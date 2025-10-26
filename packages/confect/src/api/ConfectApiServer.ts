@@ -88,6 +88,108 @@ export type ConfectApiServer<
   }
 >;
 
+const makeRegisteredFunction = <ConfectSchema extends GenericConfectSchema>(
+  confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>,
+  handlerItem: {
+    function_: {
+      functionType: string;
+      name: string;
+      args: any;
+      returns: any;
+    };
+    handler: any;
+  }
+) => {
+  const {
+    function_: { functionType, name, args, returns },
+    handler,
+  } = handlerItem;
+
+  const registeredFunction = Match.value(functionType as "Query" | "Mutation" | "Action").pipe(
+    Match.when("Query", () =>
+      queryGeneric(
+        confectQueryFunction(confectSchemaDefinition, {
+          args,
+          returns,
+          handler,
+        })
+      )
+    ),
+    Match.when("Mutation", () =>
+      mutationGeneric(
+        confectMutationFunction(confectSchemaDefinition, {
+          args,
+          returns,
+          handler,
+        })
+      )
+    ),
+    Match.when("Action", () =>
+      actionGeneric(
+        confectActionFunction(confectSchemaDefinition, {
+          args,
+          returns,
+          handler,
+        })
+      )
+    ),
+    Match.exhaustive
+  );
+
+  return [name, registeredFunction] as const;
+};
+
+const buildGroupFunctions = <ConfectSchema extends GenericConfectSchema>(
+  confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>,
+  handlers: ReadonlyArray<any>
+) =>
+  pipe(
+    handlers,
+    Array.map((handlerItem) =>
+      makeRegisteredFunction(confectSchemaDefinition, handlerItem)
+    ),
+    Record.fromEntries
+  );
+
+const buildServerGroup = <ConfectSchema extends GenericConfectSchema>(
+  confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>,
+  api: Effect.Effect.Success<
+    ReturnType<typeof ConfectApiBuilder.ConfectApiService<any, any, any>>
+  >,
+  groupName: string,
+  group: ConfectApiGroupAnyWithProps
+) =>
+  pipe(
+    api.groupHandler(group.name),
+    Effect.map((groupHandler: any) => [
+      groupName,
+      buildGroupFunctions(confectSchemaDefinition, groupHandler.handlers),
+    ] as const)
+  );
+
+const buildAllServerGroups = <
+  ConfectSchema extends GenericConfectSchema,
+  Groups extends ConfectApiGroupAnyWithProps,
+>(
+  confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>,
+  api: Effect.Effect.Success<
+    ReturnType<typeof ConfectApiBuilder.ConfectApiService<any, any, any>>
+  >,
+  groups: Record.ReadonlyRecord<Groups["name"], Groups>
+) =>
+  pipe(
+    groups,
+    Record.toEntries,
+    Array.map(([groupName, group]) =>
+      buildServerGroup(confectSchemaDefinition, api, groupName, group)
+    ),
+    Effect.all,
+    Effect.map((entries) => ({
+      [TypeId]: TypeId,
+      ...Record.fromEntries(entries),
+    } as ConfectApiServer<Groups>))
+  );
+
 export const make = <
   ConfectSchema extends GenericConfectSchema,
   ApiName extends string,
@@ -111,77 +213,13 @@ export const make = <
       apiWithDatabaseSchema.api.groups
     ),
     Effect.andThen((api) =>
-      pipe(
+      buildAllServerGroups(
+        apiWithDatabaseSchema.confectSchemaDefinition,
+        api,
         apiWithDatabaseSchema.api.groups as Record.ReadonlyRecord<
           Groups["name"],
           Groups
-        >,
-        Record.toEntries,
-        Array.map(([groupName, group]) =>
-          pipe(
-            api.groupHandler(group.name),
-            Effect.map((groupHandler) => [
-              groupName,
-              pipe(
-                groupHandler.handlers,
-                Array.map(
-                  ({
-                    function_: { functionType, name, args, returns },
-                    handler,
-                  }) => {
-                    const registeredFunction = Match.value(functionType).pipe(
-                      Match.when("Query", () =>
-                        queryGeneric(
-                          confectQueryFunction(
-                            apiWithDatabaseSchema.confectSchemaDefinition,
-                            {
-                              args,
-                              returns,
-                              handler,
-                            }
-                          )
-                        )
-                      ),
-                      Match.when("Mutation", () =>
-                        mutationGeneric(
-                          confectMutationFunction(
-                            apiWithDatabaseSchema.confectSchemaDefinition,
-                            {
-                              args,
-                              returns,
-                              handler,
-                            }
-                          )
-                        )
-                      ),
-                      Match.when("Action", () =>
-                        actionGeneric(
-                          confectActionFunction(
-                            apiWithDatabaseSchema.confectSchemaDefinition,
-                            {
-                              args,
-                              returns,
-                              handler,
-                            }
-                          )
-                        )
-                      ),
-                      Match.exhaustive
-                    );
-
-                    return [name, registeredFunction] as const;
-                  }
-                ),
-                Record.fromEntries
-              ),
-            ] as const)
-          )
-        ),
-        Effect.all,
-        Effect.map((entries) => ({
-          [TypeId]: TypeId,
-          ...Record.fromEntries(entries),
-        } as ConfectApiServer<Groups>))
+        >
       )
     ),
     Effect.provide(apiServiceLayer),
