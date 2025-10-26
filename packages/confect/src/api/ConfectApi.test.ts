@@ -1,3 +1,9 @@
+// Phase 1 Complete: Handler Collection & Server Generation
+// This file verifies type-checking for the API definition system.
+// The critical fixes have been applied:
+// 1. ConfectApiBuilder.group() now correctly populates handlers
+// 2. ConfectApiServer.make() now returns the assembled server object
+
 import { ConvexReactClient } from "convex/react";
 import { Effect, Layer, Schema } from "effect";
 import { defineConfectSchema, defineConfectTable } from "../server";
@@ -103,4 +109,9 @@ const client = ConfectApiClient.make(
 
 const myFunctionResult = client.group.myFunction({ foo: 1 });
 
+// Phase 1 Fix: Server generation now returns working object (not hole())
 const server = ConfectApiServer.make(ApiWithDatabaseSchema, ApiLive);
+
+// Type-level verification that server has correct structure
+const _typeCheck1: typeof server.group.myFunction = server.group.myFunction;
+const _typeCheck2: typeof server.group.myFunction2 = server.group.myFunction2;

@@ -135,12 +135,23 @@ export const group = <
     >
   >
 > => {
-  // TODO
   const group = apiWithDatabaseSchema.api.groups[
     groupPath
   ]! as ConfectApiGroup.ConfectApiGroup.WithPath<Groups, GroupPath>;
-  const handlers = Chunk.empty();
 
+  // Create initial empty handlers
+  const initialHandlers = makeHandlers({
+    group,
+    handlers: Chunk.empty(),
+  });
+
+  // Call build() - user chains .handle() calls, returns populated
+  const populatedHandlers = build(initialHandlers) as unknown as Handlers.FromGroup<
+    ConfectSchema,
+    ConfectApiGroup.ConfectApiGroup.WithPath<Groups, GroupPath>
+  >;
+
+  // Use the populated result directly
   return Layer.succeed(
     ConfectApiGroupService<
       ConfectSchema,
@@ -152,15 +163,7 @@ export const group = <
     }),
     {
       apiName: apiWithDatabaseSchema.api.name,
-      handlers: build(
-        makeHandlers({
-          group,
-          handlers,
-        })
-      ) as unknown as Handlers.FromGroup<
-        ConfectSchema,
-        ConfectApiGroup.ConfectApiGroup.WithPath<Groups, GroupPath>
-      >,
+      handlers: populatedHandlers,
     }
   );
 };

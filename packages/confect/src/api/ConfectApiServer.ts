@@ -11,7 +11,6 @@ import {
 import {
   Array,
   Effect,
-  hole,
   Layer,
   Match,
   pipe,
@@ -116,8 +115,7 @@ export const make = <
           apiWithDatabaseSchema.api.groups
         );
 
-        // TODO
-        const a = Record.map(
+        const serverGroups = Record.map(
           apiWithDatabaseSchema.api.groups as Record.ReadonlyRecord<
             Groups["name"],
             Groups
@@ -183,7 +181,11 @@ export const make = <
             )
         );
 
-        return hole<any>();
+        // Return the assembled server with TypeId
+        return {
+          [TypeId]: TypeId,
+          ...serverGroups,
+        } as ConfectApiServer<Groups>;
       })
     );
   }).pipe(Effect.scoped, Effect.runSync);
