@@ -1,17 +1,13 @@
 import type { Auth } from "convex/server";
-import { Effect, flow, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 
 const make = (auth: Auth) => ({
   getUserIdentity: Effect.promise(() => auth.getUserIdentity()).pipe(
-    Effect.andThen(
-      flow(
-        Option.fromNullable,
-        Option.match({
-          onNone: () => Effect.fail(new NoUserIdentityFoundError()),
-          onSome: Effect.succeed,
-        }),
-      ),
-    ),
+    Effect.map(Option.fromNullable),
+    Effect.map(Option.match({
+      onNone: () => Effect.fail(new NoUserIdentityFoundError()),
+      onSome: Effect.succeed,
+    }))
   ),
 });
 

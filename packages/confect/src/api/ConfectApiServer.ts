@@ -1,6 +1,5 @@
 import {
   actionGeneric,
-  DefaultFunctionArgs,
   GenericActionCtx,
   GenericMutationCtx,
   GenericQueryCtx,
@@ -20,31 +19,21 @@ import {
 } from "effect";
 import {
   ConfectScheduler,
-  ConfectVectorSearch,
   ConvexActionCtx,
   ConvexMutationCtx,
   ConvexQueryCtx,
 } from "../server";
 import { ConfectAuth } from "../server/auth";
 import {
-  ConfectDatabaseReader,
   confectDatabaseReaderLayer,
-  ConfectDatabaseWriter,
   confectDatabaseWriterLayer,
 } from "../server/database";
 import {
-  ConfectActionRunner,
   confectActionRunnerLayer,
-  ConfectMutationRunner,
   confectMutationRunnerLayer,
-  ConfectQueryRunner,
   confectQueryRunnerLayer,
 } from "../server/runners";
-import {
-  ConfectSchemaDefinition,
-  DataModelFromConfectSchema,
-  GenericConfectSchema,
-} from "../server/schema";
+import { ConfectSchemaDefinition, GenericConfectSchema } from "../server/schema";
 import {
   compileArgsSchema,
   compileReturnsSchema,
@@ -88,8 +77,8 @@ export type ConfectApiServer<
   }
 >;
 
-const makeRegisteredFunction = <ConfectSchema extends GenericConfectSchema>(
-  confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>,
+const makeRegisteredFunction = (
+  confectSchemaDefinition: ConfectSchemaDefinition<any>,
   handlerItem: {
     function_: {
       functionType: string;
@@ -139,8 +128,8 @@ const makeRegisteredFunction = <ConfectSchema extends GenericConfectSchema>(
   return [name, registeredFunction] as const;
 };
 
-const buildGroupFunctions = <ConfectSchema extends GenericConfectSchema>(
-  confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>,
+const buildGroupFunctions = (
+  confectSchemaDefinition: ConfectSchemaDefinition<any>,
   handlers: ReadonlyArray<any>
 ) =>
   pipe(
@@ -151,11 +140,9 @@ const buildGroupFunctions = <ConfectSchema extends GenericConfectSchema>(
     Record.fromEntries
   );
 
-const buildServerGroup = <ConfectSchema extends GenericConfectSchema>(
-  confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>,
-  api: Effect.Effect.Success<
-    ReturnType<typeof ConfectApiBuilder.ConfectApiService<any, any, any>>
-  >,
+const buildServerGroup = (
+  confectSchemaDefinition: ConfectSchemaDefinition<any>,
+  api: any,
   groupName: string,
   group: ConfectApiGroupAnyWithProps
 ) =>
@@ -167,14 +154,9 @@ const buildServerGroup = <ConfectSchema extends GenericConfectSchema>(
     ] as const)
   );
 
-const buildAllServerGroups = <
-  ConfectSchema extends GenericConfectSchema,
-  Groups extends ConfectApiGroupAnyWithProps,
->(
-  confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>,
-  api: Effect.Effect.Success<
-    ReturnType<typeof ConfectApiBuilder.ConfectApiService<any, any, any>>
-  >,
+const buildAllServerGroups = <Groups extends ConfectApiGroupAnyWithProps>(
+  confectSchemaDefinition: ConfectSchemaDefinition<any>,
+  api: any,
   groups: Record.ReadonlyRecord<Groups["name"], Groups>
 ) =>
   pipe(
@@ -227,13 +209,13 @@ export const make = <
     Effect.runSync as any
   );
 
-const runHandler = <ConvexArgs, ConfectArgs, ConvexReturns, ConfectReturns, E, R>(
-  args: Schema.Schema<ConfectArgs, ConvexArgs>,
-  returns: Schema.Schema<ConfectReturns, ConvexReturns>,
-  handler: (a: ConfectArgs) => Effect.Effect<ConfectReturns, E, R>,
-  layers: Layer.Layer<R>,
-  actualArgs: ConvexArgs
-): Promise<ConvexReturns> =>
+const runHandler = (
+  args: Schema.Schema<any, any>,
+  returns: Schema.Schema<any, any>,
+  handler: (a: any) => Effect.Effect<any, any, any>,
+  layers: Layer.Layer<any>,
+  actualArgs: any
+): Promise<any> =>
   pipe(
     Schema.decode(args)(actualArgs),
     Effect.orDie,
@@ -243,95 +225,48 @@ const runHandler = <ConvexArgs, ConfectArgs, ConvexReturns, ConfectReturns, E, R
     Effect.runPromise
   );
 
-const confectQueryFunction = <
-  ConfectSchema extends GenericConfectSchema,
-  ConvexArgs extends DefaultFunctionArgs,
-  ConfectArgs,
-  ConvexReturns,
-  ConfectReturns,
-  E,
->(
-  confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>,
+const confectQueryFunction = (
+  confectSchemaDefinition: ConfectSchemaDefinition<any>,
   {
     args,
     returns,
     handler,
   }: {
-    args: Schema.Schema<ConfectArgs, ConvexArgs>;
-    returns: Schema.Schema<ConfectReturns, ConvexReturns>;
-    handler: (
-      a: ConfectArgs
-    ) => Effect.Effect<
-      ConfectReturns,
-      E,
-      | ConfectDatabaseReader<ConfectSchemaDefinition<ConfectSchema>>
-      | ConfectAuth
-      | ConfectStorageReader
-      | ConfectQueryRunner
-      | ConvexQueryCtx<DataModelFromConfectSchema<ConfectSchema>>
-    >;
+    args: Schema.Schema<any, any>;
+    returns: Schema.Schema<any, any>;
+    handler: (a: any) => Effect.Effect<any, any, any>;
   }
 ) => ({
   args: compileArgsSchema(args),
   returns: compileReturnsSchema(returns),
-  handler: (
-    ctx: GenericQueryCtx<DataModelFromConfectSchema<ConfectSchema>>,
-    actualArgs: ConvexArgs
-  ): Promise<ConvexReturns> => {
+  handler: (ctx: GenericQueryCtx<any>, actualArgs: any): Promise<any> => {
     const layers = Layer.mergeAll(
       confectDatabaseReaderLayer(confectSchemaDefinition, ctx.db),
       ConfectAuth.layer(ctx.auth),
       ConfectStorageReader.layer(ctx.storage),
       confectQueryRunnerLayer(ctx.runQuery),
-      Layer.succeed(
-        ConvexQueryCtx<DataModelFromConfectSchema<ConfectSchema>>(),
-        ctx
-      )
+      Layer.succeed(ConvexQueryCtx(), ctx)
     );
 
     return runHandler(args, returns, handler, layers, actualArgs);
   },
 });
 
-const confectMutationFunction = <
-  ConfectSchema extends GenericConfectSchema,
-  ConvexArgs extends DefaultFunctionArgs,
-  ConfectArgs,
-  ConvexReturns,
-  ConfectReturns,
-  E,
->(
-  confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>,
+const confectMutationFunction = (
+  confectSchemaDefinition: ConfectSchemaDefinition<any>,
   {
     args,
     returns,
     handler,
   }: {
-    args: Schema.Schema<ConfectArgs, ConvexArgs>;
-    returns: Schema.Schema<ConfectReturns, ConvexReturns>;
-    handler: (
-      a: ConfectArgs
-    ) => Effect.Effect<
-      ConfectReturns,
-      E,
-      | ConfectDatabaseReader<ConfectSchemaDefinition<ConfectSchema>>
-      | ConfectDatabaseWriter<ConfectSchemaDefinition<ConfectSchema>>
-      | ConfectAuth
-      | ConfectScheduler
-      | ConfectStorageReader
-      | ConfectStorageWriter
-      | ConfectQueryRunner
-      | ConfectMutationRunner
-      | ConvexMutationCtx<DataModelFromConfectSchema<ConfectSchema>>
-    >;
+    args: Schema.Schema<any, any>;
+    returns: Schema.Schema<any, any>;
+    handler: (a: any) => Effect.Effect<any, any, any>;
   }
 ) => ({
   args: compileArgsSchema(args),
   returns: compileReturnsSchema(returns),
-  handler: (
-    ctx: GenericMutationCtx<DataModelFromConfectSchema<ConfectSchema>>,
-    actualArgs: ConvexArgs
-  ): Promise<ConvexReturns> => {
+  handler: (ctx: GenericMutationCtx<any>, actualArgs: any): Promise<any> => {
     const layers = Layer.mergeAll(
       confectDatabaseReaderLayer(confectSchemaDefinition, ctx.db),
       confectDatabaseWriterLayer(confectSchemaDefinition, ctx.db),
@@ -341,56 +276,28 @@ const confectMutationFunction = <
       ConfectStorageWriter.layer(ctx.storage),
       confectQueryRunnerLayer(ctx.runQuery),
       confectMutationRunnerLayer(ctx.runMutation),
-      Layer.succeed(
-        ConvexMutationCtx<DataModelFromConfectSchema<ConfectSchema>>(),
-        ctx
-      )
+      Layer.succeed(ConvexMutationCtx(), ctx)
     );
 
     return runHandler(args, returns, handler, layers, actualArgs);
   },
 });
 
-const confectActionFunction = <
-  ConfectSchema extends GenericConfectSchema,
-  ConvexValue extends DefaultFunctionArgs,
-  ConfectValue,
-  ConvexReturns,
-  ConfectReturns,
-  E,
->(
-  _confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>,
+const confectActionFunction = (
+  _confectSchemaDefinition: ConfectSchemaDefinition<any>,
   {
     args,
     returns,
     handler,
   }: {
-    args: Schema.Schema<ConfectValue, ConvexValue>;
-    returns: Schema.Schema<ConfectReturns, ConvexReturns>;
-    handler: (
-      a: ConfectValue
-    ) => Effect.Effect<
-      ConfectReturns,
-      E,
-      | ConfectScheduler
-      | ConfectAuth
-      | ConfectStorageReader
-      | ConfectStorageWriter
-      | ConfectStorageActionWriter
-      | ConfectQueryRunner
-      | ConfectMutationRunner
-      | ConfectActionRunner
-      | ConfectVectorSearch
-      | ConvexActionCtx<DataModelFromConfectSchema<ConfectSchema>>
-    >;
+    args: Schema.Schema<any, any>;
+    returns: Schema.Schema<any, any>;
+    handler: (a: any) => Effect.Effect<any, any, any>;
   }
 ) => ({
   args: compileArgsSchema(args),
   returns: compileReturnsSchema(returns),
-  handler: (
-    ctx: GenericActionCtx<DataModelFromConfectSchema<ConfectSchema>>,
-    actualArgs: ConvexValue
-  ): Promise<ConvexReturns> => {
+  handler: (ctx: GenericActionCtx<any>, actualArgs: any): Promise<any> => {
     const layers = Layer.mergeAll(
       ConfectScheduler.layer(ctx.scheduler),
       ConfectAuth.layer(ctx.auth),
@@ -401,10 +308,7 @@ const confectActionFunction = <
       confectMutationRunnerLayer(ctx.runMutation),
       confectActionRunnerLayer(ctx.runAction),
       confectVectorSearchLayer(ctx.vectorSearch),
-      Layer.succeed(
-        ConvexActionCtx<DataModelFromConfectSchema<ConfectSchema>>(),
-        ctx
-      )
+      Layer.succeed(ConvexActionCtx(), ctx)
     );
 
     return runHandler(args, returns, handler, layers, actualArgs);
