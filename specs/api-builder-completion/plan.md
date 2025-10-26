@@ -120,7 +120,7 @@ export const group = <...>(...): Layer.Layer<...> => {
 
 **Verification**:
 ```bash
-pnpm test packages/confect/src/api/ConfectApiBuilder.test.ts
+bun test packages/confect/src/api/ConfectApiBuilder.test.ts
 ```
 
 ---
@@ -228,7 +228,7 @@ export const make = <...>(...): ConfectApiServer<Groups> => {
 
 **Verification**:
 ```bash
-pnpm test packages/confect/src/api/ConfectApiServer.test.ts
+bun test packages/confect/src/api/ConfectApiServer.test.ts
 ```
 
 ---
@@ -417,7 +417,7 @@ describe("ConfectApi - End-to-End Integration", () => {
 
 **Verification**:
 ```bash
-pnpm test packages/confect/src/api/ConfectApi.test.ts
+bun test packages/confect/src/api/ConfectApi.test.ts
 ```
 
 ---

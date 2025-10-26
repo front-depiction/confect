@@ -7,7 +7,7 @@ on:
     paths:
       - 'packages/confect/**'
       - 'package.json'
-      - 'pnpm-workspace.yaml'
+      - 'bun-workspace.yaml'
       - '.github/workflows/confect.yml'
       - '.github/actions/confect-setup/**'
   pull_request:
@@ -16,7 +16,7 @@ on:
     paths:
       - 'packages/confect/**'
       - 'package.json'
-      - 'pnpm-workspace.yaml'
+      - 'bun-workspace.yaml'
       - '.github/workflows/confect.yml'
       - '.github/actions/confect-setup/**'
 
@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/confect-setup
-      - run: pnpm --filter @rjdellecese/confect typecheck
+      - run: bun --filter @rjdellecese/confect typecheck
 
   lint:
     name: Lint
@@ -35,7 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/confect-setup
-      - run: pnpm --filter @rjdellecese/confect lint
+      - run: bun --filter @rjdellecese/confect lint
 
   test:
     name: Test
@@ -43,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/confect-setup
-      - run: pnpm --filter @rjdellecese/confect test
+      - run: bun --filter @rjdellecese/confect test
 
   build:
     name: Build
@@ -51,7 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/confect-setup
-      - run: pnpm --filter @rjdellecese/confect build
+      - run: bun --filter @rjdellecese/confect build
 
   check-bundled-types:
     name: Check Bundled Types
@@ -59,4 +59,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/confect-setup
-      - run: pnpm --filter @rjdellecese/confect check-bundled-types
+      - run: bun --filter @rjdellecese/confect check-bundled-types

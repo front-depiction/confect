@@ -1,26 +1,26 @@
 name: "Docs App Setup"
-description: "Sets up Node.js and pnpm for the docs app"
+description: "Sets up Node.js and bun for the docs app"
 author: "Confect"
 
 runs:
   using: "composite"
   steps:
-    - name: Get pnpm version from package.json
-      id: pnpm-version
+    - name: Get bun version from package.json
+      id: bun-version
       shell: bash
-      run: echo "pnpm_version=$(node -p 'require(`./package.json`).engines.pnpm')" >> $GITHUB_OUTPUT
+      run: echo "bun_version=$(node -p 'require(`./package.json`).engines.bun')" >> $GITHUB_OUTPUT
 
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v4
+    - name: Setup bun
+      uses: bun/action-setup@v4
       with:
-        version: ${{ steps.pnpm-version.outputs.pnpm_version }}
+        version: ${{ steps.bun-version.outputs.bun_version }}
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version-file: "package.json"
-        cache: "pnpm"
+        cache: "bun"
 
     - name: Install dependencies
-      run: pnpm install
+      run: bun install
       shell: bash

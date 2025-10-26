@@ -1,16 +1,16 @@
 import { Predicate, Record } from "effect";
-import * as ConfectApiGroup from "./ConfectApiGroup";
+import { ConfectApiGroupAny, ConfectApiGroupAnyWithProps } from "./ConfectApiGroup";
 
 export const TypeId = Symbol.for("@rjdellecese/confect/ConfectApi");
 
 export type TypeId = typeof TypeId;
 
-export const isConfectApi = (u: unknown): u is ConfectApi.Any =>
+export const isConfectApi = (u: unknown): u is ConfectApiAny =>
   Predicate.hasProperty(u, TypeId);
 
 export interface ConfectApi<
   Name extends string,
-  Groups extends ConfectApiGroup.ConfectApiGroup.Any = never,
+  Groups extends ConfectApiGroupAny = never,
 > {
   readonly [TypeId]: TypeId;
   readonly name: Name;
@@ -18,25 +18,24 @@ export interface ConfectApi<
     [GroupName in Groups["name"]]: Extract<Groups, { name: GroupName }>;
   };
 
-  add<Group extends ConfectApiGroup.ConfectApiGroup.Any>(
+  add<Group extends ConfectApiGroupAny>(
     group: Group
   ): ConfectApi<Name, Groups | Group>;
 }
 
-export declare namespace ConfectApi {
-  export interface Any {
-    readonly [TypeId]: TypeId;
-  }
-
-  export interface AnyWithProps
-    extends ConfectApi<string, ConfectApiGroup.ConfectApiGroup.AnyWithProps> {}
+// Type aliases - exported directly instead of in namespace
+export interface ConfectApiAny {
+  readonly [TypeId]: TypeId;
 }
+
+export interface ConfectApiAnyWithProps
+  extends ConfectApi<string, ConfectApiGroupAnyWithProps> {}
 
 const Proto = {
   [TypeId]: TypeId,
 
-  add<Group extends ConfectApiGroup.ConfectApiGroup.AnyWithProps>(
-    this: ConfectApi.AnyWithProps,
+  add<Group extends ConfectApiGroupAnyWithProps>(
+    this: ConfectApiAnyWithProps,
     group: Group
   ) {
     return makeProto({
@@ -48,7 +47,7 @@ const Proto = {
 
 const makeProto = <
   const Name extends string,
-  Groups extends ConfectApiGroup.ConfectApiGroup.AnyWithProps,
+  Groups extends ConfectApiGroupAnyWithProps,
 >({
   name,
   groups,

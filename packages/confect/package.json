@@ -42,8 +42,8 @@
   },
   "scripts": {
     "build": "tsdown",
-    "check-bundled-types": "pnpm build && attw --pack --profile=node16",
-    "convex-codegen": "pnpm convex codegen",
+    "check-bundled-types": "bun build && attw --pack --profile=node16",
+    "convex-codegen": "bunx convex codegen",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "fix": "prettier --write . && eslint --fix . --max-warnings=0",
     "lint": "prettier --check . && eslint . --max-warnings=0",
@@ -90,6 +90,6 @@
   },
   "engines": {
     "node": ">=20",
-    "pnpm": ">=10"
+    "bun": ">=10"
   }
 }

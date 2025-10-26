@@ -1,5 +1,5 @@
 .env.local
-.pnpm-store/
+.bun-store/
 .tsup
 coverage/
 dist/

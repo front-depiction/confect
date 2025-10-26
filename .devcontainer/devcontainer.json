@@ -1,6 +1,6 @@
 {
   "image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
-  "postCreateCommand": "pnpm_version=$(node -p 'require(`./package.json`).engines.pnpm') && npm install -g pnpm@$pnpm_version && pnpm install",
+  "postCreateCommand": "bun_version=$(node -p 'require(`./package.json`).engines.bun') && npm install -g bun@$bun_version && bun install",
   "customizations": {
     "vscode": {
       "extensions": [

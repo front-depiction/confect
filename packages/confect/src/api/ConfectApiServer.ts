@@ -56,8 +56,8 @@ import {
   ConfectStorageWriter,
 } from "../server/storage";
 import { confectVectorSearchLayer } from "../server/vector_search";
+import { ConfectApiGroupAnyWithProps } from "./ConfectApiGroup";
 import * as ConfectApiBuilder from "./ConfectApiBuilder";
-import * as ConfectApiGroup from "./ConfectApiGroup";
 import * as ConfectApiWithDatabaseSchema from "./ConfectApiWithDatabaseSchema";
 
 export const TypeId = Symbol.for("@rjdellecese/confect/ConfectApiServer");
@@ -65,7 +65,7 @@ export const TypeId = Symbol.for("@rjdellecese/confect/ConfectApiServer");
 export type TypeId = typeof TypeId;
 
 export type ConfectApiServer<
-  Groups extends ConfectApiGroup.ConfectApiGroup.AnyWithProps,
+  Groups extends ConfectApiGroupAnyWithProps,
 > = Types.Simplify<
   {
     readonly [TypeId]: TypeId;
@@ -92,7 +92,7 @@ export type ConfectApiServer<
 export const make = <
   ConfectSchema extends GenericConfectSchema,
   ApiName extends string,
-  Groups extends ConfectApiGroup.ConfectApiGroup.AnyWithProps,
+  Groups extends ConfectApiGroupAnyWithProps,
 >(
   apiWithDatabaseSchema: ConfectApiWithDatabaseSchema.ConfectApiWithDatabaseSchema<
     ConfectSchema,

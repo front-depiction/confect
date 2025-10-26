@@ -34,7 +34,7 @@ export default tseslint.config(
       "dist/**",
       "coverage/**",
       "node_modules/**",
-      ".pnpm-store/**",
+      ".bun-store/**",
       ".tsup/**",
       "test/convex/_generated/**",
     ],

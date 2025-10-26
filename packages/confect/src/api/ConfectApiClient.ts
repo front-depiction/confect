@@ -1,14 +1,14 @@
 import { ConvexReactClient } from "convex/react";
 import { FunctionReference } from "convex/server";
 import { Effect, ParseResult, Record, Schema } from "effect";
+import { ConfectApiGroupAnyWithProps } from "./ConfectApiGroup";
 import * as ConfectApi from "./ConfectApi";
 import * as ConfectApiFunctionPath from "./ConfectApiFunctionPath";
-import * as ConfectApiGroup from "./ConfectApiGroup";
 
 export type ConfectApiClient<
   Api extends ConfectApi.ConfectApi<
     string,
-    ConfectApiGroup.ConfectApiGroup.AnyWithProps
+    ConfectApiGroupAnyWithProps
   >,
 > = {
   [GroupName in keyof Api["groups"]]: {
@@ -24,7 +24,7 @@ export type ConfectApiClient<
 export const make = <
   Api extends ConfectApi.ConfectApi<
     string,
-    ConfectApiGroup.ConfectApiGroup.AnyWithProps
+    ConfectApiGroupAnyWithProps
   >,
 >(
   confectApi: Api,

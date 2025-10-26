@@ -1838,7 +1838,7 @@ Client Call: client.group.myFunction({ foo: 42 })
 
 **Verification**:
 ```bash
-pnpm test packages/confect/src/api/ConfectApi.test.ts
+bun test packages/confect/src/api/ConfectApi.test.ts
 ```
 
 ---

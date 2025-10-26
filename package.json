@@ -1,19 +1,19 @@
 {
 	"scripts": {
-		"build": "pnpm -r --filter='@rjdellecese/*' build",
-		"build:confect": "pnpm --filter @rjdellecese/confect build",
-		"build:docs": "pnpm --filter @rjdellecese/docs build",
-		"build:example": "pnpm --filter @rjdellecese/example build",
-		"dev": "pnpm -r --parallel dev",
-		"dev:confect": "pnpm --filter @rjdellecese/confect dev",
-		"dev:docs": "pnpm --filter @rjdellecese/docs dev",
-		"dev:example": "pnpm --filter @rjdellecese/example dev",
-		"typecheck": "pnpm -r typecheck",
-		"lint": "pnpm -r lint",
-		"fix": "pnpm -r fix",
-		"test": "pnpm -r test",
-		"release": "pnpm build:confect && changeset publish",
-		"clean": "pnpm -r clean && rm -rf node_modules"
+		"build": "bun -r --filter='@rjdellecese/*' build",
+		"build:confect": "bun --filter @rjdellecese/confect build",
+		"build:docs": "bun --filter @rjdellecese/docs build",
+		"build:example": "bun --filter @rjdellecese/example build",
+		"dev": "bun -r --parallel dev",
+		"dev:confect": "bun --filter @rjdellecese/confect dev",
+		"dev:docs": "bun --filter @rjdellecese/docs dev",
+		"dev:example": "bun --filter @rjdellecese/example dev",
+		"typecheck": "bun -r typecheck",
+		"lint": "bun -r lint",
+		"fix": "bun -r fix",
+		"test": "bun -r test",
+		"release": "bun build:confect && changeset publish",
+		"clean": "bun -r clean && rm -rf node_modules"
 	},
 	"keywords": [
 		"effect",
@@ -28,6 +28,6 @@
 	},
 	"engines": {
 		"node": ">=20",
-		"pnpm": ">=10"
+		"bun": ">=10"
 	}
 }

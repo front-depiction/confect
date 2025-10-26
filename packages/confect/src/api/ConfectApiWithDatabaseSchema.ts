@@ -3,8 +3,11 @@ import {
   ConfectSchemaDefinition,
   GenericConfectSchema,
 } from "../server/schema";
+import {
+  ConfectApiGroupAny,
+  ConfectApiGroupAnyWithProps,
+} from "./ConfectApiGroup";
 import * as ConfectApi from "./ConfectApi";
-import * as ConfectApiGroup from "./ConfectApiGroup";
 
 export const TypeId = Symbol.for(
   "@rjdellecese/confect/ConfectApiWithDatabaseSchema"
@@ -14,31 +17,30 @@ export type TypeId = typeof TypeId;
 
 export const isConfectApiWithDatabaseSchema = (
   u: unknown
-): u is ConfectApiWithDatabaseSchema.Any => Predicate.hasProperty(u, TypeId);
+): u is ConfectApiWithDatabaseSchemaAny => Predicate.hasProperty(u, TypeId);
 
 // TODO: Rename this to ConfectApiScaffolding? Or something else?
 export interface ConfectApiWithDatabaseSchema<
   ConfectSchema extends GenericConfectSchema,
   Name extends string,
-  Groups extends ConfectApiGroup.ConfectApiGroup.Any,
+  Groups extends ConfectApiGroupAny,
 > {
   readonly [TypeId]: TypeId;
   readonly api: ConfectApi.ConfectApi<Name, Groups>;
   readonly confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>;
 }
 
-export declare namespace ConfectApiWithDatabaseSchema {
-  export interface Any {
-    readonly [TypeId]: TypeId;
-  }
-
-  export interface AnyWithProps
-    extends ConfectApiWithDatabaseSchema<
-      GenericConfectSchema,
-      string,
-      ConfectApiGroup.ConfectApiGroup.AnyWithProps
-    > {}
+// Type aliases - exported directly
+export interface ConfectApiWithDatabaseSchemaAny {
+  readonly [TypeId]: TypeId;
 }
+
+export interface ConfectApiWithDatabaseSchemaAnyWithProps
+  extends ConfectApiWithDatabaseSchema<
+    GenericConfectSchema,
+    string,
+    ConfectApiGroupAnyWithProps
+  > {}
 
 const Proto = {
   [TypeId]: TypeId,
@@ -47,7 +49,7 @@ const Proto = {
 const makeProto = <
   ConfectSchema extends GenericConfectSchema,
   const Name extends string,
-  Groups extends ConfectApiGroup.ConfectApiGroup.Any,
+  Groups extends ConfectApiGroupAny,
 >({
   confectSchemaDefinition,
   api,
@@ -63,7 +65,7 @@ const makeProto = <
 export const make = <
   ConfectSchema extends GenericConfectSchema,
   const Name extends string,
-  Groups extends ConfectApiGroup.ConfectApiGroup.Any,
+  Groups extends ConfectApiGroupAny,
 >(
   confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>,
   api: ConfectApi.ConfectApi<Name, Groups>
