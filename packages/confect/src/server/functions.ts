@@ -19,18 +19,13 @@ import { ConfectAuth } from "./auth";
 import { ConvexActionCtx, ConvexMutationCtx, ConvexQueryCtx } from "./ctx";
 import type { DataModelFromConfectDataModel } from "./data_model";
 import {
-  confectDatabaseReaderLayer,
-  ConfectDatabaseReader as ConfectDatabaseReaderTag,
-  confectDatabaseWriterLayer,
-  ConfectDatabaseWriter as ConfectDatabaseWriterTag,
+  ConfectDatabaseReader,
+  ConfectDatabaseWriter,
 } from "./database";
 import {
-  type ConfectActionRunner,
-  confectActionRunnerLayer,
-  type ConfectMutationRunner,
-  confectMutationRunnerLayer,
-  type ConfectQueryRunner,
-  confectQueryRunnerLayer,
+  ConfectActionRunner,
+  ConfectMutationRunner,
+  ConfectQueryRunner,
 } from "./runners";
 import { ConfectScheduler } from "./scheduler";
 import type {
@@ -44,10 +39,7 @@ import {
   ConfectStorageReader,
   ConfectStorageWriter,
 } from "./storage";
-import {
-  type ConfectVectorSearch,
-  confectVectorSearchLayer,
-} from "./vector_search";
+import { ConfectVectorSearch } from "./vector_search";
 
 export const makeConfectFunctions = <
   ConfectSchema extends GenericConfectSchema,
@@ -55,22 +47,7 @@ export const makeConfectFunctions = <
   confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>
 ) => {
   type ConfectDataModel = ConfectDataModelFromConfectSchema<ConfectSchema>;
-
-  const ConfectDatabaseReader =
-    ConfectDatabaseReaderTag<ConfectSchemaDefinition<ConfectSchema>>();
-  const ConfectDatabaseWriter =
-    ConfectDatabaseWriterTag<ConfectSchemaDefinition<ConfectSchema>>();
-  type ConfectDatabaseReader = typeof ConfectDatabaseReader.Identifier;
-  type ConfectDatabaseWriter = typeof ConfectDatabaseWriter.Identifier;
-
   type DataModel = DataModelFromConfectDataModel<ConfectDataModel>;
-
-  const QueryCtx = ConvexQueryCtx<DataModel>();
-  type QueryCtx = typeof QueryCtx.Service;
-  const MutationCtx = ConvexMutationCtx<DataModel>();
-  type MutationCtx = typeof MutationCtx.Service;
-  const ActionCtx = ConvexActionCtx<DataModel>();
-  type ActionCtx = typeof ActionCtx.Service;
 
   const confectQuery = <
     ConvexArgs extends DefaultFunctionArgs,
@@ -94,7 +71,7 @@ export const makeConfectFunctions = <
       | ConfectAuth
       | ConfectStorageReader
       | ConfectQueryRunner
-      | QueryCtx
+      | typeof ConvexQueryCtx
     >;
   }): RegisteredQuery<"public", ConvexArgs, Promise<ConvexReturns>> =>
     queryGeneric(confectQueryFunction({ args, returns, handler }));
@@ -121,7 +98,7 @@ export const makeConfectFunctions = <
       | ConfectAuth
       | ConfectStorageReader
       | ConfectQueryRunner
-      | QueryCtx
+      | typeof ConvexQueryCtx
     >;
   }): RegisteredQuery<"internal", ConvexArgs, Promise<ConvexReturns>> =>
     internalQueryGeneric(confectQueryFunction({ args, returns, handler }));
@@ -148,7 +125,7 @@ export const makeConfectFunctions = <
       | ConfectAuth
       | ConfectStorageReader
       | ConfectQueryRunner
-      | QueryCtx
+      | typeof ConvexQueryCtx
     >;
   }) => ({
     args: compileArgsSchema(args),
@@ -167,11 +144,11 @@ export const makeConfectFunctions = <
         ),
         Effect.provide(
           Layer.mergeAll(
-            confectDatabaseReaderLayer(confectSchemaDefinition, ctx.db),
+            ConfectDatabaseReader.layer(confectSchemaDefinition, ctx.db),
             ConfectAuth.layer(ctx.auth),
             ConfectStorageReader.layer(ctx.storage),
-            confectQueryRunnerLayer(ctx.runQuery),
-            Layer.succeed(QueryCtx, ctx)
+            ConfectQueryRunner.layer(ctx.runQuery),
+            ConvexQueryCtx.layer(ctx)
           )
         ),
         Effect.runPromise
@@ -204,7 +181,7 @@ export const makeConfectFunctions = <
       | ConfectStorageWriter
       | ConfectQueryRunner
       | ConfectMutationRunner
-      | MutationCtx
+      | typeof ConvexMutationCtx
     >;
   }): RegisteredMutation<"public", ConvexValue, Promise<ConvexReturns>> =>
     mutationGeneric(confectMutationFunction({ args, returns, handler }));
@@ -235,7 +212,7 @@ export const makeConfectFunctions = <
       | ConfectStorageWriter
       | ConfectQueryRunner
       | ConfectMutationRunner
-      | MutationCtx
+      | typeof ConvexMutationCtx
     >;
   }): RegisteredMutation<"internal", ConvexValue, Promise<ConvexReturns>> =>
     internalMutationGeneric(
@@ -268,7 +245,7 @@ export const makeConfectFunctions = <
       | ConfectStorageWriter
       | ConfectQueryRunner
       | ConfectMutationRunner
-      | MutationCtx
+      | typeof ConvexMutationCtx
     >;
   }) => ({
     args: compileArgsSchema(args),
@@ -286,15 +263,15 @@ export const makeConfectFunctions = <
             handler(decodedArgs),
             Effect.provide(
               Layer.mergeAll(
-                confectDatabaseReaderLayer(confectSchemaDefinition, ctx.db),
-                confectDatabaseWriterLayer(confectSchemaDefinition, ctx.db),
+                ConfectDatabaseReader.layer(confectSchemaDefinition, ctx.db),
+                ConfectDatabaseWriter.layer(confectSchemaDefinition, ctx.db),
                 ConfectAuth.layer(ctx.auth),
                 ConfectScheduler.layer(ctx.scheduler),
                 ConfectStorageReader.layer(ctx.storage),
                 ConfectStorageWriter.layer(ctx.storage),
-                confectQueryRunnerLayer(ctx.runQuery),
-                confectMutationRunnerLayer(ctx.runMutation),
-                Layer.succeed(MutationCtx, ctx)
+                ConfectQueryRunner.layer(ctx.runQuery),
+                ConfectMutationRunner.layer(ctx.runMutation),
+                ConvexMutationCtx.layer(ctx)
               )
             )
           )
@@ -333,7 +310,7 @@ export const makeConfectFunctions = <
       | ConfectMutationRunner
       | ConfectActionRunner
       | ConfectVectorSearch
-      | ActionCtx
+      | typeof ConvexActionCtx
     >;
   }): RegisteredAction<"public", ConvexValue, Promise<ConvexReturns>> =>
     actionGeneric(confectActionFunction({ args, returns, handler }));
@@ -365,7 +342,7 @@ export const makeConfectFunctions = <
       | ConfectMutationRunner
       | ConfectActionRunner
       | ConfectVectorSearch
-      | ActionCtx
+      | typeof ConvexActionCtx
     >;
   }): RegisteredAction<"internal", ConvexValue, Promise<ConvexReturns>> =>
     internalActionGeneric(confectActionFunction({ args, returns, handler }));
@@ -397,7 +374,7 @@ export const makeConfectFunctions = <
       | ConfectMutationRunner
       | ConfectActionRunner
       | ConfectVectorSearch
-      | ActionCtx
+      | typeof ConvexActionCtx
     >;
   }) => ({
     args: compileArgsSchema(args),
@@ -420,11 +397,11 @@ export const makeConfectFunctions = <
                 ConfectStorageReader.layer(ctx.storage),
                 ConfectStorageWriter.layer(ctx.storage),
                 ConfectStorageActionWriter.layer(ctx.storage),
-                confectQueryRunnerLayer(ctx.runQuery),
-                confectMutationRunnerLayer(ctx.runMutation),
-                confectActionRunnerLayer(ctx.runAction),
-                confectVectorSearchLayer(ctx.vectorSearch),
-                Layer.succeed(ActionCtx, ctx)
+                ConfectQueryRunner.layer(ctx.runQuery),
+                ConfectMutationRunner.layer(ctx.runMutation),
+                ConfectActionRunner.layer(ctx.runAction),
+                ConfectVectorSearch.layer(ctx.vectorSearch),
+                ConvexActionCtx.layer(ctx)
               )
             )
           )

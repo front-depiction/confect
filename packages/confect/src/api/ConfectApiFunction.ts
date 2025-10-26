@@ -127,11 +127,11 @@ export type QueryHandler<
   Function extends ConfectApiFunctionAnyWithPropsWithFunctionType<"Query">,
 > = BaseHandler<
   Function,
-  | ConfectDatabaseReader<ConfectSchemaDefinition<ConfectSchema>>
+  | typeof ConfectDatabaseReader
   | ConfectAuth
   | ConfectStorageReader
-  | ConfectQueryRunner
-  | ConvexQueryCtx<DataModelFromConfectSchema<ConfectSchema>>
+  | typeof ConfectQueryRunner
+  | typeof ConvexQueryCtx
 >;
 
 export type MutationHandler<
@@ -139,15 +139,15 @@ export type MutationHandler<
   Function extends ConfectApiFunctionAnyWithPropsWithFunctionType<"Mutation">,
 > = BaseHandler<
   Function,
-  | ConfectDatabaseReader<ConfectSchemaDefinition<ConfectSchema>>
-  | ConfectDatabaseWriter<ConfectSchemaDefinition<ConfectSchema>>
+  | typeof ConfectDatabaseReader
+  | typeof ConfectDatabaseWriter
   | ConfectAuth
   | ConfectScheduler
   | ConfectStorageReader
   | ConfectStorageWriter
-  | ConfectQueryRunner
-  | ConfectMutationRunner
-  | ConvexMutationCtx<DataModelFromConfectSchema<ConfectSchema>>
+  | typeof ConfectQueryRunner
+  | typeof ConfectMutationRunner
+  | typeof ConvexMutationCtx
 >;
 
 export type ActionHandler<
@@ -160,11 +160,11 @@ export type ActionHandler<
   | ConfectStorageReader
   | ConfectStorageWriter
   | ConfectStorageActionWriter
-  | ConfectQueryRunner
-  | ConfectMutationRunner
-  | ConfectActionRunner
-  | ConfectVectorSearch
-  | ConvexActionCtx<DataModelFromConfectSchema<ConfectSchema>>
+  | typeof ConfectQueryRunner
+  | typeof ConfectMutationRunner
+  | typeof ConfectActionRunner
+  | typeof ConfectVectorSearch
+  | typeof ConvexActionCtx
 >;
 
 type BaseHandler<
