@@ -41,13 +41,10 @@ const make =
   ) =>
     Effect.promise(() => vectorSearch(tableName, indexName, query));
 
-export const ConfectVectorSearch = Context.GenericTag<ReturnType<typeof make>>(
-  "@rjdellecese/confect/ConfectVectorSearch",
-);
-export type ConfectVectorSearch = typeof ConfectVectorSearch.Identifier;
-
-export const confectVectorSearchLayer = <
-  ConfectDataModel extends GenericConfectDataModel,
->(
-  vectorSearch: VectorSearch<ConfectDataModel>,
-) => Layer.succeed(ConfectVectorSearch, make(vectorSearch));
+export class ConfectVectorSearch extends Context.Tag(
+  "@rjdellecese/confect/ConfectVectorSearch"
+)<ConfectVectorSearch, ReturnType<typeof make>>() {
+  static readonly layer = <ConfectDataModel extends GenericConfectDataModel>(
+    vectorSearch: VectorSearch<ConfectDataModel>
+  ) => Layer.succeed(this, make(vectorSearch));
+}

@@ -25,13 +25,13 @@ import {
 } from "../server";
 import { ConfectAuth } from "../server/auth";
 import {
-  confectDatabaseReaderLayer,
-  confectDatabaseWriterLayer,
+  ConfectDatabaseReader,
+  ConfectDatabaseWriter,
 } from "../server/database";
 import {
-  confectActionRunnerLayer,
-  confectMutationRunnerLayer,
-  confectQueryRunnerLayer,
+  ConfectActionRunner,
+  ConfectMutationRunner,
+  ConfectQueryRunner,
 } from "../server/runners";
 import { ConfectSchemaDefinition, GenericConfectSchema } from "../server/schema";
 import {
@@ -43,7 +43,7 @@ import {
   ConfectStorageReader,
   ConfectStorageWriter,
 } from "../server/storage";
-import { confectVectorSearchLayer } from "../server/vector_search";
+import { ConfectVectorSearch } from "../server/vector_search";
 import { ConfectApiGroupAnyWithProps } from "./ConfectApiGroup";
 import * as ConfectApiBuilder from "./ConfectApiBuilder";
 import * as ConfectApiWithDatabaseSchema from "./ConfectApiWithDatabaseSchema";
@@ -241,11 +241,11 @@ const confectQueryFunction = (
   returns: compileReturnsSchema(returns),
   handler: (ctx: GenericQueryCtx<any>, actualArgs: any): Promise<any> => {
     const layers = Layer.mergeAll(
-      confectDatabaseReaderLayer(confectSchemaDefinition, ctx.db),
+      ConfectDatabaseReader.layer(confectSchemaDefinition, ctx.db),
       ConfectAuth.layer(ctx.auth),
       ConfectStorageReader.layer(ctx.storage),
-      confectQueryRunnerLayer(ctx.runQuery),
-      Layer.succeed(ConvexQueryCtx(), ctx)
+      ConfectQueryRunner.layer(ctx.runQuery),
+      ConvexQueryCtx.layer(ctx)
     );
 
     return runHandler(args, returns, handler, layers, actualArgs);
@@ -268,15 +268,15 @@ const confectMutationFunction = (
   returns: compileReturnsSchema(returns),
   handler: (ctx: GenericMutationCtx<any>, actualArgs: any): Promise<any> => {
     const layers = Layer.mergeAll(
-      confectDatabaseReaderLayer(confectSchemaDefinition, ctx.db),
-      confectDatabaseWriterLayer(confectSchemaDefinition, ctx.db),
+      ConfectDatabaseReader.layer(confectSchemaDefinition, ctx.db),
+      ConfectDatabaseWriter.layer(confectSchemaDefinition, ctx.db),
       ConfectAuth.layer(ctx.auth),
       ConfectScheduler.layer(ctx.scheduler),
       ConfectStorageReader.layer(ctx.storage),
       ConfectStorageWriter.layer(ctx.storage),
-      confectQueryRunnerLayer(ctx.runQuery),
-      confectMutationRunnerLayer(ctx.runMutation),
-      Layer.succeed(ConvexMutationCtx(), ctx)
+      ConfectQueryRunner.layer(ctx.runQuery),
+      ConfectMutationRunner.layer(ctx.runMutation),
+      ConvexMutationCtx.layer(ctx)
     );
 
     return runHandler(args, returns, handler, layers, actualArgs);
@@ -304,11 +304,11 @@ const confectActionFunction = (
       ConfectStorageReader.layer(ctx.storage),
       ConfectStorageWriter.layer(ctx.storage),
       ConfectStorageActionWriter.layer(ctx.storage),
-      confectQueryRunnerLayer(ctx.runQuery),
-      confectMutationRunnerLayer(ctx.runMutation),
-      confectActionRunnerLayer(ctx.runAction),
-      confectVectorSearchLayer(ctx.vectorSearch),
-      Layer.succeed(ConvexActionCtx(), ctx)
+      ConfectQueryRunner.layer(ctx.runQuery),
+      ConfectMutationRunner.layer(ctx.runMutation),
+      ConfectActionRunner.layer(ctx.runAction),
+      ConfectVectorSearch.layer(ctx.vectorSearch),
+      ConvexActionCtx.layer(ctx)
     );
 
     return runHandler(args, returns, handler, layers, actualArgs);

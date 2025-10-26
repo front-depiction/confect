@@ -4,31 +4,34 @@ import type {
   GenericMutationCtx,
   GenericQueryCtx,
 } from "convex/server";
-import { Context } from "effect";
+import { Context, Layer } from "effect";
 
-export const ConvexQueryCtx = <DataModel extends GenericDataModel>() =>
-  Context.GenericTag<GenericQueryCtx<DataModel>>(
-    "@rjdellecese/confect/ConvexQueryCtx"
-  );
+const ConvexQueryCtxTag = Context.GenericTag<GenericQueryCtx<any>>(
+  "@rjdellecese/confect/ConvexQueryCtx"
+);
 
-export type ConvexQueryCtx<DataModel extends GenericDataModel> = ReturnType<
-  typeof ConvexQueryCtx<DataModel>
->["Service"];
+export class ConvexQueryCtx {
+  static readonly layer = <DataModel extends GenericDataModel>(
+    ctx: GenericQueryCtx<DataModel>
+  ) => Layer.succeed(ConvexQueryCtxTag, ctx);
+}
 
-export const ConvexMutationCtx = <DataModel extends GenericDataModel>() =>
-  Context.GenericTag<GenericMutationCtx<DataModel>>(
-    "@rjdellecese/confect/ConvexMutationCtx"
-  );
+const ConvexMutationCtxTag = Context.GenericTag<GenericMutationCtx<any>>(
+  "@rjdellecese/confect/ConvexMutationCtx"
+);
 
-export type ConvexMutationCtx<DataModel extends GenericDataModel> = ReturnType<
-  typeof ConvexMutationCtx<DataModel>
->["Service"];
+export class ConvexMutationCtx {
+  static readonly layer = <DataModel extends GenericDataModel>(
+    ctx: GenericMutationCtx<DataModel>
+  ) => Layer.succeed(ConvexMutationCtxTag, ctx);
+}
 
-export const ConvexActionCtx = <DataModel extends GenericDataModel>() =>
-  Context.GenericTag<GenericActionCtx<DataModel>>(
-    "@rjdellecese/confect/ConvexActionCtx"
-  );
+const ConvexActionCtxTag = Context.GenericTag<GenericActionCtx<any>>(
+  "@rjdellecese/confect/ConvexActionCtx"
+);
 
-export type ConvexActionCtx<DataModel extends GenericDataModel> = ReturnType<
-  typeof ConvexActionCtx<DataModel>
->["Service"];
+export class ConvexActionCtx {
+  static readonly layer = <DataModel extends GenericDataModel>(
+    ctx: GenericActionCtx<DataModel>
+  ) => Layer.succeed(ConvexActionCtxTag, ctx);
+}

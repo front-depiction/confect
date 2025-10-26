@@ -39,32 +39,26 @@ const makeActionRunner =
   ) =>
     Effect.promise(() => runAction(action, ...args));
 
-export const ConfectQueryRunner = Context.GenericTag<
-  ReturnType<typeof makeQueryRunner>
->("@rjdellecese/confect/ConfectQueryRunner");
-export type ConfectQueryRunner = typeof ConfectQueryRunner.Identifier;
+export class ConfectQueryRunner extends Context.Tag(
+  "@rjdellecese/confect/ConfectQueryRunner"
+)<ConfectQueryRunner, ReturnType<typeof makeQueryRunner>>() {
+  static readonly layer = (runQuery: GenericQueryCtx<any>["runQuery"]) =>
+    Layer.succeed(this, makeQueryRunner(runQuery));
+}
 
-export const confectQueryRunnerLayer = (
-  runQuery: GenericQueryCtx<any>["runQuery"],
-) => Layer.succeed(ConfectQueryRunner, makeQueryRunner(runQuery));
+export class ConfectMutationRunner extends Context.Tag(
+  "@rjdellecese/confect/ConfectMutationRunner"
+)<ConfectMutationRunner, ReturnType<typeof makeMutationRunner>>() {
+  static readonly layer = (runMutation: GenericMutationCtx<any>["runMutation"]) =>
+    Layer.succeed(this, makeMutationRunner(runMutation));
+}
 
-export const ConfectMutationRunner = Context.GenericTag<
-  ReturnType<typeof makeMutationRunner>
->("@rjdellecese/confect/ConfectMutationRunner");
-export type ConfectMutationRunner = typeof ConfectMutationRunner.Identifier;
-
-export const confectMutationRunnerLayer = (
-  runMutation: GenericMutationCtx<any>["runMutation"],
-) => Layer.succeed(ConfectMutationRunner, makeMutationRunner(runMutation));
-
-export const ConfectActionRunner = Context.GenericTag<
-  ReturnType<typeof makeActionRunner>
->("@rjdellecese/confect/ConfectActionRunner");
-export type ConfectActionRunner = typeof ConfectActionRunner.Identifier;
-
-export const confectActionRunnerLayer = (
-  runAction: GenericActionCtx<any>["runAction"],
-) => Layer.succeed(ConfectActionRunner, makeActionRunner(runAction));
+export class ConfectActionRunner extends Context.Tag(
+  "@rjdellecese/confect/ConfectActionRunner"
+)<ConfectActionRunner, ReturnType<typeof makeActionRunner>>() {
+  static readonly layer = (runAction: GenericActionCtx<any>["runAction"]) =>
+    Layer.succeed(this, makeActionRunner(runAction));
+}
 
 export class MutationRollback extends Schema.TaggedError<MutationRollback>(
   "MutationRollback",
