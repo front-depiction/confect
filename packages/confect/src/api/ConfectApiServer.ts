@@ -332,7 +332,7 @@ const confectActionFunction = <
   ConfectReturns,
   E,
 >(
-  confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>,
+  _confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>,
   {
     args,
     returns,

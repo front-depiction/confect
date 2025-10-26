@@ -84,12 +84,18 @@ const Group2Live = ConfectApiBuilder.group(
     handlers.handle("myFunction3", (args) => Effect.succeed(`foo: ${args.foo}`))
 );
 
+const Group5Live = ConfectApiBuilder.group(
+  ApiWithDatabaseSchema,
+  "group4.group3.group5",
+  (handlers) => handlers
+);
+
 const Group3Live = ConfectApiBuilder.group(
   ApiWithDatabaseSchema,
   "group4.group3",
   (handlers) =>
     handlers.handle("myFunction4", (args) => Effect.succeed(`foo: ${args.foo}`))
-);
+).pipe(Layer.provide(Group5Live));
 
 const Group4Live = ConfectApiBuilder.group(
   ApiWithDatabaseSchema,
@@ -107,11 +113,14 @@ const client = ConfectApiClient.make(
   new ConvexReactClient("http://localhost:3000")
 );
 
-const myFunctionResult = client.group.myFunction({ foo: 1 });
-
 // Phase 1 Fix: Server generation now returns working object (not hole())
 const server = ConfectApiServer.make(ApiWithDatabaseSchema, ApiLive);
 
 // Type-level verification that server has correct structure
-const _typeCheck1: typeof server.group.myFunction = server.group.myFunction;
-const _typeCheck2: typeof server.group.myFunction2 = server.group.myFunction2;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _TypeCheck1 = typeof server.group.myFunction;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _TypeCheck2 = typeof server.group.myFunction2;
+
+// Client is correctly typed
+void client.group.myFunction({ foo: 1 });

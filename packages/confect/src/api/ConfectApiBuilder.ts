@@ -139,9 +139,14 @@ export const group = <
     groupPath
   ]! as ConfectApiGroup.ConfectApiGroup.WithPath<Groups, GroupPath>;
 
-  // Create initial empty handlers
-  const initialHandlers = makeHandlers({
-    group,
+  // Create initial empty handlers with explicit type parameters
+  const initialHandlers = makeHandlers<
+    ConfectSchema,
+    ConfectApiGroup.ConfectApiGroup.Functions<
+      ConfectApiGroup.ConfectApiGroup.WithPath<Groups, GroupPath>
+    >
+  >({
+    group: group as ConfectApiGroup.ConfectApiGroup.AnyWithProps,
     handlers: Chunk.empty(),
   });
 
