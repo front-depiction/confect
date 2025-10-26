@@ -160,7 +160,7 @@ const Proto = {
     function_: Function
   ) {
     // Support both builder pattern and direct function
-    const fn = "build" in function_ ? function_.build() : function_;
+    const fn = ("build" in function_ ? function_.build() : function_) as ConfectApiFunctionAnyWithProps;
 
     return makeProto({
       name: this.name,

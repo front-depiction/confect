@@ -110,10 +110,10 @@ const client = ConfectApiClient.make(
 const server = ConfectApiServer.make(ApiWithDatabaseSchema, ApiLive);
 
 // Type-level verification that server has correct structure
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _TypeCheck1 = typeof server.group.myFunction;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _TypeCheck2 = typeof server.group.myFunction2;
+// Suppress unused type warnings
+export type { _TypeCheck1, _TypeCheck2 };
 
 // Client is correctly typed
 void client.group.myFunction({ foo: 1 });
