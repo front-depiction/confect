@@ -31,9 +31,14 @@ export interface ConfectApiGroup<
   };
 
   // TODO: Rename to addFunction
-  add<Function extends ConfectApiFunctionAnyWithProps>(
+  add<Function extends ConfectApiFunctionAnyWithProps | { build(): ConfectApiFunctionAnyWithProps }>(
     function_: Function
-  ): ConfectApiGroup<ConfectSchema, Name, Functions | Function, Groups>;
+  ): ConfectApiGroup<
+    ConfectSchema,
+    Name,
+    Functions | (Function extends { build(): infer F } ? F : Function),
+    Groups
+  >;
 
   addGroup<Group extends ConfectApiGroupAnyWithProps>(
     group: Group
@@ -150,13 +155,16 @@ export type ConfectApiGroupHandlersFrom<
 const Proto = {
   [TypeId]: TypeId,
 
-  add<Function extends ConfectApiFunctionAnyWithProps>(
+  add<Function extends ConfectApiFunctionAnyWithProps | { build(): ConfectApiFunctionAnyWithProps }>(
     this: ConfectApiGroupAnyWithProps,
     function_: Function
   ) {
+    // Support both builder pattern and direct function
+    const fn = "build" in function_ ? function_.build() : function_;
+
     return makeProto({
       name: this.name,
-      functions: Record.set(this.functions, function_.name, function_),
+      functions: Record.set(this.functions, fn.name, fn),
       groups: this.groups,
     });
   },

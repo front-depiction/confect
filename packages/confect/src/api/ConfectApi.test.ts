@@ -15,39 +15,32 @@ import * as ConfectApiGroup from "./ConfectApiGroup";
 import * as ConfectApiServer from "./ConfectApiServer";
 import * as ConfectApiWithDatabaseSchema from "./ConfectApiWithDatabaseSchema";
 
+// New fluent API - more concise and readable!
 const Group = ConfectApiGroup.make("group")
   .add(
-    ConfectApiFunction.make("Query")({
-      name: "myFunction",
-      args: Schema.Struct({ foo: Schema.Number }),
-      returns: Schema.String,
-    })
+    ConfectApiFunction.query("myFunction")
+      .args(Schema.Struct({ foo: Schema.Number }))
+      .returns(Schema.String)
   )
   .add(
-    ConfectApiFunction.make("Query")({
-      name: "myFunction2",
-      args: Schema.Struct({ foo: Schema.Number }),
-      returns: Schema.String,
-    })
+    ConfectApiFunction.query("myFunction2")
+      .args(Schema.Struct({ foo: Schema.Number }))
+      .returns(Schema.String)
   );
 
 const Group2 = ConfectApiGroup.make("group2").add(
-  ConfectApiFunction.make("Query")({
-    name: "myFunction3",
-    args: Schema.Struct({ foo: Schema.Number }),
-    returns: Schema.String,
-  })
+  ConfectApiFunction.query("myFunction3")
+    .args(Schema.Struct({ foo: Schema.Number }))
+    .returns(Schema.String)
 );
 
 const Group5 = ConfectApiGroup.make("group5");
 
 const Group3 = ConfectApiGroup.make("group3")
   .add(
-    ConfectApiFunction.make("Query")({
-      name: "myFunction4",
-      args: Schema.Struct({ foo: Schema.Number }),
-      returns: Schema.String,
-    })
+    ConfectApiFunction.query("myFunction4")
+      .args(Schema.Struct({ foo: Schema.Number }))
+      .returns(Schema.String)
   )
   .addGroup(Group5);
 
