@@ -61,7 +61,7 @@
     "@arethetypeswrong/cli": "0.18.2",
     "@effect/cluster": "0.46.3",
     "@effect/experimental": "0.54.4",
-    "@effect/language-service": "0.35.0",
+    "@effect/language-service": "0.48.0",
     "@effect/platform-node": "0.94.1",
     "@effect/rpc": "0.68.3",
     "@effect/sql": "0.44.0",

@@ -94,61 +94,54 @@ export const makeOrderedQuery = <
   tableName: TN,
   tableSchema: DerivedTableSchema<S, TN, I> | undefined,
 ): ConfectOrderedQuery<TableInfoFromSchema<S, TN>> => ({
-    first: () =>
-      pipe(
-        Effect.promise(() => query.first()),
-        Effect.map(Option.fromNullable),
-        Effect.flatMap(
-          Option.match({
-            onNone: () => Effect.succeed(Option.none()),
-            onSome: (doc) =>
-              pipe(
-                decodeDocument(doc, tableName, tableSchema),
-                Effect.map(Option.some),
-              ),
-          }),
+  first: () =>
+    Effect.promise(() => query.first()).pipe(
+      Effect.map(Option.fromNullable),
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.succeed(Option.none()),
+          onSome: (doc) =>
+            decodeDocument(doc, tableName, tableSchema).pipe(
+              Effect.map(Option.some),
+            ),
+        }),
+      ),
+    ),
+
+  take: (
+    n: number,
+  ) =>
+    Effect.promise(() => query.take(n)).pipe(
+      Effect.flatMap((docs) =>
+        decodeDocuments(docs, tableName, tableSchema),
+      ),
+    ),
+
+  collect: () =>
+    Effect.promise(() => query.collect()).pipe(
+      Effect.flatMap((docs) =>
+        decodeDocuments(docs, tableName, tableSchema),
+      ),
+    ),
+
+  stream: () =>
+    Stream.fromAsyncIterable(query, identity).pipe(
+      Stream.orDie,
+      Stream.mapEffect((doc) => decodeDocument(doc, tableName, tableSchema)),
+    ),
+
+  paginate: (options: {
+    cursor: string | null;
+    numItems: number;
+  }) =>
+    Effect.promise(() => query.paginate(options)).pipe(
+      Effect.flatMap((res) =>
+        decodeDocuments(res.page, tableName, tableSchema).pipe(
+          Effect.map((page) => ({ ...res, page } as PaginationResult<ConfectDocumentFromSchema<S, TN>>)),
         ),
       ),
-
-    take: (
-      n: number,
-    ) =>
-      pipe(
-        Effect.promise(() => query.take(n)),
-        Effect.flatMap((docs) =>
-          decodeDocuments(docs, tableName, tableSchema),
-        ),
-      ),
-
-    collect: () =>
-      pipe(
-        Effect.promise(() => query.collect()),
-        Effect.flatMap((docs) =>
-          decodeDocuments(docs, tableName, tableSchema),
-        ),
-      ),
-
-    stream: () =>
-      pipe(
-        Stream.fromAsyncIterable(query as AsyncIterable<DocumentByInfo<TableInfoFromSchema<S, TN>>>, identity),
-        Stream.orDie,
-        Stream.mapEffect((doc) => decodeDocument(doc, tableName, tableSchema)),
-      ),
-
-    paginate: (options: {
-      cursor: string | null;
-      numItems: number;
-    }) =>
-      pipe(
-        Effect.promise(() => query.paginate(options)),
-        Effect.flatMap((res) =>
-          pipe(
-            decodeDocuments(res.page, tableName, tableSchema),
-            Effect.map((page) => ({ ...res, page } as PaginationResult<ConfectDocumentFromSchema<S, TN>>)),
-          ),
-        ),
-      ),
-  });
+    ),
+});
 
 /** Create a query initializer wrapper from a Convex query initializer. */
 export const makeQueryInitializer = <
@@ -190,8 +183,7 @@ const decodeDocument = <
 ): Effect.Effect<ConfectDocumentFromSchema<S, TN>, DocumentDecodeError, never> => {
   if (!tableSchema) return Effect.succeed(doc as ConfectDocumentFromSchema<S, TN>);
 
-  return pipe(
-    Schema.decodeUnknown(tableSchema)(doc),
+  return Schema.decodeUnknown(tableSchema)(doc).pipe(
     Effect.mapError((parseError) =>
       new DocumentDecodeError({
         tableName,
@@ -213,8 +205,7 @@ const decodeDocuments = <
 ): Effect.Effect<ReadonlyArray<ConfectDocumentFromSchema<S, TN>>, DocumentDecodeError, never> => {
   if (!tableSchema) return Effect.succeed(docs as ReadonlyArray<ConfectDocumentFromSchema<S, TN>>);
 
-  return pipe(
-    Schema.decodeUnknown(Schema.Array(tableSchema))(docs),
+  return Schema.decodeUnknown(Schema.Array(tableSchema))(docs).pipe(
     Effect.mapError((parseError) =>
       new DocumentDecodeError({
         tableName,
@@ -236,8 +227,7 @@ export const getDocumentById = <
   convexDatabaseReader: { get: (id: GenericId<TN>) => Promise<ConfectDocumentFromSchema<S, TN>> },
   tableSchema: DerivedTableSchema<S, TN, I> | undefined,
 ): Effect.Effect<ConfectDocumentFromSchema<S, TN>, DocumentDecodeError | GetByIdFailure, never> =>
-  pipe(
-    Effect.promise(() => convexDatabaseReader.get(id)),
+  Effect.promise(() => convexDatabaseReader.get(id)).pipe(
     Effect.map(Option.fromNullable),
     Effect.filterOrFail(
       Option.isSome,
