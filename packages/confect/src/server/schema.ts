@@ -70,6 +70,18 @@ const tableSchemasFromConfectSchema = <
   }) as any;
 
 /**
+ * A Confect table definition without specific type parameters.
+ * Uses structural types instead of `any` to preserve type information.
+ */
+export type GenericConfectTableDefinition = ConfectTableDefinition<
+  Schema.Schema.AnyNoContext,
+  GenericValidator,
+  GenericTableIndexes,
+  GenericTableSearchIndexes,
+  GenericTableVectorIndexes
+>;
+
+/**
  * A Confect schema is a record of table definitions.
  */
 export type GenericConfectSchema = Record<
@@ -132,14 +144,6 @@ export const defineConfectSchema = <ConfectSchema extends GenericConfectSchema>(
   confectSchema: ConfectSchema
 ): ConfectSchemaDefinition<ConfectSchema> =>
   new ConfectSchemaDefinitionImpl<ConfectSchema>(confectSchema);
-
-export type GenericConfectTableDefinition = ConfectTableDefinition<
-  any,
-  any,
-  any,
-  any,
-  any
->;
 
 export interface ConfectTableDefinition<
   TableSchema extends Schema.Schema.AnyNoContext,

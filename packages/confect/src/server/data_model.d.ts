@@ -75,3 +75,54 @@ export type GenericConfectDoc<
   ConfectDataModel extends GenericConfectDataModel,
   TableName extends TableNamesInConfectDataModel<ConfectDataModel>,
 > = ConfectDataModel[TableName]["encodedConfectDocument"];
+
+export type ConvexDataModel<ConfectSchema extends GenericConfectSchemaDefinition> =
+  DataModelFromConfectDataModel<
+    ConfectDataModelFromConfectSchemaDefinition<ConfectSchema>
+  >;
+
+// ===========================
+// Type Aliases for Extraction
+// ===========================
+
+/**
+ * Extract ConfectDataModel from SchemaDefinition.
+ * This is the primary type-level transformation of the schema.
+ */
+export type ConfectDataModelFromSchemaDefinition<
+  SD extends GenericConfectSchemaDefinition
+> = ConfectDataModelFromConfectSchemaDefinition<SD>;
+
+/**
+ * Extract ConfectSchema from SchemaDefinition.
+ * Useful when you need to access the raw schema definition.
+ */
+export type ConfectSchemaFromSchemaDefinition<
+  SD extends GenericConfectSchemaDefinition
+> = SD["confectSchema"];
+
+/**
+ * Extract table names from SchemaDefinition.
+ */
+export type TableNamesFromSchemaDefinition<
+  SD extends GenericConfectSchemaDefinition
+> = TableNamesInConfectDataModel<ConfectDataModelFromSchemaDefinition<SD>>;
+
+/**
+ * Extract table schema for a specific table from SchemaDefinition.
+ */
+export type TableSchemaFromSchemaDefinition<
+  SD extends GenericConfectSchemaDefinition,
+  TableName extends TableNamesFromSchemaDefinition<SD>
+> = SD["tableSchemas"][TableName]["withoutSystemFields"];
+
+/**
+ * Extract document type for a specific table from SchemaDefinition.
+ */
+export type ConfectDocumentFromSchemaDefinition<
+  SD extends GenericConfectSchemaDefinition,
+  TableName extends TableNamesFromSchemaDefinition<SD>
+> = ConfectDocumentByName<
+  ConfectDataModelFromSchemaDefinition<SD>,
+  TableName
+>;
