@@ -19,11 +19,7 @@ import {
   ConfectMutationRunner,
   ConfectQueryRunner,
 } from "../server/runners";
-import {
-  ConfectSchemaDefinition,
-  DataModelFromConfectSchema,
-  GenericConfectSchema,
-} from "../server/schema";
+import { GenericConfectSchema } from "../server/schema";
 
 export const TypeId = Symbol.for("@rjdellecese/confect/ConfectApiFunction");
 
@@ -115,15 +111,14 @@ export type Handler<
   Function extends ConfectApiFunctionAnyWithProps,
 > =
   Function extends ConfectApiFunctionWithFunctionType<Function, "Query">
-    ? QueryHandler<ConfectSchema, Function>
+    ? QueryHandler<Function>
     : Function extends ConfectApiFunctionWithFunctionType<Function, "Mutation">
-      ? MutationHandler<ConfectSchema, Function>
+      ? MutationHandler<Function>
       : Function extends ConfectApiFunctionWithFunctionType<Function, "Action">
-        ? ActionHandler<ConfectSchema, Function>
+        ? ActionHandler<Function>
         : never;
 
 export type QueryHandler<
-  ConfectSchema extends GenericConfectSchema,
   Function extends ConfectApiFunctionAnyWithPropsWithFunctionType<"Query">,
 > = BaseHandler<
   Function,
@@ -135,7 +130,6 @@ export type QueryHandler<
 >;
 
 export type MutationHandler<
-  ConfectSchema extends GenericConfectSchema,
   Function extends ConfectApiFunctionAnyWithPropsWithFunctionType<"Mutation">,
 > = BaseHandler<
   Function,
@@ -151,7 +145,6 @@ export type MutationHandler<
 >;
 
 export type ActionHandler<
-  ConfectSchema extends GenericConfectSchema,
   Function extends ConfectApiFunctionAnyWithPropsWithFunctionType<"Action">,
 > = BaseHandler<
   Function,

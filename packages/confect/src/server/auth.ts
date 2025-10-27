@@ -1,22 +1,51 @@
-import type { Auth } from "convex/server";
-import { Effect, Layer, Option, Schema } from "effect";
+/**
+ * Confect Auth Service
+ *
+ * Provides Effect-based authentication wrapping Convex's Auth API.
+ *
+ * Design decisions:
+ * - Returns Effect for composability
+ * - Fails with typed error when no user identity exists
+ * - Uses Option to handle nullable user identity from Convex
+ */
 
-const make = (auth: Auth) => ({
+import type { Auth } from "convex/server";
+import { Context, Effect, Layer, Option, Schema } from "effect";
+
+const ConfectAuthTypeId = Symbol.for("@rjdellecese/confect/ConfectAuth");
+type ConfectAuthTypeId = typeof ConfectAuthTypeId;
+
+type UserIdentity = Exclude<
+  Awaited<ReturnType<Auth["getUserIdentity"]>>,
+  null
+>;
+
+export interface ConfectAuth {
+  readonly [ConfectAuthTypeId]: ConfectAuthTypeId;
+  readonly getUserIdentity: Effect.Effect<
+    UserIdentity,
+    NoUserIdentityFoundError
+  >;
+}
+
+const make = (auth: Auth): ConfectAuth => ({
+  [ConfectAuthTypeId]: ConfectAuthTypeId,
   getUserIdentity: Effect.promise(() => auth.getUserIdentity()).pipe(
-    Effect.map(Option.fromNullable),
-    Effect.map(Option.match({
-      onNone: () => Effect.fail(new NoUserIdentityFoundError()),
-      onSome: Effect.succeed,
-    }))
+    Effect.flatMap((identity) =>
+      Option.match(Option.fromNullable(identity), {
+        onNone: () => Effect.fail(new NoUserIdentityFoundError()),
+        onSome: Effect.succeed,
+      }),
+    ),
   ),
 });
 
-export class ConfectAuth extends Effect.Tag("@rjdellecese/confect/ConfectAuth")<
-  ConfectAuth,
-  ReturnType<typeof make>
->() {
-  static readonly layer = (auth: Auth) => Layer.succeed(this, make(auth));
-}
+export const ConfectAuth = Context.GenericTag<ConfectAuth>(
+  "@rjdellecese/confect/ConfectAuth",
+);
+
+export const layer = (auth: Auth): Layer.Layer<ConfectAuth> =>
+  Layer.succeed(ConfectAuth, make(auth));
 
 export class NoUserIdentityFoundError extends Schema.TaggedError<NoUserIdentityFoundError>(
   "NoUserIdentityFoundError",

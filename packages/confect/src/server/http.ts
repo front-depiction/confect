@@ -16,18 +16,24 @@ import {
   type RouteSpecWithPathPrefix,
 } from "convex/server";
 import { Array, Layer, pipe, Record } from "effect";
-import { ConfectAuth } from "./auth";
-import { ConvexActionCtx } from "./ctx";
+import { ConfectAuth, layer as layerAuth } from "./auth";
+import { layerActionCtx } from "./ctx";
 import {
   ConfectActionRunner,
   ConfectMutationRunner,
   ConfectQueryRunner,
+  layerActionRunner,
+  layerMutationRunner,
+  layerQueryRunner,
 } from "./runners";
-import { ConfectScheduler } from "./scheduler";
+import { ConfectScheduler, layer as layerScheduler } from "./scheduler";
 import {
   ConfectStorageActionWriter,
   ConfectStorageReader,
   ConfectStorageWriter,
+  layerStorageActionWriter,
+  layerStorageReader,
+  layerStorageWriter,
 } from "./storage";
 
 type Middleware = (
@@ -65,15 +71,15 @@ const makeHandler =
     const ApiLive = apiLive.pipe(
       Layer.provide(
         Layer.mergeAll(
-          ConfectQueryRunner.layer(ctx.runQuery),
-          ConfectMutationRunner.layer(ctx.runMutation),
-          ConfectActionRunner.layer(ctx.runAction),
-          ConfectScheduler.layer(ctx.scheduler),
-          ConfectAuth.layer(ctx.auth),
-          ConfectStorageReader.layer(ctx.storage),
-          ConfectStorageWriter.layer(ctx.storage),
-          ConfectStorageActionWriter.layer(ctx.storage),
-          ConvexActionCtx.layer(ctx),
+          layerQueryRunner(ctx.runQuery),
+          layerMutationRunner(ctx.runMutation),
+          layerActionRunner(ctx.runAction),
+          layerScheduler(ctx.scheduler),
+          layerAuth(ctx.auth),
+          layerStorageReader(ctx.storage),
+          layerStorageWriter(ctx.storage),
+          layerStorageActionWriter(ctx.storage),
+          layerActionCtx(ctx),
         ),
       ),
     );

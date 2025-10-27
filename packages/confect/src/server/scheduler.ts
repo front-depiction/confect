@@ -1,38 +1,69 @@
-import type {
-  OptionalRestArgs,
-  SchedulableFunctionReference,
-  Scheduler,
-} from "convex/server";
-import { DateTime, Duration, Effect, Layer } from "effect";
+/**
+ * Confect Scheduler Service
+ *
+ * Provides Effect-based scheduling wrapping Convex's Scheduler API.
+ *
+ * Design decisions:
+ * - Uses Effect.Duration instead of milliseconds for type safety
+ * - Uses Effect.DateTime instead of timestamps for clarity
+ * - Returns Effect for composability
+ */
 
-const make = (scheduler: Scheduler) => ({
+import type {
+    OptionalRestArgs,
+    SchedulableFunctionReference,
+    Scheduler,
+} from "convex/server";
+import { Context, DateTime, Duration, Effect, Layer } from "effect";
+
+const ConfectSchedulerTypeId = Symbol.for("@rjdellecese/confect/ConfectScheduler");
+type ConfectSchedulerTypeId = typeof ConfectSchedulerTypeId;
+
+export interface ConfectScheduler {
+  readonly [ConfectSchedulerTypeId]: ConfectSchedulerTypeId;
+  readonly runAfter: <FuncRef extends SchedulableFunctionReference>(
+    delay: Duration.DurationInput,
+    functionReference: FuncRef,
+    ...args: OptionalRestArgs<FuncRef>
+  ) => Effect.Effect<void>;
+  readonly runAt: <FuncRef extends SchedulableFunctionReference>(
+    dateTime: DateTime.DateTime,
+    functionReference: FuncRef,
+    ...args: OptionalRestArgs<FuncRef>
+  ) => Effect.Effect<void>;
+}
+export const ConfectScheduler = Context.GenericTag<ConfectScheduler>(
+    "@rjdellecese/confect/ConfectScheduler",
+  );
+
+const make = (scheduler: Scheduler): ConfectScheduler => ({
+
+  [ConfectSchedulerTypeId]: ConfectSchedulerTypeId,
+
   runAfter: <FuncRef extends SchedulableFunctionReference>(
-    delay: Duration.Duration,
+    delay: Duration.DurationInput,
     functionReference: FuncRef,
     ...args: OptionalRestArgs<FuncRef>
   ) => {
     const delayMs = Duration.toMillis(delay);
-
     return Effect.promise(() =>
       scheduler.runAfter(delayMs, functionReference, ...args),
     );
   },
+  
   runAt: <FuncRef extends SchedulableFunctionReference>(
     dateTime: DateTime.DateTime,
     functionReference: FuncRef,
     ...args: OptionalRestArgs<FuncRef>
   ) => {
     const timestamp = DateTime.toEpochMillis(dateTime);
-
     return Effect.promise(() =>
       scheduler.runAt(timestamp, functionReference, ...args),
     );
   },
 });
 
-export class ConfectScheduler extends Effect.Tag(
-  "@rjdellecese/confect/ConfectScheduler",
-)<ConfectScheduler, ReturnType<typeof make>>() {
-  static readonly layer = (scheduler: Scheduler) =>
-    Layer.succeed(this, make(scheduler));
-}
+
+
+export const layer = (scheduler: Scheduler): Layer.Layer<ConfectScheduler> =>
+  Layer.succeed(ConfectScheduler, make(scheduler));
