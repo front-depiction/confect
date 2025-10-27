@@ -126,3 +126,24 @@ export type ConfectDocumentFromSchemaDefinition<
   ConfectDataModelFromSchemaDefinition<SD>,
   TableName
 >;
+
+/**
+ * Extract TableInfo (Convex-compatible) for a specific table from SchemaDefinition.
+ * This converts ConfectTableInfo to Convex's GenericTableInfo format.
+ */
+export type TableInfoFromSchemaDefinition<
+  SD extends GenericConfectSchemaDefinition,
+  TableName extends TableNamesFromSchemaDefinition<SD>
+> = TableInfoFromConfectTableInfo<
+  ConfectDataModelFromSchemaDefinition<SD>[TableName]
+>;
+
+/**
+ * Type alias for a table schema derived from a ConfectSchema and table name.
+ * This represents an Effect Schema with no context requirements (R = never).
+ */
+export type DerivedTableSchema<
+  S extends GenericConfectSchema,
+  TN extends TableNamesFromSchemaDefinition<ConfectSchemaDefinition<S>>,
+  I = never
+> = Schema.Schema<ConfectDocumentFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>, I, never>;
