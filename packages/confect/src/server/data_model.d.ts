@@ -82,34 +82,86 @@ export type ConvexDataModel<ConfectSchema extends GenericConfectSchemaDefinition
   >;
 
 // ===========================
-// Type Aliases for Extraction
+// Type Aliases for Extraction from Schema (S)
 // ===========================
+// These are the primary aliases - everything derives from GenericConfectSchema
 
 /**
- * Extract ConfectDataModel from SchemaDefinition.
+ * Extract ConfectDataModel from Schema.
  * This is the primary type-level transformation of the schema.
+ */
+export type ConfectDataModelFromSchema<
+  S extends GenericConfectSchema
+> = ConfectDataModelFromConfectSchemaDefinition<ConfectSchemaDefinition<S>>;
+
+/**
+ * Extract table names from Schema.
+ */
+export type TableNamesFromSchema<
+  S extends GenericConfectSchema
+> = TableNamesInConfectDataModel<ConfectDataModelFromSchema<S>>;
+
+/**
+ * Extract table schema for a specific table from Schema.
+ */
+export type TableSchemaFromSchema<
+  S extends GenericConfectSchema,
+  TableName extends TableNamesFromSchema<S>
+> = ConfectSchemaDefinition<S>["tableSchemas"][TableName]["withoutSystemFields"];
+
+/**
+ * Extract document type for a specific table from Schema.
+ */
+export type ConfectDocumentFromSchema<
+  S extends GenericConfectSchema,
+  TableName extends TableNamesFromSchema<S>
+> = ConfectDocumentByName<
+  ConfectDataModelFromSchema<S>,
+  TableName
+>;
+
+/**
+ * Extract TableInfo (Convex-compatible) for a specific table from Schema.
+ * This converts ConfectTableInfo to Convex's GenericTableInfo format.
+ */
+export type TableInfoFromSchema<
+  S extends GenericConfectSchema,
+  TableName extends TableNamesFromSchema<S>
+> = TableInfoFromConfectTableInfo<
+  ConfectDataModelFromSchema<S>[TableName]
+>;
+
+/**
+ * Type alias for a table schema derived from a ConfectSchema and table name.
+ * This represents an Effect Schema with no context requirements (R = never).
+ */
+export type DerivedTableSchema<
+  S extends GenericConfectSchema,
+  TN extends TableNamesFromSchema<S>,
+  I = never
+> = Schema.Schema<ConfectDocumentFromSchema<S, TN>, I, never>;
+
+// ===========================
+// Legacy Aliases (for backwards compatibility)
+// ===========================
+// These wrap the SchemaDefinition but internally use the Schema-based aliases
+
+/**
+ * @deprecated Use ConfectDataModelFromSchema instead
  */
 export type ConfectDataModelFromSchemaDefinition<
   SD extends GenericConfectSchemaDefinition
 > = ConfectDataModelFromConfectSchemaDefinition<SD>;
 
 /**
- * Extract ConfectSchema from SchemaDefinition.
- * Useful when you need to access the raw schema definition.
- */
-export type ConfectSchemaFromSchemaDefinition<
-  SD extends GenericConfectSchemaDefinition
-> = SD["confectSchema"];
-
-/**
- * Extract table names from SchemaDefinition.
+ * @deprecated Use TableNamesFromSchema instead
  */
 export type TableNamesFromSchemaDefinition<
   SD extends GenericConfectSchemaDefinition
 > = TableNamesInConfectDataModel<ConfectDataModelFromSchemaDefinition<SD>>;
 
 /**
- * Extract table schema for a specific table from SchemaDefinition.
+ * @deprecated Use TableSchemaFromSchema instead
  */
 export type TableSchemaFromSchemaDefinition<
   SD extends GenericConfectSchemaDefinition,
@@ -117,7 +169,7 @@ export type TableSchemaFromSchemaDefinition<
 > = SD["tableSchemas"][TableName]["withoutSystemFields"];
 
 /**
- * Extract document type for a specific table from SchemaDefinition.
+ * @deprecated Use ConfectDocumentFromSchema instead
  */
 export type ConfectDocumentFromSchemaDefinition<
   SD extends GenericConfectSchemaDefinition,
@@ -128,8 +180,7 @@ export type ConfectDocumentFromSchemaDefinition<
 >;
 
 /**
- * Extract TableInfo (Convex-compatible) for a specific table from SchemaDefinition.
- * This converts ConfectTableInfo to Convex's GenericTableInfo format.
+ * @deprecated Use TableInfoFromSchema instead
  */
 export type TableInfoFromSchemaDefinition<
   SD extends GenericConfectSchemaDefinition,
@@ -137,13 +188,3 @@ export type TableInfoFromSchemaDefinition<
 > = TableInfoFromConfectTableInfo<
   ConfectDataModelFromSchemaDefinition<SD>[TableName]
 >;
-
-/**
- * Type alias for a table schema derived from a ConfectSchema and table name.
- * This represents an Effect Schema with no context requirements (R = never).
- */
-export type DerivedTableSchema<
-  S extends GenericConfectSchema,
-  TN extends TableNamesFromSchemaDefinition<ConfectSchemaDefinition<S>>,
-  I = never
-> = Schema.Schema<ConfectDocumentFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>, I, never>;

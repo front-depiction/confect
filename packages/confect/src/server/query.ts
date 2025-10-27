@@ -27,13 +27,12 @@ import {
   Stream,
 } from "effect";
 import type {
-  ConfectDocumentFromSchemaDefinition,
+  ConfectDocumentFromSchema,
   DerivedTableSchema,
-  TableInfoFromSchemaDefinition,
-  TableNamesFromSchemaDefinition,
+  TableInfoFromSchema,
+  TableNamesFromSchema,
 } from "./data_model";
 import type {
-  ConfectSchemaDefinition,
   GenericConfectSchema,
 } from "./schema";
 
@@ -88,13 +87,13 @@ export interface ConfectQueryInitializer<TableInfo extends GenericTableInfo> {
 /** Create an ordered query wrapper from a Convex ordered query. */
 export const makeOrderedQuery = <
   S extends GenericConfectSchema,
-  TN extends TableNamesFromSchemaDefinition<ConfectSchemaDefinition<S>>,
+  TN extends TableNamesFromSchema<S>,
   I = never
 >(
-  query: OrderedQuery<TableInfoFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>> | Query<TableInfoFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>>,
+  query: OrderedQuery<TableInfoFromSchema<S, TN>> | Query<TableInfoFromSchema<S, TN>>,
   tableName: TN,
   tableSchema: DerivedTableSchema<S, TN, I> | undefined,
-): ConfectOrderedQuery<TableInfoFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>> => ({
+): ConfectOrderedQuery<TableInfoFromSchema<S, TN>> => ({
     first: () =>
       pipe(
         Effect.promise(() => query.first()),
@@ -131,7 +130,7 @@ export const makeOrderedQuery = <
 
     stream: () =>
       pipe(
-        Stream.fromAsyncIterable(query as AsyncIterable<DocumentByInfo<TableInfoFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>>>, identity),
+        Stream.fromAsyncIterable(query as AsyncIterable<DocumentByInfo<TableInfoFromSchema<S, TN>>>, identity),
         Stream.orDie,
         Stream.mapEffect((doc) => decodeDocument(doc, tableName, tableSchema)),
       ),
@@ -145,7 +144,7 @@ export const makeOrderedQuery = <
         Effect.flatMap((res) =>
           pipe(
             decodeDocuments(res.page, tableName, tableSchema),
-            Effect.map((page) => ({ ...res, page } as PaginationResult<ConfectDocumentFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>>)),
+            Effect.map((page) => ({ ...res, page } as PaginationResult<ConfectDocumentFromSchema<S, TN>>)),
           ),
         ),
       ),
@@ -154,13 +153,13 @@ export const makeOrderedQuery = <
 /** Create a query initializer wrapper from a Convex query initializer. */
 export const makeQueryInitializer = <
   S extends GenericConfectSchema,
-  TN extends TableNamesFromSchemaDefinition<ConfectSchemaDefinition<S>>,
+  TN extends TableNamesFromSchema<S>,
   I = never
 >(
-  query: QueryInitializer<TableInfoFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>>,
+  query: QueryInitializer<TableInfoFromSchema<S, TN>>,
   tableName: TN,
   tableSchema: DerivedTableSchema<S, TN, I> | undefined,
-): Effect.Effect<ConfectQueryInitializer<TableInfoFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>>, never, never> =>
+): Effect.Effect<ConfectQueryInitializer<TableInfoFromSchema<S, TN>>, never, never> =>
   Effect.succeed({
     index: (indexName: string, order: "asc" | "desc" = "asc") => {
       const ordered = query.withIndex(indexName as never).order(order);
@@ -182,14 +181,14 @@ export const makeQueryInitializer = <
 
 const decodeDocument = <
   S extends GenericConfectSchema,
-  TN extends TableNamesFromSchemaDefinition<ConfectSchemaDefinition<S>>,
+  TN extends TableNamesFromSchema<S>,
   I
 >(
   doc: unknown,
   tableName: TN,
   tableSchema: DerivedTableSchema<S, TN, I> | undefined,
-): Effect.Effect<ConfectDocumentFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>, DocumentDecodeError, never> => {
-  if (!tableSchema) return Effect.succeed(doc as ConfectDocumentFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>);
+): Effect.Effect<ConfectDocumentFromSchema<S, TN>, DocumentDecodeError, never> => {
+  if (!tableSchema) return Effect.succeed(doc as ConfectDocumentFromSchema<S, TN>);
 
   return pipe(
     Schema.decodeUnknown(tableSchema)(doc),
@@ -205,14 +204,14 @@ const decodeDocument = <
 
 const decodeDocuments = <
   S extends GenericConfectSchema,
-  TN extends TableNamesFromSchemaDefinition<ConfectSchemaDefinition<S>>,
+  TN extends TableNamesFromSchema<S>,
   I
 >(
   docs: unknown,
   tableName: TN,
   tableSchema: DerivedTableSchema<S, TN, I> | undefined,
-): Effect.Effect<ReadonlyArray<ConfectDocumentFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>>, DocumentDecodeError, never> => {
-  if (!tableSchema) return Effect.succeed(docs as ReadonlyArray<ConfectDocumentFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>>);
+): Effect.Effect<ReadonlyArray<ConfectDocumentFromSchema<S, TN>>, DocumentDecodeError, never> => {
+  if (!tableSchema) return Effect.succeed(docs as ReadonlyArray<ConfectDocumentFromSchema<S, TN>>);
 
   return pipe(
     Schema.decodeUnknown(Schema.Array(tableSchema))(docs),
@@ -229,14 +228,14 @@ const decodeDocuments = <
 
 export const getDocumentById = <
   S extends GenericConfectSchema,
-  TN extends TableNamesFromSchemaDefinition<ConfectSchemaDefinition<S>>,
+  TN extends TableNamesFromSchema<S>,
   I
 >(
   tableName: TN,
   id: GenericId<TN>,
-  convexDatabaseReader: { get: (id: GenericId<TN>) => Promise<ConfectDocumentFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>> },
+  convexDatabaseReader: { get: (id: GenericId<TN>) => Promise<ConfectDocumentFromSchema<S, TN>> },
   tableSchema: DerivedTableSchema<S, TN, I> | undefined,
-): Effect.Effect<ConfectDocumentFromSchemaDefinition<ConfectSchemaDefinition<S>, TN>, DocumentDecodeError | GetByIdFailure, never> =>
+): Effect.Effect<ConfectDocumentFromSchema<S, TN>, DocumentDecodeError | GetByIdFailure, never> =>
   pipe(
     Effect.promise(() => convexDatabaseReader.get(id)),
     Effect.map(Option.fromNullable),

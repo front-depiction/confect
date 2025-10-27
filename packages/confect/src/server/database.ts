@@ -27,9 +27,9 @@ import { pipe } from "effect/Function";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
 import type {
-  ConfectDocumentFromSchemaDefinition,
+  ConfectDocumentFromSchema,
   ConvexDataModel,
-  TableNamesFromSchemaDefinition,
+  TableNamesFromSchema,
 } from "./data_model";
 import {
   DocumentDecodeError,
@@ -50,21 +50,21 @@ import type {
 // ===========================
 
 export interface ConfectDatabaseReader<
-  Schema extends GenericConfectSchema = GenericConfectSchema,
+  S extends GenericConfectSchema = GenericConfectSchema,
 > {
-  readonly get: <TN extends TableNamesFromSchemaDefinition<ConfectSchemaDefinition<Schema>>>(
+  readonly get: <TN extends TableNamesFromSchema<S>>(
     tableName: TN,
     id: GenericId<TN>,
   ) => Effect.Effect<
-    Option.Option<ConfectDocumentFromSchemaDefinition<ConfectSchemaDefinition<Schema>, TN>>,
+    Option.Option<ConfectDocumentFromSchema<S, TN>>,
     DocumentDecodeError
   >;
 
-  readonly table: <TN extends TableNamesFromSchemaDefinition<ConfectSchemaDefinition<Schema>>>(
+  readonly table: <TN extends TableNamesFromSchema<S>>(
     tableName: TN,
   ) => Effect.Effect<
     ConfectQueryInitializer<
-      NamedTableInfo<ConvexDataModel<ConfectSchemaDefinition<Schema>>, TN>
+      NamedTableInfo<ConvexDataModel<ConfectSchemaDefinition<S>>, TN>
     >
   >;
 }
@@ -124,23 +124,23 @@ export const layerDatabaseReader = <
 // ===========================
 
 export interface ConfectDatabaseWriter<
-  Schema extends GenericConfectSchema = GenericConfectSchema,
-> extends ConfectDatabaseReader<Schema> {
-  readonly insert: <TN extends TableNamesFromSchemaDefinition<ConfectSchemaDefinition<Schema>>>(
+  S extends GenericConfectSchema = GenericConfectSchema,
+> extends ConfectDatabaseReader<S> {
+  readonly insert: <TN extends TableNamesFromSchema<S>>(
     tableName: TN,
-    document: WithoutSystemFields<ConfectDocumentFromSchemaDefinition<ConfectSchemaDefinition<Schema>, TN>>,
+    document: WithoutSystemFields<ConfectDocumentFromSchema<S, TN>>,
   ) => Effect.Effect<GenericId<TN>, DocumentEncodeError>;
-  readonly patch: <TN extends TableNamesFromSchemaDefinition<ConfectSchemaDefinition<Schema>>>(
+  readonly patch: <TN extends TableNamesFromSchema<S>>(
     tableName: TN,
     id: GenericId<TN>,
-    patchedValues: Partial<WithoutSystemFields<ConfectDocumentFromSchemaDefinition<ConfectSchemaDefinition<Schema>, TN>>>,
+    patchedValues: Partial<WithoutSystemFields<ConfectDocumentFromSchema<S, TN>>>,
   ) => Effect.Effect<void, DocumentEncodeError | DocumentDecodeError | GetByIdFailure>;
-  readonly replace: <TN extends TableNamesFromSchemaDefinition<ConfectSchemaDefinition<Schema>>>(
+  readonly replace: <TN extends TableNamesFromSchema<S>>(
     tableName: TN,
     id: GenericId<TN>,
-    value: WithoutSystemFields<ConfectDocumentFromSchemaDefinition<ConfectSchemaDefinition<Schema>, TN>>,
+    value: WithoutSystemFields<ConfectDocumentFromSchema<S, TN>>,
   ) => Effect.Effect<void, DocumentEncodeError>;
-  readonly delete: <TN extends TableNamesFromSchemaDefinition<ConfectSchemaDefinition<Schema>>>(
+  readonly delete: <TN extends TableNamesFromSchema<S>>(
     tableName: TN,
     id: GenericId<TN>,
   ) => Effect.Effect<void>;
