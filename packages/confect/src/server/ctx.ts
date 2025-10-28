@@ -1,13 +1,12 @@
 /**
- * Convex Context Services (Internal)
+ * Convex Context Services
  *
- * These are internal-only tags used by the API builder.
- * Users should use capability services (QueryDB, MutationDB, Auth, etc.) instead.
+ * Provides convenience context objects that aggregate capability services.
  *
  * Design decisions:
- * - Context tags are internal implementation details
- * - Backward compatibility layers use Layer.effect to compose capabilities
- * - Users work with high-level capability services, not raw contexts
+ * - Context services are built from capability services using Layer.effect
+ * - Users can choose between direct capability access or context objects
+ * - Contexts provide familiar Convex API shape with { db, auth, storage, ... }
  */
 
 import type {
@@ -24,7 +23,99 @@ import { ConfectScheduler } from "./scheduler";
 import { ConfectQueryRunner, ConfectMutationRunner } from "./runners";
 
 // ===========================
-// ConvexQueryCtx
+// ConfectQueryCtx
+// ===========================
+
+/**
+ * Query context that aggregates read-only capability services.
+ * Provides familiar Convex context shape.
+ */
+export interface ConfectQueryCtx {
+  readonly db: QueryDB;
+  readonly auth: ConfectAuth;
+  readonly storage: ConfectStorageReader;
+  readonly runQuery: ConfectQueryRunner;
+}
+
+const ConfectQueryCtxTag = Context.GenericTag<ConfectQueryCtx>(
+  "@rjdellecese/confect/ConfectQueryCtx",
+);
+
+export const ConfectQueryCtx = Object.assign(ConfectQueryCtxTag, {
+  of: (props: ConfectQueryCtx): ConfectQueryCtx => props,
+});
+
+/**
+ * Build ConfectQueryCtx from capability services using Layer.effect.
+ */
+export const layerConfectQueryCtx = Layer.effect(
+  ConfectQueryCtx,
+  Effect.gen(function* () {
+    const db = yield* QueryDB;
+    const auth = yield* ConfectAuth;
+    const storage = yield* ConfectStorageReader;
+    const runQuery = yield* ConfectQueryRunner;
+
+    return ConfectQueryCtx.of({
+      db,
+      auth,
+      storage,
+      runQuery,
+    });
+  }),
+);
+
+// ===========================
+// ConfectMutationCtx
+// ===========================
+
+/**
+ * Mutation context that aggregates read-write capability services.
+ * Provides familiar Convex context shape.
+ */
+export interface ConfectMutationCtx {
+  readonly db: MutationDB;
+  readonly auth: ConfectAuth;
+  readonly storage: ConfectStorageWriter;
+  readonly scheduler: ConfectScheduler;
+  readonly runQuery: ConfectQueryRunner;
+  readonly runMutation: ConfectMutationRunner;
+}
+
+const ConfectMutationCtxTag = Context.GenericTag<ConfectMutationCtx>(
+  "@rjdellecese/confect/ConfectMutationCtx",
+);
+
+export const ConfectMutationCtx = Object.assign(ConfectMutationCtxTag, {
+  of: (props: ConfectMutationCtx): ConfectMutationCtx => props,
+});
+
+/**
+ * Build ConfectMutationCtx from capability services using Layer.effect.
+ */
+export const layerConfectMutationCtx = Layer.effect(
+  ConfectMutationCtx,
+  Effect.gen(function* () {
+    const db = yield* MutationDB;
+    const auth = yield* ConfectAuth;
+    const storage = yield* ConfectStorageWriter;
+    const scheduler = yield* ConfectScheduler;
+    const runQuery = yield* ConfectQueryRunner;
+    const runMutation = yield* ConfectMutationRunner;
+
+    return ConfectMutationCtx.of({
+      db,
+      auth,
+      storage,
+      scheduler,
+      runQuery,
+      runMutation,
+    });
+  }),
+);
+
+// ===========================
+// Internal Convex Context Tags (for API builder)
 // ===========================
 
 export const ConvexQueryCtx = Context.GenericTag<GenericQueryCtx<GenericDataModel>>(

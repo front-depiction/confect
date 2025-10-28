@@ -1,4 +1,10 @@
 export { ConfectAuth } from "./auth";
+export {
+  ConfectQueryCtx,
+  ConfectMutationCtx,
+  layerConfectQueryCtx,
+  layerConfectMutationCtx,
+} from "./ctx";
 export type {
   DataModelFromConfectDataModel,
   GenericConfectDoc,
