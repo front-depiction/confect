@@ -22,7 +22,6 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ParseResult from "effect/ParseResult";
-import { pipe } from "effect/Function";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
 import type {
@@ -194,14 +193,14 @@ export const makeMutationDB = <
           convexDatabaseWriter,
           tableDefinition?.tableSchema,
         );
-        const updated = { ...(original as object), ...patchedValues };
+        const updated = { ...original, ...patchedValues };
         const encodedDocument = yield* encodeDocument(
           updated,
           tableName,
           tableDefinition?.tableSchema,
         );
         yield* Effect.promise(() =>
-          convexDatabaseWriter.replace(id, encodedDocument as never),
+          convexDatabaseWriter.replace(id, encodedDocument),
         );
       }),
 
@@ -249,15 +248,22 @@ const encodeDocument = <A, I>(
   tableSchema: Schema.Schema<A, I> | undefined,
 ): Effect.Effect<I, DocumentEncodeError> => {
   if (!tableSchema) {
-    return Effect.succeed(self as unknown as I);
+    return Effect.succeed(self as never);
   }
 
-  return pipe(
-    Schema.encode(tableSchema)(self),
+  const extractIdForError = (doc: unknown): string => {
+    if (typeof doc === "object" && doc !== null && "_id" in doc) {
+      const id = (doc as { _id: unknown })._id;
+      return typeof id === "string" ? id : String(id);
+    }
+    return "unknown";
+  };
+
+  return Schema.encode(tableSchema)(self).pipe(
     Effect.mapError((parseError) =>
       new DocumentEncodeError({
         tableName,
-        id: (self as { _id?: string })?._id ?? "unknown",
+        id: extractIdForError(self),
         parseError: ParseResult.TreeFormatter.formatErrorSync(parseError),
       }),
     ),

@@ -17,22 +17,25 @@ import {
   Schema,
   Types,
 } from "effect";
-import {
-  ConfectScheduler,
-  ConvexActionCtx,
-  ConvexMutationCtx,
-  ConvexQueryCtx,
-} from "../server";
-import { ConfectAuth } from "../server/auth";
-import {
-  ConfectDatabaseReader,
-  ConfectDatabaseWriter,
-} from "../server/database";
+import { ConfectScheduler, layer as layerScheduler } from "../server/scheduler";
+import { ConfectAuth, layer as layerAuth } from "../server/auth";
+import { QueryDB, MutationDB, layerQueryDB, layerMutationDB } from "../server/database";
 import {
   ConfectActionRunner,
   ConfectMutationRunner,
   ConfectQueryRunner,
+  layerActionRunner,
+  layerMutationRunner,
+  layerQueryRunner,
 } from "../server/runners";
+import {
+  ConvexActionCtx,
+  ConvexMutationCtx,
+  ConvexQueryCtx,
+  layerActionCtx,
+  layerMutationCtx,
+  layerQueryCtx,
+} from "../server/ctx";
 import { ConfectSchemaDefinition, GenericConfectSchema } from "../server/schema";
 import {
   compileArgsSchema,
@@ -42,8 +45,11 @@ import {
   ConfectStorageActionWriter,
   ConfectStorageReader,
   ConfectStorageWriter,
+  layerStorageActionWriter,
+  layerStorageReader,
+  layerStorageWriter,
 } from "../server/storage";
-import { ConfectVectorSearch } from "../server/vector_search";
+import { ConfectVectorSearch, layer as layerVectorSearch } from "../server/vector_search";
 import { ConfectApiGroupAnyWithProps } from "./ConfectApiGroup";
 import * as ConfectApiBuilder from "./ConfectApiBuilder";
 import * as ConfectApiWithDatabaseSchema from "./ConfectApiWithDatabaseSchema";
@@ -241,11 +247,11 @@ const confectQueryFunction = (
   returns: compileReturnsSchema(returns),
   handler: (ctx: GenericQueryCtx<any>, actualArgs: any): Promise<any> => {
     const layers = Layer.mergeAll(
-      ConfectDatabaseReader.layer(confectSchemaDefinition, ctx.db),
-      ConfectAuth.layer(ctx.auth),
-      ConfectStorageReader.layer(ctx.storage),
-      ConfectQueryRunner.layer(ctx.runQuery),
-      ConvexQueryCtx.layer(ctx)
+      layerQueryDB(confectSchemaDefinition, ctx.db),
+      layerAuth(ctx.auth),
+      layerStorageReader(ctx.storage),
+      layerQueryRunner(ctx.runQuery),
+      layerQueryCtx(ctx)
     );
 
     return runHandler(args, returns, handler, layers, actualArgs);
@@ -268,15 +274,15 @@ const confectMutationFunction = (
   returns: compileReturnsSchema(returns),
   handler: (ctx: GenericMutationCtx<any>, actualArgs: any): Promise<any> => {
     const layers = Layer.mergeAll(
-      ConfectDatabaseReader.layer(confectSchemaDefinition, ctx.db),
-      ConfectDatabaseWriter.layer(confectSchemaDefinition, ctx.db),
-      ConfectAuth.layer(ctx.auth),
-      ConfectScheduler.layer(ctx.scheduler),
-      ConfectStorageReader.layer(ctx.storage),
-      ConfectStorageWriter.layer(ctx.storage),
-      ConfectQueryRunner.layer(ctx.runQuery),
-      ConfectMutationRunner.layer(ctx.runMutation),
-      ConvexMutationCtx.layer(ctx)
+      layerQueryDB(confectSchemaDefinition, ctx.db),
+      layerMutationDB(confectSchemaDefinition, ctx.db),
+      layerAuth(ctx.auth),
+      layerScheduler(ctx.scheduler),
+      layerStorageReader(ctx.storage),
+      layerStorageWriter(ctx.storage),
+      layerQueryRunner(ctx.runQuery),
+      layerMutationRunner(ctx.runMutation),
+      layerMutationCtx(ctx)
     );
 
     return runHandler(args, returns, handler, layers, actualArgs);
@@ -299,16 +305,16 @@ const confectActionFunction = (
   returns: compileReturnsSchema(returns),
   handler: (ctx: GenericActionCtx<any>, actualArgs: any): Promise<any> => {
     const layers = Layer.mergeAll(
-      ConfectScheduler.layer(ctx.scheduler),
-      ConfectAuth.layer(ctx.auth),
-      ConfectStorageReader.layer(ctx.storage),
-      ConfectStorageWriter.layer(ctx.storage),
-      ConfectStorageActionWriter.layer(ctx.storage),
-      ConfectQueryRunner.layer(ctx.runQuery),
-      ConfectMutationRunner.layer(ctx.runMutation),
-      ConfectActionRunner.layer(ctx.runAction),
-      ConfectVectorSearch.layer(ctx.vectorSearch),
-      ConvexActionCtx.layer(ctx)
+      layerScheduler(ctx.scheduler),
+      layerAuth(ctx.auth),
+      layerStorageReader(ctx.storage),
+      layerStorageWriter(ctx.storage),
+      layerStorageActionWriter(ctx.storage),
+      layerQueryRunner(ctx.runQuery),
+      layerMutationRunner(ctx.runMutation),
+      layerActionRunner(ctx.runAction),
+      layerVectorSearch(ctx.vectorSearch),
+      layerActionCtx(ctx)
     );
 
     return runHandler(args, returns, handler, layers, actualArgs);

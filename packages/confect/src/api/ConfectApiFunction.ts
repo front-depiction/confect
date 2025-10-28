@@ -5,15 +5,14 @@ import {
   ConfectStorageReader,
   ConfectStorageWriter,
   ConfectVectorSearch,
-  ConvexActionCtx,
-  ConvexMutationCtx,
-  ConvexQueryCtx,
 } from "../server";
 import { ConfectAuth } from "../server/auth";
 import {
-  ConfectDatabaseReader,
-  ConfectDatabaseWriter,
-} from "../server/database";
+  ConvexActionCtx,
+  ConvexMutationCtx,
+  ConvexQueryCtx,
+} from "../server/ctx";
+import { QueryDB, MutationDB } from "../server/database";
 import {
   ConfectActionRunner,
   ConfectMutationRunner,
@@ -122,7 +121,7 @@ export type QueryHandler<
   Function extends ConfectApiFunctionAnyWithPropsWithFunctionType<"Query">,
 > = BaseHandler<
   Function,
-  | typeof ConfectDatabaseReader
+  | typeof QueryDB
   | ConfectAuth
   | ConfectStorageReader
   | typeof ConfectQueryRunner
@@ -133,8 +132,8 @@ export type MutationHandler<
   Function extends ConfectApiFunctionAnyWithPropsWithFunctionType<"Mutation">,
 > = BaseHandler<
   Function,
-  | typeof ConfectDatabaseReader
-  | typeof ConfectDatabaseWriter
+  | typeof QueryDB
+  | typeof MutationDB
   | ConfectAuth
   | ConfectScheduler
   | ConfectStorageReader

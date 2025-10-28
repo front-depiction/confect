@@ -18,13 +18,13 @@ import type {
 import type { GenericId } from "convex/values";
 
 import {
-  Effect,
-  identity,
-  Option,
-  ParseResult,
-  Schema,
-  Stream,
+  identity
 } from "effect";
+import * as ParseResult from "effect/ParseResult";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import type {
   ConfectDocumentFromSchema,
   DerivedTableSchema,
@@ -107,9 +107,7 @@ export const makeOrderedQuery = <
       ),
     ),
 
-  take: (
-    n: number,
-  ) =>
+  take: (n: number) =>
     Effect.promise(() => query.take(n)).pipe(
       Effect.flatMap((docs) =>
         decodeDocuments(docs, tableName, tableSchema),

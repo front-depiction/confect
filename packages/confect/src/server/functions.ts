@@ -13,7 +13,7 @@ import {
   type RegisteredMutation,
   type RegisteredQuery,
 } from "convex/server";
-import { Effect, Layer, pipe, Schema } from "effect";
+import { Effect, Layer, ParseResult, pipe, Schema } from "effect";
 
 import { ConfectAuth, layer as layerAuth } from "./auth";
 import {
