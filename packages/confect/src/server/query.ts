@@ -22,7 +22,6 @@ import {
   identity,
   Option,
   ParseResult,
-  pipe,
   Schema,
   Stream,
 } from "effect";
