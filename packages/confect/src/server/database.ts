@@ -44,6 +44,7 @@ import type {
   ConfectSchemaDefinition,
   GenericConfectSchema,
 } from "./schema";
+import * as Predicate from "effect/Predicate";
 
 
 
@@ -251,13 +252,7 @@ const encodeDocument = <A, I>(
     return Effect.succeed(self as never);
   }
 
-  const extractIdForError = (doc: unknown): string => {
-    if (typeof doc === "object" && doc !== null && "_id" in doc) {
-      const id = (doc as { _id: unknown })._id;
-      return typeof id === "string" ? id : String(id);
-    }
-    return "unknown";
-  };
+  const extractIdForError = (doc: unknown): string => Predicate.hasProperty(doc, "_id") && Predicate.isString(doc._id) ? doc._id : "unknown"
 
   return Schema.encode(tableSchema)(self).pipe(
     Effect.mapError((parseError) =>
