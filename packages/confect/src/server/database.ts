@@ -49,10 +49,10 @@ import type {
 
 
 // ===========================
-// ConfectDatabaseReader
+// QueryDB - Read-only database operations
 // ===========================
 
-export interface ConfectDatabaseReader<
+export interface QueryDB<
   S extends GenericConfectSchema = GenericConfectSchema,
 > {
   readonly get: <TN extends TableNamesFromSchema<S>>(
@@ -68,16 +68,20 @@ export interface ConfectDatabaseReader<
   ) => Effect.Effect<ConfectQueryInitializer<TableInfoFromSchema<S, TN>>>;
 }
 
-export const ConfectDatabaseReader = Context.GenericTag<ConfectDatabaseReader>(
-  "@rjdellecese/confect/ConfectDatabaseReader",
+export const QueryDB = Context.GenericTag<QueryDB>(
+  "@rjdellecese/confect/QueryDB",
 );
 
-export const makeConfectDatabaseReader = <
+// Legacy export for backward compatibility
+/** @deprecated Use QueryDB instead */
+export const ConfectDatabaseReader = QueryDB;
+
+export const makeQueryDB = <
   S extends GenericConfectSchema,
 >(
   confectSchemaDefinition: ConfectSchemaDefinition<S>,
   convexDatabaseReader: GenericDatabaseReader<ConvexDataModel<ConfectSchemaDefinition<S>>>,
-): ConfectDatabaseReader<S> => ({
+): QueryDB<S> => ({
   get: (tableName, id) => {
     const maybeSchema = Option.fromNullable(confectSchemaDefinition.confectSchema[tableName]?.tableSchema)
     return Effect.promise(() => convexDatabaseReader.get(id)).pipe(
@@ -105,24 +109,30 @@ export const makeConfectDatabaseReader = <
   },
 });
 
-export const layerDatabaseReader = <
+export const layerQueryDB = <
   S extends GenericConfectSchema,
 >(
   confectSchemaDefinition: ConfectSchemaDefinition<S>,
   convexDatabaseReader: GenericDatabaseReader<ConvexDataModel<ConfectSchemaDefinition<S>>>,
-): Layer.Layer<ConfectDatabaseReader<S>> =>
+): Layer.Layer<QueryDB<S>> =>
   Layer.succeed(
-    ConfectDatabaseReader,
-    makeConfectDatabaseReader(confectSchemaDefinition, convexDatabaseReader),
+    QueryDB,
+    makeQueryDB(confectSchemaDefinition, convexDatabaseReader),
   );
 
+// Legacy exports for backward compatibility
+/** @deprecated Use makeQueryDB instead */
+export const makeConfectDatabaseReader = makeQueryDB;
+/** @deprecated Use layerQueryDB instead */
+export const layerDatabaseReader = layerQueryDB;
+
 // ===========================
-// ConfectDatabaseWriter
+// MutationDB - Read and write database operations
 // ===========================
 
-export interface ConfectDatabaseWriter<
+export interface MutationDB<
   S extends GenericConfectSchema = GenericConfectSchema,
-> extends ConfectDatabaseReader<S> {
+> extends QueryDB<S> {
   readonly insert: <TN extends TableNamesFromSchema<S>>(
     tableName: TN,
     document: WithoutSystemFields<ConfectDocumentFromSchema<S, TN>>,
@@ -143,17 +153,21 @@ export interface ConfectDatabaseWriter<
   ) => Effect.Effect<void>;
 }
 
-export const ConfectDatabaseWriter = Context.GenericTag<ConfectDatabaseWriter>(
-  "@rjdellecese/confect/ConfectDatabaseWriter",
+export const MutationDB = Context.GenericTag<MutationDB>(
+  "@rjdellecese/confect/MutationDB",
 );
 
-export const makeConfectDatabaseWriter = <
+// Legacy export for backward compatibility
+/** @deprecated Use MutationDB instead */
+export const ConfectDatabaseWriter = MutationDB;
+
+export const makeMutationDB = <
   S extends GenericConfectSchema,
 >(
   confectSchemaDefinition: ConfectSchemaDefinition<S>,
   convexDatabaseWriter: GenericDatabaseWriter<ConvexDataModel<ConfectSchemaDefinition<S>>>,
-): ConfectDatabaseWriter<S> => {
-  const reader = makeConfectDatabaseReader(confectSchemaDefinition, convexDatabaseWriter);
+): MutationDB<S> => {
+  const reader = makeQueryDB(confectSchemaDefinition, convexDatabaseWriter);
 
   return {
     ...reader,
@@ -208,16 +222,22 @@ export const makeConfectDatabaseWriter = <
   };
 };
 
-export const layerDatabaseWriter = <
+export const layerMutationDB = <
   S extends GenericConfectSchema,
 >(
   confectSchemaDefinition: ConfectSchemaDefinition<S>,
   convexDatabaseWriter: GenericDatabaseWriter<ConvexDataModel<ConfectSchemaDefinition<S>>>,
-): Layer.Layer<ConfectDatabaseWriter<S>> =>
+): Layer.Layer<MutationDB<S>> =>
   Layer.succeed(
-    ConfectDatabaseWriter,
-    makeConfectDatabaseWriter(confectSchemaDefinition, convexDatabaseWriter),
+    MutationDB,
+    makeMutationDB(confectSchemaDefinition, convexDatabaseWriter),
   );
+
+// Legacy exports for backward compatibility
+/** @deprecated Use makeMutationDB instead */
+export const makeConfectDatabaseWriter = makeMutationDB;
+/** @deprecated Use layerMutationDB instead */
+export const layerDatabaseWriter = layerMutationDB;
 
 // ===========================
 // Encoding Helper
