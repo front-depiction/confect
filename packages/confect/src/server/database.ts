@@ -15,7 +15,6 @@
 import type {
   GenericDatabaseReader,
   GenericDatabaseWriter,
-  NamedTableInfo,
   WithoutSystemFields,
 } from "convex/server";
 import type { GenericId } from "convex/values";
@@ -29,6 +28,7 @@ import * as Option from "effect/Option";
 import type {
   ConfectDocumentFromSchema,
   ConvexDataModel,
+  TableInfoFromSchema,
   TableNamesFromSchema,
 } from "./data_model";
 import {
@@ -38,6 +38,9 @@ import {
   makeQueryInitializer,
   type ConfectQueryInitializer,
 } from "./query";
+
+// Re-export error classes for convenience
+export { DocumentDecodeError, GetByIdFailure };
 import type {
   ConfectSchemaDefinition,
   GenericConfectSchema,
@@ -62,11 +65,7 @@ export interface ConfectDatabaseReader<
 
   readonly table: <TN extends TableNamesFromSchema<S>>(
     tableName: TN,
-  ) => Effect.Effect<
-    ConfectQueryInitializer<
-      NamedTableInfo<ConvexDataModel<ConfectSchemaDefinition<S>>, TN>
-    >
-  >;
+  ) => Effect.Effect<ConfectQueryInitializer<TableInfoFromSchema<S, TN>>>;
 }
 
 export const ConfectDatabaseReader = Context.GenericTag<ConfectDatabaseReader>(
@@ -74,12 +73,11 @@ export const ConfectDatabaseReader = Context.GenericTag<ConfectDatabaseReader>(
 );
 
 export const makeConfectDatabaseReader = <
-  Schema extends GenericConfectSchema,
-  DatabaseReader extends GenericDatabaseReader<ConvexDataModel<ConfectSchemaDefinition<Schema>>>,
+  S extends GenericConfectSchema,
 >(
-  confectSchemaDefinition: ConfectSchemaDefinition<Schema>,
-  convexDatabaseReader: DatabaseReader,
-): ConfectDatabaseReader<Schema> => ({
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
+  convexDatabaseReader: GenericDatabaseReader<ConvexDataModel<ConfectSchemaDefinition<S>>>,
+): ConfectDatabaseReader<S> => ({
   get: (tableName, id) => {
     const maybeSchema = Option.fromNullable(confectSchemaDefinition.confectSchema[tableName]?.tableSchema)
     return Effect.promise(() => convexDatabaseReader.get(id)).pipe(
@@ -108,12 +106,11 @@ export const makeConfectDatabaseReader = <
 });
 
 export const layerDatabaseReader = <
-  Schema extends GenericConfectSchema,
-  DatabaseReader extends GenericDatabaseReader<ConvexDataModel<ConfectSchemaDefinition<Schema>>>,
+  S extends GenericConfectSchema,
 >(
-  confectSchemaDefinition: ConfectSchemaDefinition<Schema>,
-  convexDatabaseReader: DatabaseReader,
-): Layer.Layer<ConfectDatabaseReader<Schema>> =>
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
+  convexDatabaseReader: GenericDatabaseReader<ConvexDataModel<ConfectSchemaDefinition<S>>>,
+): Layer.Layer<ConfectDatabaseReader<S>> =>
   Layer.succeed(
     ConfectDatabaseReader,
     makeConfectDatabaseReader(confectSchemaDefinition, convexDatabaseReader),
@@ -151,12 +148,11 @@ export const ConfectDatabaseWriter = Context.GenericTag<ConfectDatabaseWriter>(
 );
 
 export const makeConfectDatabaseWriter = <
-  Schema extends GenericConfectSchema,
-  DatabaseWriter extends GenericDatabaseWriter<ConvexDataModel<ConfectSchemaDefinition<Schema>>>,
+  S extends GenericConfectSchema,
 >(
-  confectSchemaDefinition: ConfectSchemaDefinition<Schema>,
-  convexDatabaseWriter: DatabaseWriter,
-): ConfectDatabaseWriter<Schema> => {
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
+  convexDatabaseWriter: GenericDatabaseWriter<ConvexDataModel<ConfectSchemaDefinition<S>>>,
+): ConfectDatabaseWriter<S> => {
   const reader = makeConfectDatabaseReader(confectSchemaDefinition, convexDatabaseWriter);
 
   return {
@@ -213,12 +209,11 @@ export const makeConfectDatabaseWriter = <
 };
 
 export const layerDatabaseWriter = <
-  Schema extends GenericConfectSchema,
-  DatabaseWriter extends GenericDatabaseWriter<ConvexDataModel<ConfectSchemaDefinition<Schema>>>,
+  S extends GenericConfectSchema,
 >(
-  confectSchemaDefinition: ConfectSchemaDefinition<Schema>,
-  convexDatabaseWriter: DatabaseWriter,
-): Layer.Layer<ConfectDatabaseWriter<Schema>> =>
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
+  convexDatabaseWriter: GenericDatabaseWriter<ConvexDataModel<ConfectSchemaDefinition<S>>>,
+): Layer.Layer<ConfectDatabaseWriter<S>> =>
   Layer.succeed(
     ConfectDatabaseWriter,
     makeConfectDatabaseWriter(confectSchemaDefinition, convexDatabaseWriter),
