@@ -1,10 +1,10 @@
 export { ConfectAuth } from "./auth";
-export { ConvexActionCtx, ConvexMutationCtx, ConvexQueryCtx } from "./ctx";
 export type {
   DataModelFromConfectDataModel,
   GenericConfectDoc,
   TableNamesInConfectDataModel,
 } from "./data_model";
+export { QueryDB, MutationDB } from "./database";
 export { makeConfectFunctions } from "./functions";
 export { type ConfectHttpApi, makeConvexHttpRouter } from "./http";
 export {
