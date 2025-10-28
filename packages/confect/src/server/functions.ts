@@ -26,10 +26,10 @@ import {
 } from "./ctx";
 import type { DataModelFromConfectDataModel } from "./data_model";
 import {
-  ConfectDatabaseReader,
-  ConfectDatabaseWriter,
-  layerDatabaseReader,
-  layerDatabaseWriter,
+  QueryDB,
+  MutationDB,
+  layerQueryDB,
+  layerMutationDB,
 } from "./database";
 import {
   ConfectActionRunner,
@@ -82,7 +82,7 @@ export const makeConfectFunctions = <
     ) => Effect.Effect<
       ConfectReturns,
       E,
-      | typeof ConfectDatabaseReader
+      | typeof QueryDB
       | typeof ConfectAuth
       | typeof ConfectStorageReader
       | typeof ConfectQueryRunner
@@ -109,7 +109,7 @@ export const makeConfectFunctions = <
     ) => Effect.Effect<
       ConfectReturns,
       E,
-      | typeof ConfectDatabaseReader
+      | typeof QueryDB
       | typeof ConfectAuth
       | typeof ConfectStorageReader
       | typeof ConfectQueryRunner
@@ -136,7 +136,7 @@ export const makeConfectFunctions = <
     ) => Effect.Effect<
       ConfectReturns,
       E,
-      | typeof ConfectDatabaseReader
+      | typeof QueryDB
       | typeof ConfectAuth
       | typeof ConfectStorageReader
       | typeof ConfectQueryRunner
@@ -159,7 +159,7 @@ export const makeConfectFunctions = <
         ),
         Effect.provide(
           Layer.mergeAll(
-            layerDatabaseReader(confectSchemaDefinition, ctx.db),
+            layerQueryDB(confectSchemaDefinition, ctx.db),
             layerAuth(ctx.auth),
             layerStorageReader(ctx.storage),
             layerQueryRunner(ctx.runQuery),
@@ -188,8 +188,8 @@ export const makeConfectFunctions = <
     ) => Effect.Effect<
       ConfectReturns,
       E,
-      | typeof ConfectDatabaseReader
-      | typeof ConfectDatabaseWriter
+      | typeof QueryDB
+      | typeof MutationDB
       | typeof ConfectAuth
       | typeof ConfectScheduler
       | typeof ConfectStorageReader
@@ -219,8 +219,8 @@ export const makeConfectFunctions = <
     ) => Effect.Effect<
       ConfectReturns,
       E,
-      | typeof ConfectDatabaseReader
-      | typeof ConfectDatabaseWriter
+      | typeof QueryDB
+      | typeof MutationDB
       | typeof ConfectAuth
       | typeof ConfectScheduler
       | typeof ConfectStorageReader
@@ -252,8 +252,8 @@ export const makeConfectFunctions = <
     ) => Effect.Effect<
       ConfectReturns,
       E,
-      | typeof ConfectDatabaseReader
-      | typeof ConfectDatabaseWriter
+      | typeof QueryDB
+      | typeof MutationDB
       | typeof ConfectAuth
       | typeof ConfectScheduler
       | typeof ConfectStorageReader
@@ -278,8 +278,8 @@ export const makeConfectFunctions = <
             handler(decodedArgs),
             Effect.provide(
               Layer.mergeAll(
-                layerDatabaseReader(confectSchemaDefinition, ctx.db),
-                layerDatabaseWriter(confectSchemaDefinition, ctx.db),
+                layerQueryDB(confectSchemaDefinition, ctx.db),
+                layerMutationDB(confectSchemaDefinition, ctx.db),
                 layerAuth(ctx.auth),
                 layerScheduler(ctx.scheduler),
                 layerStorageReader(ctx.storage),
@@ -435,7 +435,7 @@ export const makeConfectFunctions = <
     confectInternalMutation,
     confectAction,
     confectInternalAction,
-    ConfectDatabaseReader,
-    ConfectDatabaseWriter,
+    QueryDB,
+    MutationDB,
   };
 };
