@@ -1,6 +1,6 @@
 import { describe } from "@effect/vitest";
 import { assertEquals } from "@effect/vitest/utils";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import { api } from "./convex/_generated/api";
 import { TestConvexService } from "./TestConvexService";
 import { effect } from "./test_utils";

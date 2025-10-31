@@ -6,7 +6,9 @@ import {
   OpenApi,
 } from "@effect/platform";
 
-import { Effect, Layer, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { makeConvexHttpRouter } from "../../src/server";
 
 // root

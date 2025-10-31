@@ -502,7 +502,7 @@ const handlePropertySignatures = (typeLiteralAst: SchemaAST.TypeLiteral) =>
         );
       }
     }),
-    Effect.andThen((propertyNamesWithValidators) =>
+    Effect.flatMap((propertyNamesWithValidators) =>
       pipe(
         propertyNamesWithValidators,
         Array.reduce(

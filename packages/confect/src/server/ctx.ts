@@ -15,12 +15,14 @@ import type {
   GenericMutationCtx,
   GenericQueryCtx,
 } from "convex/server";
-import { Context, Effect, Layer } from "effect";
-import { QueryDB, MutationDB } from "./database";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { ConfectAuth } from "./auth";
-import { ConfectStorageReader, ConfectStorageWriter } from "./storage";
+import { MutationDB, QueryDB } from "./database";
+import { ConfectMutationRunner, ConfectQueryRunner } from "./runners";
 import { ConfectScheduler } from "./scheduler";
-import { ConfectQueryRunner, ConfectMutationRunner } from "./runners";
+import { ConfectStorageReader, ConfectStorageWriter } from "./storage";
 
 // ===========================
 // ConfectQueryCtx
@@ -37,13 +39,9 @@ export interface ConfectQueryCtx {
   readonly runQuery: ConfectQueryRunner;
 }
 
-const ConfectQueryCtxTag = Context.GenericTag<ConfectQueryCtx>(
+const ConfectQueryCtx = Context.GenericTag<ConfectQueryCtx>(
   "@rjdellecese/confect/ConfectQueryCtx",
 );
-
-export const ConfectQueryCtx = Object.assign(ConfectQueryCtxTag, {
-  of: (props: ConfectQueryCtx): ConfectQueryCtx => props,
-});
 
 /**
  * Build ConfectQueryCtx from capability services using Layer.effect.
@@ -82,14 +80,9 @@ export interface ConfectMutationCtx {
   readonly runMutation: ConfectMutationRunner;
 }
 
-const ConfectMutationCtxTag = Context.GenericTag<ConfectMutationCtx>(
+const ConfectMutationCtx = Context.GenericTag<ConfectMutationCtx>(
   "@rjdellecese/confect/ConfectMutationCtx",
 );
-
-export const ConfectMutationCtx = Object.assign(ConfectMutationCtxTag, {
-  of: (props: ConfectMutationCtx): ConfectMutationCtx => props,
-});
-
 /**
  * Build ConfectMutationCtx from capability services using Layer.effect.
  */
@@ -124,7 +117,7 @@ export const ConvexQueryCtx = Context.GenericTag<GenericQueryCtx<GenericDataMode
 
 export const layerQueryCtx = <DataModel extends GenericDataModel>(
   ctx: GenericQueryCtx<DataModel>,
-): Layer.Layer<GenericQueryCtx<GenericDataModel>> =>
+) =>
   Layer.succeed(ConvexQueryCtx, ctx as unknown as GenericQueryCtx<GenericDataModel>);
 
 // ===========================
@@ -137,7 +130,7 @@ export const ConvexMutationCtx = Context.GenericTag<GenericMutationCtx<GenericDa
 
 export const layerMutationCtx = <DataModel extends GenericDataModel>(
   ctx: GenericMutationCtx<DataModel>,
-): Layer.Layer<GenericMutationCtx<GenericDataModel>> =>
+) =>
   Layer.succeed(ConvexMutationCtx, ctx as unknown as GenericMutationCtx<GenericDataModel>);
 
 // ===========================
@@ -150,7 +143,7 @@ export const ConvexActionCtx = Context.GenericTag<GenericActionCtx<GenericDataMo
 
 export const layerActionCtx = <DataModel extends GenericDataModel>(
   ctx: GenericActionCtx<DataModel>,
-): Layer.Layer<GenericActionCtx<GenericDataModel>> =>
+) =>
   Layer.succeed(ConvexActionCtx, ctx as unknown as GenericActionCtx<GenericDataModel>);
 
 // ===========================

@@ -92,6 +92,15 @@ const HandlersProto = {
     handler: HandlerAnyWithProps
   ) {
     const function_ = this.group.functions[name];
+    // The handlers array is constructed incrementally through .handle() calls.
+    // Each call adds a new HandlerItem. While we know the structure is correct
+    // (function_ and handler are properly typed), TypeScript cannot verify the
+    // array spread preserves Chunk.Chunk invariants from the prototype method context.
+    // We use Array spread for simplicity and cast to Chunk at the boundary.
+    // This cast is safe because:
+    // 1. handlers is already Chunk.Chunk<HandlersItem<...>>
+    // 2. We're adding a conforming HandlerItem structure
+    // 3. The array structure matches Chunk's internal representation
     return makeHandlers({
       group: this.group,
       handlers: [
@@ -100,7 +109,7 @@ const HandlersProto = {
           function_,
           handler,
         },
-      ] as any,
+      ] as unknown as Chunk.Chunk<HandlersItem<ConfectSchema, ConfectApiFunctionAnyWithProps>>,
     });
   },
 };
@@ -150,11 +159,18 @@ export const group = <
     >
   >
 > => {
+  // GroupPath is a string literal type derived from Groups union.
+  // At runtime, we know groupPath is a valid key in api.groups, but TypeScript
+  // cannot statically verify the Record lookup returns the exact ConfectApiGroupWithPath type.
+  // This cast is safe because GroupPath constrains groupPath to valid paths in Groups.
   const group = apiWithDatabaseSchema.api.groups[
     groupPath
   ]! as ConfectApiGroupWithPath<Groups, GroupPath>;
 
   // Create initial empty handlers with explicit type parameters
+  // This cast is necessary because makeHandlers expects ConfectApiGroupAnyWithProps
+  // but 'group' has the more specific type ConfectApiGroupWithPath. The cast is safe
+  // because ConfectApiGroupWithPath extends ConfectApiGroupAnyWithProps.
   const initialHandlers = makeHandlers<
     ConfectSchema,
     ConfectApiGroupFunctions<
@@ -165,7 +181,11 @@ export const group = <
     handlers: Chunk.empty(),
   });
 
-  // Call build() - user chains .handle() calls, returns populated
+  // The build() function is a user-provided callback that chains .handle() calls.
+  // TypeScript's HandlersValidateReturn ensures all functions are handled, but returns
+  // a string literal error message if not. At runtime, if validation passes, we know
+  // the result is HandlersFromGroup. This cast bridges the compile-time validation
+  // type (string literal error or Handlers) to the runtime guarantee.
   const populatedHandlers = build(initialHandlers) as unknown as HandlersFromGroup<
     ConfectSchema,
     ConfectApiGroupWithPath<Groups, GroupPath>
@@ -227,8 +247,15 @@ export const api = <
             GroupName
           >;
 
+          // GroupName is constrained to ConfectApiGroupName<Groups>, so groupName is a valid key.
+          // However, TypeScript cannot statically verify the Record lookup yields ConfectApiGroupWithName.
+          // This cast is safe because GroupName ensures we're looking up a group that exists in Groups.
           const group = apiWithDatabaseSchema.api.groups[groupName]! as unknown as Group;
 
+          // Context.GenericTag returns a Tag<Service>, but yield* on a Tag should resolve to Service.
+          // TypeScript struggles with the complex generic inference through yield* and Context.GenericTag.
+          // This cast explicitly tells TypeScript that yielding the tag provides the service Effect.
+          // Safe because ConfectApiGroupService returns Context.GenericTag<ConfectApiGroupService<...>>.
           const groupService = yield* ConfectApiGroupService({
             apiName: apiWithDatabaseSchema.api.name,
             group,

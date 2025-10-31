@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { expectTypeOf, test } from "vitest";
 import { PaginationResult } from "../../src/server/schemas/PaginationResult";
 

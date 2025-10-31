@@ -6,7 +6,7 @@
  * Design decisions:
  * - Returns Effect for composability
  * - Fails with typed error when no user identity exists
- * - Uses Option to handle nullable user identity from Convex
+* - Uses Option to handle nullable user identity from Convex
  */
 import type { Auth, UserIdentity } from "convex/server";
 import * as Context from "effect/Context";

@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as schema from "../../src/server/schema";
 import { GenericId } from "../../src/server/schemas/GenericId";
 

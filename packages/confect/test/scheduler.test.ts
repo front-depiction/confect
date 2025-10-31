@@ -1,6 +1,9 @@
 import { describe, vi } from "@effect/vitest";
 import { assertEquals } from "@effect/vitest/utils";
-import { DateTime, Duration, Effect, Schema } from "effect";
+import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { api } from "./convex/_generated/api";
 import { TestConvexService } from "./TestConvexService";
 import { effect } from "./test_utils";

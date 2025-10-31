@@ -1,4 +1,7 @@
-import { Chunk, Effect, Schema, Stream } from "effect";
+import * as Chunk from "effect/Chunk";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { GenericId } from "../../src/server/schemas/GenericId";
 import { PaginationResult } from "../../src/server/schemas/PaginationResult";
 import {

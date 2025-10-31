@@ -37,6 +37,12 @@ export const make = <
         Effect.gen(function* () {
           const encodedArgs = yield* Schema.encodeUnknown(function_.args)(args);
 
+          // API boundary cast: Convex expects FunctionReference<"public", any, any> which is a
+          // branded string type. ConfectApiFunctionPath.make returns a string with the correct
+          // format ("groupName.functionName"), but TypeScript cannot verify the brand matches.
+          // This is a legitimate API boundary between Confect's type system and Convex's runtime.
+          // Safe because: (1) path format matches Convex's expectations, (2) Convex performs
+          // runtime validation, (3) we're calling registered functions from the same schema.
           const path = ConfectApiFunctionPath.make(
             group.name,
             function_.name
@@ -53,4 +59,11 @@ export const make = <
           return decodedResult;
         })
     )
-  ) as any;
+  // Record.map preserves the structure of Api["groups"] but returns ReadonlyRecord with
+  // generic value types. TypeScript cannot infer the precise nested function signatures
+  // through the double Record.map transformation. This cast is safe because:
+  // 1. Outer Record.map preserves group structure from Api["groups"]
+  // 2. Inner Record.map preserves function structure from each group.functions
+  // 3. The lambda correctly types args/returns from function_.args/returns schemas
+  // 4. The resulting structure exactly matches ConfectApiClient<Api> by construction
+  ) as ConfectApiClient<Api>;

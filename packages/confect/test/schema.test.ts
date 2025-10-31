@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, test } from "@effect/vitest";
 import type { SystemDataModel } from "convex/server";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import type {
   DataModelFromConfectDataModel,
   GenericConfectDataModel,

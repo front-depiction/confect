@@ -1,4 +1,6 @@
-import { Effect, type ParseResult, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import type * as ParseResult from "effect/ParseResult";
+import * as Schema from "effect/Schema";
 import { GenericId } from "../../src/server";
 import { api } from "../convex/_generated/api";
 import {

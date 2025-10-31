@@ -14,7 +14,10 @@ import {
   type TestConvexForDataModel,
   type TestConvexForDataModelAndIdentity,
 } from "convex-test";
-import { Context, Effect, Layer, pipe } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { pipe } from "effect";
 
 import schema from "./convex/schema";
 

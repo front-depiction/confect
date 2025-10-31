@@ -1,6 +1,6 @@
 import { Command } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 
 export const setup = () =>
   Command.make("bun", "convex", "codegen").pipe(

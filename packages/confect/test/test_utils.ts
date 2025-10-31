@@ -1,5 +1,6 @@
 import { effect as effect_ } from "@effect/vitest";
-import { Effect, type TestServices } from "effect";
+import * as Effect from "effect/Effect";
+import type * as TestServices from "effect/TestServices";
 
 import * as TestConvexService from "./TestConvexService";
 

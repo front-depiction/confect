@@ -13,7 +13,9 @@ import {
   type RegisteredMutation,
   type RegisteredQuery,
 } from "convex/server";
-import { Effect, Layer, ParseResult, pipe, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 
 import { ConfectAuth, layer as layerAuth } from "./auth";
 import {
@@ -24,7 +26,6 @@ import {
   layerMutationCtx,
   layerQueryCtx,
 } from "./ctx";
-import type { DataModelFromConfectDataModel } from "./data_model";
 import {
   QueryDB,
   MutationDB,
@@ -41,7 +42,6 @@ import {
 } from "./runners";
 import { ConfectScheduler, layer as layerScheduler } from "./scheduler";
 import type {
-  ConfectDataModelFromConfectSchema,
   ConfectSchemaDefinition,
   GenericConfectSchema,
 } from "./schema";
@@ -61,9 +61,6 @@ export const makeConfectFunctions = <
 >(
   confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>
 ) => {
-  type ConfectDataModel = ConfectDataModelFromConfectSchema<ConfectSchema>;
-  type DataModel = DataModelFromConfectDataModel<ConfectDataModel>;
-
   const confectQuery = <
     ConvexArgs extends DefaultFunctionArgs,
     ConfectArgs,
@@ -146,28 +143,24 @@ export const makeConfectFunctions = <
     args: compileArgsSchema(args),
     returns: compileReturnsSchema(returns),
     handler: (
-      ctx: GenericQueryCtx<DataModel>,
+      ctx: GenericQueryCtx<any>,
       actualArgs: ConvexArgs
-    ): Promise<ConvexReturns> =>
-      pipe(
-        actualArgs,
-        Schema.decode(args),
+    ): Promise<ConvexReturns> => {
+      const layers: Layer.Layer<any> = Layer.mergeAll(
+        layerQueryDB<ConfectSchema>(confectSchemaDefinition, ctx.db),
+        layerAuth(ctx.auth),
+        layerStorageReader(ctx.storage),
+        layerQueryRunner(ctx.runQuery),
+        layerQueryCtx(ctx)
+      );
+      return Schema.decode(args)(actualArgs).pipe(
         Effect.orDie,
-        Effect.andThen((decodedArgs) => handler(decodedArgs)),
-        Effect.andThen((convexReturns) =>
-          Schema.encodeUnknown(returns)(convexReturns)
-        ),
-        Effect.provide(
-          Layer.mergeAll(
-            layerQueryDB(confectSchemaDefinition, ctx.db),
-            layerAuth(ctx.auth),
-            layerStorageReader(ctx.storage),
-            layerQueryRunner(ctx.runQuery),
-            layerQueryCtx(ctx)
-          )
-        ) as Effect.Effect<ConvexReturns, ParseResult.ParseError | E, never>,
+        Effect.flatMap(handler),
+        Effect.provide(layers),
+        Effect.flatMap(Schema.encodeUnknown(returns)),
         Effect.runPromise
-      ),
+      );
+    },
   });
 
   const confectMutation = <
@@ -266,36 +259,28 @@ export const makeConfectFunctions = <
     args: compileArgsSchema(args),
     returns: compileReturnsSchema(returns),
     handler: (
-      ctx: GenericMutationCtx<DataModel>,
+      ctx: GenericMutationCtx<any>,
       actualArgs: ConvexArgs
-    ): Promise<ConvexReturns> =>
-      pipe(
-        actualArgs,
-        Schema.decode(args),
+    ): Promise<ConvexReturns> => {
+      const layers: Layer.Layer<any> = Layer.mergeAll(
+        layerQueryDB<ConfectSchema>(confectSchemaDefinition, ctx.db),
+        layerMutationDB<ConfectSchema>(confectSchemaDefinition, ctx.db),
+        layerAuth(ctx.auth),
+        layerScheduler(ctx.scheduler),
+        layerStorageReader(ctx.storage),
+        layerStorageWriter(ctx.storage),
+        layerQueryRunner(ctx.runQuery),
+        layerMutationRunner(ctx.runMutation),
+        layerMutationCtx(ctx)
+      );
+      return Schema.decode(args)(actualArgs).pipe(
         Effect.orDie,
-        Effect.andThen((decodedArgs) =>
-          pipe(
-            handler(decodedArgs),
-            Effect.provide(
-              Layer.mergeAll(
-                layerQueryDB(confectSchemaDefinition, ctx.db),
-                layerMutationDB(confectSchemaDefinition, ctx.db),
-                layerAuth(ctx.auth),
-                layerScheduler(ctx.scheduler),
-                layerStorageReader(ctx.storage),
-                layerStorageWriter(ctx.storage),
-                layerQueryRunner(ctx.runQuery),
-                layerMutationRunner(ctx.runMutation),
-                layerMutationCtx(ctx)
-              )
-            )
-          )
-        ),
-        Effect.andThen((convexReturns) =>
-          Schema.encodeUnknown(returns)(convexReturns)
-        ),
-        Effect.runPromise as any
-      ),
+        Effect.flatMap(handler),
+        Effect.provide(layers),
+        Effect.flatMap(Schema.encodeUnknown(returns)),
+        Effect.runPromise
+      );
+    },
   });
 
   const confectAction = <
@@ -395,37 +380,29 @@ export const makeConfectFunctions = <
     args: compileArgsSchema(args),
     returns: compileReturnsSchema(returns),
     handler: (
-      ctx: GenericActionCtx<DataModel>,
+      ctx: GenericActionCtx<any>,
       actualArgs: ConvexValue
-    ): Promise<ConvexReturns> =>
-      pipe(
-        actualArgs,
-        Schema.decode(args),
+    ): Promise<ConvexReturns> => {
+      const layers: Layer.Layer<any> = Layer.mergeAll(
+        layerScheduler(ctx.scheduler),
+        layerAuth(ctx.auth),
+        layerStorageReader(ctx.storage),
+        layerStorageWriter(ctx.storage),
+        layerStorageActionWriter(ctx.storage),
+        layerQueryRunner(ctx.runQuery),
+        layerMutationRunner(ctx.runMutation),
+        layerActionRunner(ctx.runAction),
+        layerVectorSearch(ctx.vectorSearch),
+        layerActionCtx(ctx)
+      );
+      return Schema.decode(args)(actualArgs).pipe(
         Effect.orDie,
-        Effect.andThen((decodedArgs) =>
-          pipe(
-            handler(decodedArgs),
-            Effect.provide(
-              Layer.mergeAll(
-                layerScheduler(ctx.scheduler),
-                layerAuth(ctx.auth),
-                layerStorageReader(ctx.storage),
-                layerStorageWriter(ctx.storage),
-                layerStorageActionWriter(ctx.storage),
-                layerQueryRunner(ctx.runQuery),
-                layerMutationRunner(ctx.runMutation),
-                layerActionRunner(ctx.runAction),
-                layerVectorSearch(ctx.vectorSearch),
-                layerActionCtx(ctx)
-              )
-            )
-          )
-        ),
-        Effect.andThen((convexReturns) =>
-          Schema.encodeUnknown(returns)(convexReturns)
-        ) as Effect.Effect<ConvexReturns, ParseResult.ParseError | E, never>,
+        Effect.flatMap(handler),
+        Effect.provide(layers),
+        Effect.flatMap(Schema.encodeUnknown(returns)),
         Effect.runPromise
-      ),
+      );
+    },
   });
 
   return {

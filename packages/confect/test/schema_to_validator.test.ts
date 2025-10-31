@@ -1,6 +1,9 @@
 import { describe, effect, expect, expectTypeOf, test } from "@effect/vitest";
 import { v, type VBoolean, type VString, type VUnion } from "convex/values";
-import { Effect, Exit, identity, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import { identity } from "effect";
+import * as Schema from "effect/Schema";
 
 import {
   compileArgsSchema,

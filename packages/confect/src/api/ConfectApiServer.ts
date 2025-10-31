@@ -7,31 +7,23 @@ import {
   queryGeneric,
   RegisteredQuery,
 } from "convex/server";
+import * as Array from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import { pipe } from "effect";
+import * as Record from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Types from "effect/Types";
+import { layer as layerScheduler } from "../server/scheduler";
+import { layer as layerAuth } from "../server/auth";
+import { layerQueryDB, layerMutationDB } from "../server/database";
 import {
-  Array,
-  Effect,
-  Layer,
-  Match,
-  pipe,
-  Record,
-  Schema,
-  Types,
-} from "effect";
-import { ConfectScheduler, layer as layerScheduler } from "../server/scheduler";
-import { ConfectAuth, layer as layerAuth } from "../server/auth";
-import { QueryDB, MutationDB, layerQueryDB, layerMutationDB } from "../server/database";
-import {
-  ConfectActionRunner,
-  ConfectMutationRunner,
-  ConfectQueryRunner,
   layerActionRunner,
   layerMutationRunner,
   layerQueryRunner,
 } from "../server/runners";
 import {
-  ConvexActionCtx,
-  ConvexMutationCtx,
-  ConvexQueryCtx,
   layerActionCtx,
   layerMutationCtx,
   layerQueryCtx,
@@ -42,15 +34,12 @@ import {
   compileReturnsSchema,
 } from "../server/schema_to_validator";
 import {
-  ConfectStorageActionWriter,
-  ConfectStorageReader,
-  ConfectStorageWriter,
   layerStorageActionWriter,
   layerStorageReader,
   layerStorageWriter,
 } from "../server/storage";
-import { ConfectVectorSearch, layer as layerVectorSearch } from "../server/vector_search";
-import { ConfectApiGroupAnyWithProps } from "./ConfectApiGroup";
+import { layer as layerVectorSearch } from "../server/vector_search";
+import { ConfectApiGroupAnyWithProps, ConfectApiGroupName } from "./ConfectApiGroup";
 import * as ConfectApiBuilder from "./ConfectApiBuilder";
 import * as ConfectApiWithDatabaseSchema from "./ConfectApiWithDatabaseSchema";
 
@@ -83,16 +72,16 @@ export type ConfectApiServer<
   }
 >;
 
-const makeRegisteredFunction = (
-  confectSchemaDefinition: ConfectSchemaDefinition<any>,
+const makeRegisteredFunction = <S extends GenericConfectSchema>(
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
   handlerItem: {
     function_: {
       functionType: string;
       name: string;
-      args: any;
-      returns: any;
+      args: Schema.Schema.AnyNoContext;
+      returns: Schema.Schema.AnyNoContext;
     };
-    handler: any;
+    handler: (a: unknown) => Effect.Effect<unknown, unknown, unknown>;
   }
 ) => {
   const {
@@ -134,9 +123,18 @@ const makeRegisteredFunction = (
   return [name, registeredFunction] as const;
 };
 
-const buildGroupFunctions = (
-  confectSchemaDefinition: ConfectSchemaDefinition<any>,
-  handlers: ReadonlyArray<any>
+const buildGroupFunctions = <S extends GenericConfectSchema>(
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
+  // Internal handlers from ConfectApiBuilder - generic schemas and handlers
+  handlers: ReadonlyArray<{
+    function_: {
+      functionType: string;
+      name: string;
+      args: Schema.Schema.AnyNoContext;
+      returns: Schema.Schema.AnyNoContext;
+    };
+    handler: (a: unknown) => Effect.Effect<unknown, unknown, unknown>;
+  }>
 ) =>
   pipe(
     handlers,
@@ -146,23 +144,32 @@ const buildGroupFunctions = (
     Record.fromEntries
   );
 
-const buildServerGroup = (
-  confectSchemaDefinition: ConfectSchemaDefinition<any>,
-  api: any,
+const buildServerGroup = <
+  S extends GenericConfectSchema,
+  ApiName extends string,
+  Groups extends ConfectApiGroupAnyWithProps,
+>(
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
+  api: ConfectApiBuilder.ConfectApiService<S, ApiName, Groups>,
   groupName: string,
   group: ConfectApiGroupAnyWithProps
 ) =>
   pipe(
-    api.groupHandler(group.name),
-    Effect.map((groupHandler: any) => [
+    // Type assertion: groupName comes from Record.toEntries so it's a valid group name at runtime
+    api.groupHandler(group.name as ConfectApiGroupName<Groups>),
+    Effect.map((groupHandler) => [
       groupName,
       buildGroupFunctions(confectSchemaDefinition, groupHandler.handlers),
     ] as const)
   );
 
-const buildAllServerGroups = <Groups extends ConfectApiGroupAnyWithProps>(
-  confectSchemaDefinition: ConfectSchemaDefinition<any>,
-  api: any,
+const buildAllServerGroups = <
+  S extends GenericConfectSchema,
+  ApiName extends string,
+  Groups extends ConfectApiGroupAnyWithProps,
+>(
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
+  api: ConfectApiBuilder.ConfectApiService<S, ApiName, Groups>,
   groups: Record.ReadonlyRecord<Groups["name"], Groups>
 ) =>
   pipe(
@@ -200,7 +207,7 @@ export const make = <
       apiWithDatabaseSchema.api.name,
       apiWithDatabaseSchema.api.groups
     ),
-    Effect.andThen((api) =>
+    Effect.flatMap((api) =>
       buildAllServerGroups(
         apiWithDatabaseSchema.confectSchemaDefinition,
         api,
@@ -212,9 +219,19 @@ export const make = <
     ),
     Effect.provide(apiServiceLayer),
     Effect.scoped,
+    // API boundary cast: Convex requires synchronous function registration.
+    // Effect.runSync returns the unwrapped result but TypeScript can't infer
+    // the return type through the complex pipe chain. This is safe because
+    // buildAllServerGroups returns Effect<ConfectApiServer<Groups>>.
     Effect.runSync as any
   );
 
+// Internal handler runner that bridges Convex's untyped ctx with Effect's typed layer system.
+// Uses `any` for schema types because:
+// 1. Convex handlers receive/return untyped values (any) at the API boundary
+// 2. Schema encode/decode operations handle unknown->typed conversions
+// 3. The layer R must match what handler requires (can't be constrained further here)
+// Type safety is enforced at the ConfectApiFunction level, not at this low-level runner.
 const runHandler = (
   args: Schema.Schema<any, any>,
   returns: Schema.Schema<any, any>,
@@ -225,21 +242,23 @@ const runHandler = (
   pipe(
     Schema.decode(args)(actualArgs),
     Effect.orDie,
-    Effect.andThen(handler),
+    Effect.flatMap(handler),
     Effect.provide(layers),
-    Effect.andThen(Schema.encodeUnknown(returns)),
+    Effect.flatMap(Schema.encodeUnknown(returns)),
     Effect.runPromise
   );
 
-const confectQueryFunction = (
-  confectSchemaDefinition: ConfectSchemaDefinition<any>,
+const confectQueryFunction = <
+  S extends GenericConfectSchema
+>(
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
   {
     args,
     returns,
     handler,
   }: {
-    args: Schema.Schema<any, any>;
-    returns: Schema.Schema<any, any>;
+    args: Schema.Schema.AnyNoContext;
+    returns: Schema.Schema.AnyNoContext;
     handler: (a: any) => Effect.Effect<any, any, any>;
   }
 ) => ({
@@ -258,15 +277,17 @@ const confectQueryFunction = (
   },
 });
 
-const confectMutationFunction = (
-  confectSchemaDefinition: ConfectSchemaDefinition<any>,
+const confectMutationFunction = <
+  S extends GenericConfectSchema
+>(
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
   {
     args,
     returns,
     handler,
   }: {
-    args: Schema.Schema<any, any>;
-    returns: Schema.Schema<any, any>;
+    args: Schema.Schema.AnyNoContext;
+    returns: Schema.Schema.AnyNoContext;
     handler: (a: any) => Effect.Effect<any, any, any>;
   }
 ) => ({
@@ -289,15 +310,17 @@ const confectMutationFunction = (
   },
 });
 
-const confectActionFunction = (
-  _confectSchemaDefinition: ConfectSchemaDefinition<any>,
+const confectActionFunction = <
+  S extends GenericConfectSchema
+>(
+  _confectSchemaDefinition: ConfectSchemaDefinition<S>,
   {
     args,
     returns,
     handler,
   }: {
-    args: Schema.Schema<any, any>;
-    returns: Schema.Schema<any, any>;
+    args: Schema.Schema.AnyNoContext;
+    returns: Schema.Schema.AnyNoContext;
     handler: (a: any) => Effect.Effect<any, any, any>;
   }
 ) => ({

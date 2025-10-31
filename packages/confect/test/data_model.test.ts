@@ -1,6 +1,6 @@
 import type { GenericDataModel, GenericTableInfo } from "convex/server";
 import type { GenericId } from "convex/values";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { describe, expectTypeOf, test } from "vitest";
 
 import type {

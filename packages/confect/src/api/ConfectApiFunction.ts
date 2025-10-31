@@ -106,7 +106,7 @@ export type ConfectApiFunctionExcludeName<
 > = Exclude<Function, { readonly name: Name }>;
 
 export type Handler<
-  ConfectSchema extends GenericConfectSchema,
+  _ConfectSchema extends GenericConfectSchema,
   Function extends ConfectApiFunctionAnyWithProps,
 > =
   Function extends ConfectApiFunctionWithFunctionType<Function, "Query">
@@ -265,6 +265,14 @@ class ConfectApiFunctionBuilder<
       );
     }
 
+    // Builder pattern invariant: Runtime checks guarantee argsSchema and returnsSchema are defined,
+    // which means Args and Returns are narrowed to Schema.Schema.AnyNoContext (not undefined).
+    // However, TypeScript's control flow analysis cannot narrow generic type parameters through
+    // runtime checks. The conditional return type requires Args/Returns to be non-undefined schemas,
+    // which we've verified at runtime. This cast bridges the runtime guarantee to the conditional
+    // return type. Safe because: (1) runtime checks prevent undefined schemas, (2) the builder API
+    // enforces .args() and .returns() must be called before .build(), (3) the returned structure
+    // matches ConfectApiFunction<FT, Name, Args, Returns> exactly.
     return Object.assign(Object.create(Proto), {
       functionType: this.functionType,
       name: this._name,

@@ -15,7 +15,10 @@ import {
   ROUTABLE_HTTP_METHODS,
   type RouteSpecWithPathPrefix,
 } from "convex/server";
-import { Array, Layer, pipe, Record } from "effect";
+import * as Array from "effect/Array";
+import * as Layer from "effect/Layer";
+import { pipe } from "effect";
+import * as Record from "effect/Record";
 import { ConfectAuth, layer as layerAuth } from "./auth";
 import { layerActionCtx } from "./ctx";
 import {
@@ -62,7 +65,6 @@ const makeHandler =
       | ConfectStorageReader
       | ConfectStorageWriter
       | ConfectStorageActionWriter
-      | GenericActionCtx<DataModel>
     >;
     middleware?: Middleware;
     scalar?: HttpApiScalar.ScalarConfig;
@@ -121,7 +123,6 @@ const makeHttpAction = <DataModel extends GenericDataModel>({
     | ConfectStorageReader
     | ConfectStorageWriter
     | ConfectStorageActionWriter
-    | GenericActionCtx<DataModel>
   >;
   middleware?: Middleware;
   scalar?: HttpApiScalar.ScalarConfig;
@@ -176,7 +177,6 @@ const mountEffectHttpApi =
       | ConfectStorageReader
       | ConfectStorageWriter
       | ConfectStorageActionWriter
-      | GenericActionCtx<DataModel>
     >;
     middleware?: Middleware;
     scalar?: HttpApiScalar.ScalarConfig;

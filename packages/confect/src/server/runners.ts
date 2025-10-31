@@ -13,12 +13,17 @@
 import {
   getFunctionName,
   type FunctionReference,
+  type FunctionReturnType,
   type GenericActionCtx,
+  type GenericDataModel,
   type GenericMutationCtx,
   type GenericQueryCtx,
   type OptionalRestArgs,
 } from "convex/server";
-import { Context, Effect, Layer, Schema } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 
 // ===========================
 // ConfectQueryRunner
@@ -32,11 +37,11 @@ export interface ConfectQueryRunner {
   readonly run: <Query extends FunctionReference<"query", "public" | "internal">>(
     query: Query,
     ...args: OptionalRestArgs<Query>
-  ) => Effect.Effect<Awaited<ReturnType<Query>>, never>;
+  ) => Effect.Effect<FunctionReturnType<Query>>;
 }
 
 const makeQueryRunner = (
-  runQuery: GenericQueryCtx<unknown>["runQuery"],
+  runQuery: GenericQueryCtx<GenericDataModel>["runQuery"],
 ): ConfectQueryRunner => ({
   [ConfectQueryRunnerTypeId]: ConfectQueryRunnerTypeId,
   run: <Query extends FunctionReference<"query", "public" | "internal">>(
@@ -50,7 +55,7 @@ export const ConfectQueryRunner = Context.GenericTag<ConfectQueryRunner>(
 );
 
 export const layerQueryRunner = (
-  runQuery: GenericQueryCtx<unknown>["runQuery"],
+  runQuery: GenericQueryCtx<GenericDataModel>["runQuery"],
 ): Layer.Layer<ConfectQueryRunner> =>
   Layer.succeed(ConfectQueryRunner, makeQueryRunner(runQuery));
 
@@ -66,11 +71,11 @@ export interface ConfectMutationRunner {
   readonly run: <Mutation extends FunctionReference<"mutation", "public" | "internal">>(
     mutation: Mutation,
     ...args: OptionalRestArgs<Mutation>
-  ) => Effect.Effect<Awaited<ReturnType<Mutation>>, MutationRollback>;
+  ) => Effect.Effect<FunctionReturnType<Mutation>, MutationRollback>;
 }
 
 const makeMutationRunner = (
-  runMutation: GenericMutationCtx<unknown>["runMutation"],
+  runMutation: GenericMutationCtx<GenericDataModel>["runMutation"],
 ): ConfectMutationRunner => ({
   [ConfectMutationRunnerTypeId]: ConfectMutationRunnerTypeId,
   run: <Mutation extends FunctionReference<"mutation", "public" | "internal">>(
@@ -92,7 +97,7 @@ export const ConfectMutationRunner = Context.GenericTag<ConfectMutationRunner>(
 );
 
 export const layerMutationRunner = (
-  runMutation: GenericMutationCtx<unknown>["runMutation"],
+  runMutation: GenericMutationCtx<GenericDataModel>["runMutation"],
 ): Layer.Layer<ConfectMutationRunner> =>
   Layer.succeed(ConfectMutationRunner, makeMutationRunner(runMutation));
 
@@ -108,11 +113,11 @@ export interface ConfectActionRunner {
   readonly run: <Action extends FunctionReference<"action", "public" | "internal">>(
     action: Action,
     ...args: OptionalRestArgs<Action>
-  ) => Effect.Effect<Awaited<ReturnType<Action>>, never>;
+  ) => Effect.Effect<FunctionReturnType<Action>>;
 }
 
 const makeActionRunner = (
-  runAction: GenericActionCtx<unknown>["runAction"],
+  runAction: GenericActionCtx<GenericDataModel>["runAction"],
 ): ConfectActionRunner => ({
   [ConfectActionRunnerTypeId]: ConfectActionRunnerTypeId,
   run: <Action extends FunctionReference<"action", "public" | "internal">>(
@@ -126,7 +131,7 @@ export const ConfectActionRunner = Context.GenericTag<ConfectActionRunner>(
 );
 
 export const layerActionRunner = (
-  runAction: GenericActionCtx<unknown>["runAction"],
+  runAction: GenericActionCtx<GenericDataModel>["runAction"],
 ): Layer.Layer<ConfectActionRunner> =>
   Layer.succeed(ConfectActionRunner, makeActionRunner(runAction));
 

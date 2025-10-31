@@ -15,7 +15,9 @@ import {
   type VectorIndexConfig,
 } from "convex/server";
 import type { GenericValidator, Validator } from "convex/values";
-import { pipe, Record, Schema } from "effect";
+import { pipe } from "effect";
+import * as Record from "effect/Record";
+import * as Schema from "effect/Schema";
 import type {
   DataModelFromConfectDataModel,
   GenericConfectDataModel,

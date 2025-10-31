@@ -4,7 +4,10 @@ import {
   assertFailure,
   assertInstanceOf,
 } from "@effect/vitest/utils";
-import { Cause, Effect, Runtime, Schema } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Runtime from "effect/Runtime";
+import * as Schema from "effect/Schema";
 import { FileNotFoundError } from "../src/server/storage";
 import { api } from "./convex/_generated/api";
 import { TestConvexService } from "./TestConvexService";

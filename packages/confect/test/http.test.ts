@@ -1,5 +1,5 @@
 import { describe, expect } from "@effect/vitest";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import { TestConvexService } from "./TestConvexService";
 import { effect } from "./test_utils";
 
