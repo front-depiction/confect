@@ -1,9 +1,9 @@
 import type {
   OptionalProperty,
   PropertyValidators,
+  Validator,
   VAny,
   VArray,
-  Validator,
   VBoolean,
   VBytes,
   VFloat64,
@@ -19,21 +19,21 @@ import type {
 } from "convex/values";
 import { v } from "convex/values";
 import {
-  Array,
-  Cause,
-  Data,
-  Effect,
-  Exit,
-  Match,
-  Number,
-  Option,
-  type ParseResult,
-  Predicate,
-  pipe,
-  Schema,
-  SchemaAST,
-  String,
+  pipe
 } from "effect";
+import * as Array from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
+import * as Number from "effect/Number";
+import * as Option from "effect/Option";
+import type * as ParseResult from "effect/ParseResult";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
+import * as String from "effect/String";
 
 import * as GenericId from "./schemas/GenericId";
 import type {
@@ -84,10 +84,10 @@ export type TableSchemaToTableValidator<
   TableSchema extends Schema.Schema.AnyNoContext,
 > =
   ValueToValidator<TableSchema["Encoded"]> extends infer Vd extends
-    | VObject<any, any, any, any>
-    | VUnion<any, any, any, any>
-    ? Vd
-    : never;
+  | VObject<any, any, any, any>
+  | VUnion<any, any, any, any>
+  ? Vd
+  : never;
 
 export const compileTableSchema = <
   TableSchema extends Schema.Schema.AnyNoContext,
@@ -130,115 +130,115 @@ export type ReadonlyRecordValue = {
 
 export type ValueToValidator<Vl> =
   IsRecursive<Vl> extends true
-    ? VAny
-    : [Vl] extends [never]
-      ? never
-      : IsAny<Vl> extends true
-        ? VAny
-        : [Vl] extends [ReadonlyValue]
-          ? Vl extends {
-              __tableName: infer TableName extends string;
-            }
-            ? VId<GenericId.GenericId<TableName>>
-            : IsValueLiteral<Vl> extends true
-              ? VLiteral<Vl>
-              : Vl extends null
-                ? VNull
-                : Vl extends number
-                  ? VFloat64
-                  : Vl extends bigint
-                    ? VInt64
-                    : Vl extends boolean
-                      ? VBoolean
-                      : Vl extends string
-                        ? VString
-                        : Vl extends ArrayBuffer
-                          ? VBytes
-                          : Vl extends ReadonlyArray<ReadonlyValue>
-                            ? ArrayValueToValidator<Vl>
-                            : Vl extends ReadonlyRecordValue
-                              ? RecordValueToValidator<Vl>
-                              : IsUnion<Vl> extends true
-                                ? UnionValueToValidator<Vl>
-                                : TypeError<"Unexpected value", Vl>
-          : TypeError<"Provided value is not a valid Convex value", Vl>;
+  ? VAny
+  : [Vl] extends [never]
+  ? never
+  : IsAny<Vl> extends true
+  ? VAny
+  : [Vl] extends [ReadonlyValue]
+  ? Vl extends {
+    __tableName: infer TableName extends string;
+  }
+  ? VId<GenericId.GenericId<TableName>>
+  : IsValueLiteral<Vl> extends true
+  ? VLiteral<Vl>
+  : Vl extends null
+  ? VNull
+  : Vl extends number
+  ? VFloat64
+  : Vl extends bigint
+  ? VInt64
+  : Vl extends boolean
+  ? VBoolean
+  : Vl extends string
+  ? VString
+  : Vl extends ArrayBuffer
+  ? VBytes
+  : Vl extends ReadonlyArray<ReadonlyValue>
+  ? ArrayValueToValidator<Vl>
+  : Vl extends ReadonlyRecordValue
+  ? RecordValueToValidator<Vl>
+  : IsUnion<Vl> extends true
+  ? UnionValueToValidator<Vl>
+  : TypeError<"Unexpected value", Vl>
+  : TypeError<"Provided value is not a valid Convex value", Vl>;
 
 type ArrayValueToValidator<Vl extends ReadonlyArray<ReadonlyValue>> =
   Vl extends ReadonlyArray<infer El extends ReadonlyValue>
-    ? ValueToValidator<El> extends infer Vd extends Validator<any, any, any>
-      ? VArray<DeepMutable<El[]>, Vd>
-      : never
-    : never;
+  ? ValueToValidator<El> extends infer Vd extends Validator<any, any, any>
+  ? VArray<DeepMutable<El[]>, Vd>
+  : never
+  : never;
 
 type RecordValueToValidator<Vl> = Vl extends ReadonlyRecordValue
   ? {
-      -readonly [K in keyof Vl]-?: IsAny<Vl[K]> extends true
-        ? IsOptional<Vl, K> extends true
-          ? VOptional<VAny>
-          : VAny
-        : UndefinedOrValueToValidator<Vl[K]>;
-    } extends infer VdRecord extends Record<string, any>
-    ? {
-        -readonly [K in keyof Vl]: DeepMutable<Vl[K]>;
-      } extends infer VlRecord extends Record<string, any>
-      ? IsRecordType<VlRecord> extends true
-        ? VRecord<VlRecord, VString, VdRecord[keyof VdRecord]>
-        : VObject<VlRecord, VdRecord>
-      : never
-    : never
+    -readonly [K in keyof Vl]-?: IsAny<Vl[K]> extends true
+    ? IsOptional<Vl, K> extends true
+    ? VOptional<VAny>
+    : VAny
+    : UndefinedOrValueToValidator<Vl[K]>;
+  } extends infer VdRecord extends Record<string, any>
+  ? {
+    -readonly [K in keyof Vl]: DeepMutable<Vl[K]>;
+  } extends infer VlRecord extends Record<string, any>
+  ? IsRecordType<VlRecord> extends true
+  ? VRecord<VlRecord, VString, VdRecord[keyof VdRecord]>
+  : VObject<VlRecord, VdRecord>
+  : never
+  : never
   : never;
 
 export type UndefinedOrValueToValidator<Vl extends ReadonlyValue | undefined> =
   undefined extends Vl
-    ? [Vl] extends [(infer Val extends ReadonlyValue) | undefined]
-      ? ValueToValidator<Val> extends infer Vd extends Validator<
-          any,
-          OptionalProperty,
-          any
-        >
-        ? VOptional<Vd>
-        : never
-      : never
-    : Vl extends ReadonlyValue
-      ? ValueToValidator<Vl>
-      : never;
+  ? [Vl] extends [(infer Val extends ReadonlyValue) | undefined]
+  ? ValueToValidator<Val> extends infer Vd extends Validator<
+    any,
+    OptionalProperty,
+    any
+  >
+  ? VOptional<Vd>
+  : never
+  : never
+  : Vl extends ReadonlyValue
+  ? ValueToValidator<Vl>
+  : never;
 
 type UnionValueToValidator<Vl extends ReadonlyValue> = [Vl] extends [
   ReadonlyValue,
 ]
   ? IsUnion<Vl> extends true
-    ? UnionToTuple<Vl> extends infer VlTuple extends
-        ReadonlyArray<ReadonlyValue>
-      ? ValueTupleToValidatorTuple<VlTuple> extends infer VdTuple extends
-          Validator<any, "required", any>[]
-        ? VUnion<DeepMutable<Vl>, VdTuple>
-        : TypeError<"Failed to convert value tuple to validator tuple">
-      : TypeError<"Failed to convert union to tuple">
-    : TypeError<"Expected a union of values, but got a single value instead">
+  ? UnionToTuple<Vl> extends infer VlTuple extends
+  ReadonlyArray<ReadonlyValue>
+  ? ValueTupleToValidatorTuple<VlTuple> extends infer VdTuple extends
+  Validator<any, "required", any>[]
+  ? VUnion<DeepMutable<Vl>, VdTuple>
+  : TypeError<"Failed to convert value tuple to validator tuple">
+  : TypeError<"Failed to convert union to tuple">
+  : TypeError<"Expected a union of values, but got a single value instead">
   : TypeError<"Provided value is not a valid Convex value">;
 
 type ValueTupleToValidatorTuple<VlTuple extends ReadonlyArray<ReadonlyValue>> =
   VlTuple extends
-    | [true, false, ...infer VlRest extends ReadonlyArray<ReadonlyValue>]
-    | [false, true, ...infer VlRest extends ReadonlyArray<ReadonlyValue>]
-    ? ValueTupleToValidatorTuple<VlRest> extends infer VdRest extends Validator<
-        any,
-        any,
-        any
-      >[]
-      ? [VBoolean<boolean>, ...VdRest]
-      : never
-    : VlTuple extends [
-          infer Vl extends ReadonlyValue,
-          ...infer VlRest extends ReadonlyArray<ReadonlyValue>,
-        ]
-      ? ValueToValidator<Vl> extends infer Vd extends Validator<any, any, any>
-        ? ValueTupleToValidatorTuple<VlRest> extends infer VdRest extends
-            Validator<any, "required", any>[]
-          ? [Vd, ...VdRest]
-          : never
-        : never
-      : [];
+  | [true, false, ...infer VlRest extends ReadonlyArray<ReadonlyValue>]
+  | [false, true, ...infer VlRest extends ReadonlyArray<ReadonlyValue>]
+  ? ValueTupleToValidatorTuple<VlRest> extends infer VdRest extends Validator<
+    any,
+    any,
+    any
+  >[]
+  ? [VBoolean<boolean>, ...VdRest]
+  : never
+  : VlTuple extends [
+    infer Vl extends ReadonlyValue,
+    ...infer VlRest extends ReadonlyArray<ReadonlyValue>,
+  ]
+  ? ValueToValidator<Vl> extends infer Vd extends Validator<any, any, any>
+  ? ValueTupleToValidatorTuple<VlRest> extends infer VdRest extends
+  Validator<any, "required", any>[]
+  ? [Vd, ...VdRest]
+  : never
+  : never
+  : [];
 
 export const compileSchema = <T, E>(
   schema: Schema.Schema<T, E>,
@@ -302,80 +302,80 @@ export const compileAst = (
   isRecursive(ast)
     ? Effect.succeed(v.any())
     : pipe(
-        ast,
-        Match.value,
-        Match.tag("Literal", ({ literal }) =>
-          pipe(
-            literal,
-            Match.value,
-            Match.whenOr(
-              Match.string,
-              Match.number,
-              Match.bigint,
-              Match.boolean,
-              (l) => v.literal(l),
-            ),
-            Match.when(Match.null, () => v.null()),
-            Match.exhaustive,
-            Effect.succeed,
+      ast,
+      Match.value,
+      Match.tag("Literal", ({ literal }) =>
+        pipe(
+          literal,
+          Match.value,
+          Match.whenOr(
+            Match.string,
+            Match.number,
+            Match.bigint,
+            Match.boolean,
+            (l) => v.literal(l),
           ),
+          Match.when(Match.null, () => v.null()),
+          Match.exhaustive,
+          Effect.succeed,
         ),
-        Match.tag("BooleanKeyword", () => Effect.succeed(v.boolean())),
-        Match.tag("StringKeyword", (stringAst) =>
-          GenericId.tableName(stringAst).pipe(
-            Option.match({
-              onNone: () => Effect.succeed(v.string()),
-              onSome: (tableName) => Effect.succeed(v.id(tableName)),
-            }),
-          ),
+      ),
+      Match.tag("BooleanKeyword", () => Effect.succeed(v.boolean())),
+      Match.tag("StringKeyword", (stringAst) =>
+        GenericId.tableName(stringAst).pipe(
+          Option.match({
+            onNone: () => Effect.succeed(v.string()),
+            onSome: (tableName) => Effect.succeed(v.id(tableName)),
+          }),
         ),
-        Match.tag("NumberKeyword", () => Effect.succeed(v.float64())),
-        Match.tag("BigIntKeyword", () => Effect.succeed(v.int64())),
-        Match.tag("Union", (unionAst) =>
-          handleUnion(unionAst, isOptionalPropertyOfTypeLiteral),
+      ),
+      Match.tag("NumberKeyword", () => Effect.succeed(v.float64())),
+      Match.tag("BigIntKeyword", () => Effect.succeed(v.int64())),
+      Match.tag("Union", (unionAst) =>
+        handleUnion(unionAst, isOptionalPropertyOfTypeLiteral),
+      ),
+      Match.tag("TypeLiteral", (typeLiteralAst) =>
+        handleTypeLiteral(typeLiteralAst),
+      ),
+      Match.tag("TupleType", (tupleTypeAst) => handleTupleType(tupleTypeAst)),
+      Match.tag("UnknownKeyword", "AnyKeyword", () =>
+        Effect.succeed(v.any()),
+      ),
+      Match.tag("Declaration", (declaration) =>
+        Effect.mapBoth(
+          declaration.decodeUnknown(...declaration.typeParameters)(
+            new ArrayBuffer(0),
+            {},
+            declaration,
+          ) as Effect.Effect<ArrayBuffer, ParseResult.ParseIssue>,
+          {
+            onSuccess: () => v.bytes(),
+            onFailure: () =>
+              new UnsupportedSchemaTypeError({
+                schemaType: declaration._tag,
+              }),
+          },
         ),
-        Match.tag("TypeLiteral", (typeLiteralAst) =>
-          handleTypeLiteral(typeLiteralAst),
-        ),
-        Match.tag("TupleType", (tupleTypeAst) => handleTupleType(tupleTypeAst)),
-        Match.tag("UnknownKeyword", "AnyKeyword", () =>
-          Effect.succeed(v.any()),
-        ),
-        Match.tag("Declaration", (declaration) =>
-          Effect.mapBoth(
-            declaration.decodeUnknown(...declaration.typeParameters)(
-              new ArrayBuffer(0),
-              {},
-              declaration,
-            ) as Effect.Effect<ArrayBuffer, ParseResult.ParseIssue>,
-            {
-              onSuccess: () => v.bytes(),
-              onFailure: () =>
-                new UnsupportedSchemaTypeError({
-                  schemaType: declaration._tag,
-                }),
-            },
-          ),
-        ),
-        Match.tag("Refinement", ({ from }) => compileAst(from)),
-        Match.tag("Suspend", () => Effect.succeed(v.any())),
-        Match.tag(
-          "UniqueSymbol",
-          "SymbolKeyword",
-          "UndefinedKeyword",
-          "VoidKeyword",
-          "NeverKeyword",
-          "Enums",
-          "TemplateLiteral",
-          "ObjectKeyword",
-          "Transformation",
-          () =>
-            new UnsupportedSchemaTypeError({
-              schemaType: ast._tag,
-            }),
-        ),
-        Match.exhaustive,
-      );
+      ),
+      Match.tag("Refinement", ({ from }) => compileAst(from)),
+      Match.tag("Suspend", () => Effect.succeed(v.any())),
+      Match.tag(
+        "UniqueSymbol",
+        "SymbolKeyword",
+        "UndefinedKeyword",
+        "VoidKeyword",
+        "NeverKeyword",
+        "Enums",
+        "TemplateLiteral",
+        "ObjectKeyword",
+        "Transformation",
+        () =>
+          new UnsupportedSchemaTypeError({
+            schemaType: ast._tag,
+          }),
+      ),
+      Match.exhaustive,
+    );
 
 const handleUnion = (
   { types: [first, second, ...rest] }: SchemaAST.Union,
@@ -384,10 +384,10 @@ const handleUnion = (
   Effect.gen(function* () {
     const validatorEffects = isOptionalPropertyOfTypeLiteral
       ? Array.filterMap([first, second, ...rest], (type) =>
-          Predicate.not(SchemaAST.isUndefinedKeyword)(type)
-            ? Option.some(compileAst(type))
-            : Option.none(),
-        )
+        Predicate.not(SchemaAST.isUndefinedKeyword)(type)
+          ? Option.some(compileAst(type))
+          : Option.none(),
+      )
       : Array.map([first, second, ...rest], (type) => compileAst(type));
 
     const [firstValidator, secondValidator, ...restValidators] =
@@ -455,20 +455,20 @@ const handleTupleType = ({ elements, rest }: SchemaAST.TupleType) =>
 
     const arrayItemsValidator = yield* f === undefined
       ? pipe(
-          restValidator,
-          Effect.catchTag("NoSuchElementException", () =>
-            Effect.fail(new EmptyTupleIsNotSupportedError()),
-          ),
-        )
+        restValidator,
+        Effect.catchTag("NoSuchElementException", () =>
+          Effect.fail(new EmptyTupleIsNotSupportedError()),
+        ),
+      )
       : s === undefined
         ? elementToValidator(f)
         : Effect.gen(function* () {
-            const firstValidator = yield* elementToValidator(f);
-            const secondValidator = yield* elementToValidator(s);
-            const restValidators = yield* Effect.forEach(r, elementToValidator);
+          const firstValidator = yield* elementToValidator(f);
+          const secondValidator = yield* elementToValidator(s);
+          const restValidators = yield* Effect.forEach(r, elementToValidator);
 
-            return v.union(firstValidator, secondValidator, ...restValidators);
-          });
+          return v.union(firstValidator, secondValidator, ...restValidators);
+        });
 
     return v.array(arrayItemsValidator);
   });

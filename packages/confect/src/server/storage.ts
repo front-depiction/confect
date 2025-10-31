@@ -16,7 +16,12 @@ import type {
   StorageWriter,
 } from "convex/server";
 import type { GenericId } from "convex/values";
-import { Context, Effect, flow, Layer, Option, pipe, Schema } from "effect";
+import { pipe } from "effect";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
+import * as Layer from "effect/Layer";
+import * as Effect from "effect/Effect";
+import * as Context from "effect/Context";
 
 // ===========================
 // ConfectStorageReader
@@ -36,14 +41,11 @@ const makeStorageReader = (storageReader: StorageReader): ConfectStorageReader =
   [ConfectStorageReaderTypeId]: ConfectStorageReaderTypeId,
   getUrl: (storageId: GenericId<"_storage">) =>
     Effect.promise(() => storageReader.getUrl(storageId)).pipe(
-      Effect.flatMap(
-        flow(
-          Option.fromNullable,
-          Option.match({
-            onNone: () => Effect.fail(new FileNotFoundError({ id: storageId })),
-            onSome: (url) => pipe(url, Schema.decode(Schema.URL), Effect.orDie),
-          }),
-        ),
+      Effect.map(Option.fromNullable),
+      Effect.flatMap(Option.match({
+        onNone: () => Effect.fail(new FileNotFoundError({ id: storageId })),
+        onSome: (url) => pipe(url, Schema.decode(Schema.URL), Effect.orDie),
+      }),
       ),
     ),
 });
@@ -66,7 +68,7 @@ type ConfectStorageWriterTypeId = typeof ConfectStorageWriterTypeId;
 
 export interface ConfectStorageWriter {
   readonly [ConfectStorageWriterTypeId]: ConfectStorageWriterTypeId;
-  readonly generateUploadUrl: () => Effect.Effect<URL, never>;
+  readonly generateUploadUrl: () => Effect.Effect<URL>;
   readonly delete: (
     storageId: GenericId<"_storage">,
   ) => Effect.Effect<void, FileNotFoundError>;
@@ -74,15 +76,14 @@ export interface ConfectStorageWriter {
 
 const makeStorageWriter = (storageWriter: StorageWriter): ConfectStorageWriter => ({
   [ConfectStorageWriterTypeId]: ConfectStorageWriterTypeId,
-  generateUploadUrl: () =>
-    Effect.promise(() => storageWriter.generateUploadUrl()).pipe(
-      Effect.andThen((url) => pipe(url, Schema.decode(Schema.URL), Effect.orDie)),
-    ),
-  delete: (storageId: GenericId<"_storage">) =>
-    Effect.tryPromise({
-      try: () => storageWriter.delete(storageId),
-      catch: () => new FileNotFoundError({ id: storageId }),
-    }),
+  generateUploadUrl: () => Effect.promise(() => storageWriter.generateUploadUrl()).pipe(
+    Effect.flatMap(Schema.decode(Schema.URL)),
+    Effect.orDie
+  ),
+  delete: (storageId: GenericId<"_storage">) => Effect.tryPromise({
+    try: () => storageWriter.delete(storageId),
+    catch: () => new FileNotFoundError({ id: storageId }),
+  }),
 });
 
 export const ConfectStorageWriter = Context.GenericTag<ConfectStorageWriter>(
@@ -105,7 +106,7 @@ export interface ConfectStorageActionWriter {
   readonly [ConfectStorageActionWriterTypeId]: ConfectStorageActionWriterTypeId;
   readonly get: (
     storageId: GenericId<"_storage">,
-  ) => Effect.Effect<Blob | null, FileNotFoundError>;
+  ) => Effect.Effect<Blob, FileNotFoundError>;
   readonly store: (
     blob: Blob,
     options?: { sha256?: string },
@@ -118,18 +119,10 @@ const makeStorageActionWriter = (
   [ConfectStorageActionWriterTypeId]: ConfectStorageActionWriterTypeId,
   get: (storageId: GenericId<"_storage">) =>
     Effect.promise(() => storageActionWriter.get(storageId)).pipe(
-      Effect.flatMap(
-        flow(
-          Option.fromNullable,
-          Option.match({
-            onNone: () => Effect.fail(new FileNotFoundError({ id: storageId })),
-            onSome: Effect.succeed,
-          }),
-        ),
-      ),
+      Effect.flatMap(Option.fromNullable),
+      Effect.mapError(() => new FileNotFoundError({ id: storageId }))
     ),
-  store: (blob: Blob, options?: { sha256?: string }) =>
-    Effect.promise(() => storageActionWriter.store(blob, options)),
+  store: (blob: Blob, options?: { sha256?: string }) => Effect.promise(() => storageActionWriter.store(blob, options)),
 });
 
 export const ConfectStorageActionWriter = Context.GenericTag<ConfectStorageActionWriter>(

@@ -8,49 +8,28 @@
  * - Fails with typed error when no user identity exists
  * - Uses Option to handle nullable user identity from Convex
  */
-
-import type { Auth } from "convex/server";
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import type { Auth, UserIdentity } from "convex/server";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 
 const ConfectAuthTypeId = Symbol.for("@rjdellecese/confect/ConfectAuth");
 type ConfectAuthTypeId = typeof ConfectAuthTypeId;
 
-type UserIdentity = Exclude<
-  Awaited<ReturnType<Auth["getUserIdentity"]>>,
-  null
->;
-
 export interface ConfectAuth {
   readonly [ConfectAuthTypeId]: ConfectAuthTypeId;
-  readonly getUserIdentity: Effect.Effect<
-    UserIdentity,
-    NoUserIdentityFoundError
-  >;
+  readonly getUserIdentity: Effect.Effect<Option.Option<UserIdentity>>;
 }
-
-const make = (auth: Auth): ConfectAuth => ({
-  [ConfectAuthTypeId]: ConfectAuthTypeId,
-  getUserIdentity: Effect.promise(() => auth.getUserIdentity()).pipe(
-    Effect.flatMap((identity) =>
-      Option.match(Option.fromNullable(identity), {
-        onNone: () => Effect.fail(new NoUserIdentityFoundError()),
-        onSome: Effect.succeed,
-      }),
-    ),
-  ),
-});
 
 export const ConfectAuth = Context.GenericTag<ConfectAuth>(
   "@rjdellecese/confect/ConfectAuth",
 );
 
-export const layer = (auth: Auth): Layer.Layer<ConfectAuth> =>
-  Layer.succeed(ConfectAuth, make(auth));
 
-export class NoUserIdentityFoundError extends Schema.TaggedError<NoUserIdentityFoundError>(
-  "NoUserIdentityFoundError",
-)("NoUserIdentityFoundError", {}) {
-  override get message(): string {
-    return "No user identity found";
-  }
-}
+const make = (auth: Auth): ConfectAuth => ({
+  [ConfectAuthTypeId]: ConfectAuthTypeId,
+  getUserIdentity: Effect.promise(() => auth.getUserIdentity()).pipe(Effect.map(Option.fromNullable)
+  )
+});
+export const layer = (auth: Auth): Layer.Layer<ConfectAuth> => Layer.succeed(ConfectAuth, make(auth));

@@ -10,11 +10,15 @@
  */
 
 import type {
-    OptionalRestArgs,
-    SchedulableFunctionReference,
-    Scheduler,
+  OptionalRestArgs,
+  SchedulableFunctionReference,
+  Scheduler,
 } from "convex/server";
-import { Context, DateTime, Duration, Effect, Layer } from "effect";
+import * as Layer from "effect/Layer";
+import * as Effect from "effect/Effect";
+import * as Duration from "effect/Duration";
+import * as DateTime from "effect/DateTime";
+import * as Context from "effect/Context";
 
 const ConfectSchedulerTypeId = Symbol.for("@rjdellecese/confect/ConfectScheduler");
 type ConfectSchedulerTypeId = typeof ConfectSchedulerTypeId;
@@ -33,8 +37,8 @@ export interface ConfectScheduler {
   ) => Effect.Effect<void>;
 }
 export const ConfectScheduler = Context.GenericTag<ConfectScheduler>(
-    "@rjdellecese/confect/ConfectScheduler",
-  );
+  "@rjdellecese/confect/ConfectScheduler",
+);
 
 const make = (scheduler: Scheduler): ConfectScheduler => ({
 
@@ -50,7 +54,7 @@ const make = (scheduler: Scheduler): ConfectScheduler => ({
       scheduler.runAfter(delayMs, functionReference, ...args),
     );
   },
-  
+
   runAt: <FuncRef extends SchedulableFunctionReference>(
     dateTime: DateTime.DateTime,
     functionReference: FuncRef,

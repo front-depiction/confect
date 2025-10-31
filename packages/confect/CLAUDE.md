@@ -232,9 +232,43 @@ yield* Effect.promise(() => convexDatabaseWriter.insert(tableName, encodedDocume
 const convexCtx = ctx as unknown as GenericActionCtx<DataModel>;
 ```
 
+## Import Style
+
+### 3. Use Namespace Imports from Submodules for Tree-Shaking
+
+Always import Effect modules using namespace imports from their specific submodules. This enables better tree-shaking and reduces bundle size.
+
+**Good:**
+```typescript
+// DO: Import from submodules with namespace imports
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Predicate from "effect/Predicate";
+```
+
+**Forbidden:**
+```typescript
+// DON'T: Barrel imports prevent tree-shaking
+import { Context, Effect, Layer, Option, Schema } from "effect";
+```
+
+**Rationale:**
+- Barrel imports (`from "effect"`) include all modules in the bundle
+- Submodule imports (`from "effect/Effect"`) enable dead code elimination
+- Namespace imports (`* as Effect`) provide clear namespacing and better tree-shaking
+
+**Exception:**
+```typescript
+// Acceptable: pipe is a utility that doesn't benefit from namespacing
+import { pipe } from "effect";
+```
+
 ## Effect Code Style
 
-### 3. Prefer Method Chaining with `.pipe()`
+### 4. Prefer Method Chaining with `.pipe()`
 
 When working with Effect, prefer the method-style `.pipe()` over the function-style `pipe()`.
 
@@ -276,7 +310,213 @@ pipe(
 - When the starting value is not an Effect (e.g., plain data transformations)
 - When importing from `effect/Function` for non-Effect pipelines
 
-### 4. Keep Code Terse with High Signal-to-Noise Ratio
+### 5. Avoid `flow` in Effect Chains
+
+Never use `flow` within Effect pipelines. Use explicit pipe stages instead for clarity and debuggability.
+
+**Good:**
+```typescript
+// DO: Use explicit pipe stages
+Effect.promise(() => storageReader.getUrl(storageId)).pipe(
+  Effect.map(Option.fromNullable),
+  Effect.flatMap(Option.match({
+    onNone: () => Effect.fail(new FileNotFoundError({ id: storageId })),
+    onSome: (url) => pipe(url, Schema.decode(Schema.URL), Effect.orDie),
+  })),
+)
+```
+
+**Forbidden:**
+```typescript
+// DON'T: flow obscures the Effect pipeline
+Effect.promise(() => storageReader.getUrl(storageId)).pipe(
+  Effect.flatMap(
+    flow(
+      Option.fromNullable,
+      Option.match({
+        onNone: () => Effect.fail(new FileNotFoundError({ id: storageId })),
+        onSome: (url) => pipe(url, Schema.decode(Schema.URL), Effect.orDie),
+      }),
+    ),
+  ),
+)
+```
+
+**Rationale:**
+- `flow` adds indirection that makes Effect chains harder to read
+- Explicit pipe stages make the data flow immediately visible
+- Debugging is easier when each transformation is a separate pipe stage
+- Better stack traces and error reporting
+
+### 6. Simplify `flatMap` with `fromNullable` + `mapError`
+
+When converting nullable values to Effects with error handling, use the `flatMap(Option.fromNullable)` + `mapError` pattern instead of `Option.match`.
+
+**Good:**
+```typescript
+// DO: Use flatMap + mapError pattern
+Effect.promise(() => storageActionWriter.get(storageId)).pipe(
+  Effect.flatMap(Option.fromNullable),
+  Effect.mapError(() => new FileNotFoundError({ id: storageId })),
+)
+```
+
+**Less preferred:**
+```typescript
+// Works but more verbose: Option.match
+Effect.promise(() => storageActionWriter.get(storageId)).pipe(
+  Effect.flatMap(
+    flow(
+      Option.fromNullable,
+      Option.match({
+        onNone: () => Effect.fail(new FileNotFoundError({ id: storageId })),
+        onSome: Effect.succeed,
+      }),
+    ),
+  ),
+)
+```
+
+**Rationale:**
+- `flatMap(Option.fromNullable)` converts `null | T` to `Effect<T, NoSuchElementException>`
+- `mapError` transforms the error type cleanly
+- More concise and idiomatic Effect code
+- Clear separation between conversion and error handling
+
+### 7. Use Predicate Utilities for Type Guards
+
+Use Effect's `Predicate` utilities instead of manual type guards and type assertions.
+
+**Good:**
+```typescript
+// DO: Use Predicate utilities
+import * as Predicate from "effect/Predicate";
+
+const extractIdForError = (doc: unknown): string =>
+  Predicate.hasProperty(doc, "_id") && Predicate.isString(doc._id)
+    ? doc._id
+    : "unknown"
+```
+
+**Forbidden:**
+```typescript
+// DON'T: Manual type guards with type assertions
+const extractIdForError = (doc: unknown): string => {
+  if (typeof doc === "object" && doc !== null && "_id" in doc) {
+    const id = (doc as { _id: unknown })._id;
+    return typeof id === "string" ? id : String(id);
+  }
+  return "unknown";
+};
+```
+
+**Common Predicate utilities:**
+- `Predicate.hasProperty(obj, key)` - checks property existence with type narrowing
+- `Predicate.isString(value)` - type-safe string check
+- `Predicate.isNumber(value)` - type-safe number check
+- `Predicate.isObject(value)` - type-safe object check
+- `Predicate.isNullable(value)` - checks for null or undefined
+
+**Rationale:**
+- Eliminates type assertions (`as`)
+- Provides proper type narrowing
+- More composable and functional
+- Part of Effect's standard library
+
+### 8. Simplify Effect Type Signatures
+
+Omit `never` from Effect type signatures when there are no errors or requirements.
+
+**Good:**
+```typescript
+// DO: Omit never for cleaner signatures
+readonly generateUploadUrl: () => Effect.Effect<URL>;
+readonly getUserIdentity: Effect.Effect<Option.Option<UserIdentity>>;
+```
+
+**Less preferred:**
+```typescript
+// Unnecessary: explicitly stating never
+readonly generateUploadUrl: () => Effect.Effect<URL, never>;
+readonly getUserIdentity: Effect.Effect<Option.Option<UserIdentity>, never, never>;
+```
+
+**When to include type parameters:**
+- Always include the error type when it's not `never`
+- Always include the requirements type when it's not `never`
+- Omit trailing `never` parameters for cleaner signatures
+
+### 9. Prefer `Option` Over Custom Errors (When Appropriate)
+
+When absence is a valid state (not an error), return `Option` instead of failing with a custom error.
+
+**Good:**
+```typescript
+// DO: Option for valid absence
+export interface ConfectAuth {
+  readonly getUserIdentity: Effect.Effect<Option.Option<UserIdentity>>;
+}
+
+const make = (auth: Auth): ConfectAuth => ({
+  getUserIdentity: Effect.promise(() => auth.getUserIdentity()).pipe(
+    Effect.map(Option.fromNullable)
+  )
+});
+```
+
+**Less preferred:**
+```typescript
+// Less idiomatic: custom error for valid absence
+export interface ConfectAuth {
+  readonly getUserIdentity: Effect.Effect<UserIdentity, NoUserIdentityFoundError>;
+}
+
+const make = (auth: Auth): ConfectAuth => ({
+  getUserIdentity: Effect.promise(() => auth.getUserIdentity()).pipe(
+    Effect.flatMap((identity) =>
+      Option.match(Option.fromNullable(identity), {
+        onNone: () => Effect.fail(new NoUserIdentityFoundError()),
+        onSome: Effect.succeed,
+      }),
+    ),
+  ),
+});
+```
+
+**Guidelines:**
+- Use `Option` when absence is expected and valid (e.g., user not logged in)
+- Use errors when absence indicates a problem (e.g., file not found when it should exist)
+- Pushes error handling to the caller, allowing them to decide
+- More composable with Option combinators
+
+### 10. Use `Effect.orDie` for Unexpected Errors
+
+When decoding or parsing should never fail (programmer error if it does), use `Effect.orDie` to convert the error to a defect.
+
+**Good:**
+```typescript
+// DO: orDie for errors that indicate bugs
+Effect.promise(() => storageWriter.generateUploadUrl()).pipe(
+  Effect.flatMap(Schema.decode(Schema.URL)),
+  Effect.orDie
+)
+```
+
+**Less preferred:**
+```typescript
+// Less clear: using andThen obscures intent
+Effect.promise(() => storageWriter.generateUploadUrl()).pipe(
+  Effect.andThen((url) => pipe(url, Schema.decode(Schema.URL), Effect.orDie))
+)
+```
+
+**Guidelines:**
+- Use `orDie` when failure indicates a programmer error (bug)
+- Use explicit error handling for expected failures
+- Separates expected errors from unexpected defects
+- Place `orDie` as the final stage in the pipe for clarity
+
+### 11. Keep Code Terse with High Signal-to-Noise Ratio
 
 Write concise, functional code that maximizes meaning per line.
 
@@ -375,13 +615,22 @@ bunx tsc --noEmit 2>&1 | grep "src/server/database.ts"
 ✅ **DO:**
 - Use proper types, generics, and type inference
 - Design types that align naturally (no casts needed)
+- Use namespace imports from submodules (`import * as Effect from "effect/Effect"`)
 - Use `.pipe()` method chaining for Effects
+- Use explicit pipe stages instead of `flow` in Effect chains
+- Use `Predicate` utilities for type guards
+- Use `Option` for valid absence states
+- Use `Effect.orDie` for unexpected errors (programmer errors)
+- Omit `never` from Effect type signatures
 - Write terse, functional code with high signal-to-noise
 - Validate all code with `bunx tsc --noEmit`
 
 ❌ **DON'T:**
 - Use `any` type
 - Use type casting (`as`, `as never`) except for third-party API boundaries
+- Use barrel imports (`from "effect"`) - prevents tree-shaking
+- Use `flow` within Effect pipelines - obscures data flow
+- Write manual type guards when Predicate utilities exist
 - Write verbose code with obvious comments
 - Commit code with TypeScript errors
 
