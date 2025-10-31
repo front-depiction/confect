@@ -82,15 +82,34 @@ import { Effect, Option } from "effect";
 
 ### 3. Type Safety
 
+**Critical Question Before Using `any`:**
+> **"Could a generic be used instead?"**
+>
+> Always ask this question. Most `any` usage can be replaced with proper generics.
+
 **Forbidden:**
 - `any` type - use `unknown` or proper generics
 - Type casting (`as`, `as never`) - redesign types to align naturally
-- Exception: Third-party API boundaries only
+- Exception: Third-party API boundaries only (document why)
 
 **Required:**
-- Proper generic constraints
+- Proper generic constraints instead of `any`
 - Natural type alignment (no casts needed)
 - Strict TypeScript compilation
+- Precise typing of Effect requirements (not `any`)
+
+**Example:**
+```typescript
+// ❌ Wrong - using any for requirements
+handler: (a: Args["Type"]) => Effect.Effect<Returns["Encoded"], E, any>
+
+// ✅ Correct - precise requirement types
+handler: (a: Args["Type"]) => Effect.Effect<
+  Returns["Encoded"],
+  E,
+  QueryDB<S> | ConfectAuth | ConfectStorageReader
+>
+```
 
 > 📖 **Details:** See `validation` skill or `code-reviewer` agent
 

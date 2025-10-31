@@ -20,9 +20,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { ConfectAuth } from "./auth";
 import { MutationDB, QueryDB } from "./database";
-import { ConfectMutationRunner, ConfectQueryRunner } from "./runners";
+import { ConfectActionRunner, ConfectMutationRunner, ConfectQueryRunner } from "./runners";
 import { ConfectScheduler } from "./scheduler";
+import { GenericConfectSchema } from "./schema";
 import { ConfectStorageReader, ConfectStorageWriter } from "./storage";
+import { ConfectVectorSearch } from "./vector_search";
 
 // ===========================
 // ConfectQueryCtx
@@ -32,34 +34,34 @@ import { ConfectStorageReader, ConfectStorageWriter } from "./storage";
  * Query context that aggregates read-only capability services.
  * Provides familiar Convex context shape.
  */
-export interface ConfectQueryCtx {
-  readonly db: QueryDB;
+export interface ConfectQueryCtx<S extends GenericConfectSchema> {
+  readonly db: QueryDB<S>;
   readonly auth: ConfectAuth;
   readonly storage: ConfectStorageReader;
   readonly runQuery: ConfectQueryRunner;
 }
 
-const ConfectQueryCtx = Context.GenericTag<ConfectQueryCtx>(
+const ConfectQueryCtx = <S extends GenericConfectSchema>() => Context.GenericTag<ConfectQueryCtx<S>>(
   "@rjdellecese/confect/ConfectQueryCtx",
 );
 
 /**
  * Build ConfectQueryCtx from capability services using Layer.effect.
  */
-export const layerConfectQueryCtx = Layer.effect(
-  ConfectQueryCtx,
+export const layerConfectQueryCtx = <S extends GenericConfectSchema>() => Layer.effect(
+  ConfectQueryCtx<S>(),
   Effect.gen(function* () {
-    const db = yield* QueryDB;
+    const db = yield* QueryDB<S>();
     const auth = yield* ConfectAuth;
     const storage = yield* ConfectStorageReader;
     const runQuery = yield* ConfectQueryRunner;
 
-    return ConfectQueryCtx.of({
+    return {
       db,
       auth,
       storage,
       runQuery,
-    });
+    };
   }),
 );
 
@@ -71,8 +73,8 @@ export const layerConfectQueryCtx = Layer.effect(
  * Mutation context that aggregates read-write capability services.
  * Provides familiar Convex context shape.
  */
-export interface ConfectMutationCtx {
-  readonly db: MutationDB;
+export interface ConfectMutationCtx<S extends GenericConfectSchema> {
+  readonly db: MutationDB<S>;
   readonly auth: ConfectAuth;
   readonly storage: ConfectStorageWriter;
   readonly scheduler: ConfectScheduler;
@@ -80,30 +82,30 @@ export interface ConfectMutationCtx {
   readonly runMutation: ConfectMutationRunner;
 }
 
-const ConfectMutationCtx = Context.GenericTag<ConfectMutationCtx>(
+const ConfectMutationCtx =<S extends GenericConfectSchema>() => Context.GenericTag<ConfectMutationCtx<S>>(
   "@rjdellecese/confect/ConfectMutationCtx",
 );
 /**
  * Build ConfectMutationCtx from capability services using Layer.effect.
  */
-export const layerConfectMutationCtx = Layer.effect(
-  ConfectMutationCtx,
+export const layerConfectMutationCtx = <S extends GenericConfectSchema>() => Layer.effect(
+  ConfectMutationCtx<S>(),
   Effect.gen(function* () {
-    const db = yield* MutationDB;
+    const db = yield* MutationDB<S>();
     const auth = yield* ConfectAuth;
     const storage = yield* ConfectStorageWriter;
     const scheduler = yield* ConfectScheduler;
     const runQuery = yield* ConfectQueryRunner;
     const runMutation = yield* ConfectMutationRunner;
 
-    return ConfectMutationCtx.of({
+    return {
       db,
       auth,
       storage,
       scheduler,
       runQuery,
       runMutation,
-    });
+    };
   }),
 );
 
@@ -111,113 +113,76 @@ export const layerConfectMutationCtx = Layer.effect(
 // Internal Convex Context Tags (for API builder)
 // ===========================
 
-export const ConvexQueryCtx = Context.GenericTag<GenericQueryCtx<GenericDataModel>>(
+export const ConvexQueryCtx = <DataModel extends GenericDataModel>() => Context.GenericTag<GenericQueryCtx<DataModel>>(
   "@rjdellecese/confect/ConvexQueryCtx",
 );
-
-export const layerQueryCtx = <DataModel extends GenericDataModel>(
-  ctx: GenericQueryCtx<DataModel>,
-) =>
-  Layer.succeed(ConvexQueryCtx, ctx as unknown as GenericQueryCtx<GenericDataModel>);
+export const layerQueryCtx = <DataModel extends GenericDataModel>(ctx: GenericQueryCtx<DataModel>) =>
+   Layer.succeed(ConvexQueryCtx<DataModel>(), ctx);
 
 // ===========================
 // ConvexMutationCtx
 // ===========================
 
-export const ConvexMutationCtx = Context.GenericTag<GenericMutationCtx<GenericDataModel>>(
+export const ConvexMutationCtx = <DataModel extends GenericDataModel>() => Context.GenericTag<GenericMutationCtx<DataModel>>(
   "@rjdellecese/confect/ConvexMutationCtx",
 );
-
-export const layerMutationCtx = <DataModel extends GenericDataModel>(
-  ctx: GenericMutationCtx<DataModel>,
-) =>
-  Layer.succeed(ConvexMutationCtx, ctx as unknown as GenericMutationCtx<GenericDataModel>);
+export const layerMutationCtx = <DataModel extends GenericDataModel>(ctx: GenericMutationCtx<DataModel>) =>
+  Layer.succeed(ConvexMutationCtx<DataModel>(), ctx );
 
 // ===========================
-// ConvexActionCtx
-// ===========================
-
-export const ConvexActionCtx = Context.GenericTag<GenericActionCtx<GenericDataModel>>(
-  "@rjdellecese/confect/ConvexActionCtx",
-);
-
-export const layerActionCtx = <DataModel extends GenericDataModel>(
-  ctx: GenericActionCtx<DataModel>,
-) =>
-  Layer.succeed(ConvexActionCtx, ctx as unknown as GenericActionCtx<GenericDataModel>);
-
-// ===========================
-// Backward Compatibility Layers
+// ConfectActionCtx
 // ===========================
 
 /**
- * @deprecated Use capability services (QueryDB, Auth, etc.) directly instead of ConvexQueryCtx
- *
- * Backward compatibility layer that provides ConvexQueryCtx by composing capability services.
- * This allows gradual migration from raw context to capability-based design.
- *
- * @example
- * ```typescript
- * // Old way (deprecated)
- * const ctx = yield* ConvexQueryCtx;
- * const doc = await ctx.db.get(id);
- *
- * // New way (preferred)
- * const db = yield* QueryDB;
- * const doc = yield* db.get("tableName", id);
- * ```
+ * Action context that aggregates all capability services.
+ * Provides familiar Convex context shape with access to storage writes, scheduling, and runners.
  */
-export const layerConvexQueryCtxCompat = Layer.effect(
-  ConvexQueryCtx,
-  Effect.gen(function* () {
-    const db = yield* QueryDB;
-    const auth = yield* ConfectAuth;
-    const storage = yield* ConfectStorageReader;
-    const runQuery = yield* ConfectQueryRunner;
+export interface ConfectActionCtx<S extends GenericConfectSchema> {
+  readonly auth: ConfectAuth;
+  readonly storage: ConfectStorageWriter;
+  readonly scheduler: ConfectScheduler;
+  readonly runQuery: ConfectQueryRunner;
+  readonly runMutation: ConfectMutationRunner;
+  readonly runAction: ConfectActionRunner;
+  readonly vectorSearch: ConfectVectorSearch<S>;
+}
 
-    return {
-      db,
-      auth,
-      storage,
-      runQuery,
-    } as unknown as GenericQueryCtx<GenericDataModel>;
-  }),
+const ConfectActionCtx = <S extends GenericConfectSchema>() => Context.GenericTag<ConfectActionCtx<S>>(
+  "@rjdellecese/confect/ConfectActionCtx",
 );
 
 /**
- * @deprecated Use capability services (MutationDB, Auth, etc.) directly instead of ConvexMutationCtx
- *
- * Backward compatibility layer that provides ConvexMutationCtx by composing capability services.
- * This allows gradual migration from raw context to capability-based design.
- *
- * @example
- * ```typescript
- * // Old way (deprecated)
- * const ctx = yield* ConvexMutationCtx;
- * await ctx.db.insert("table", doc);
- *
- * // New way (preferred)
- * const db = yield* MutationDB;
- * yield* db.insert("table", doc);
- * ```
+ * Build ConfectActionCtx from capability services using Layer.effect.
  */
-export const layerConvexMutationCtxCompat = Layer.effect(
-  ConvexMutationCtx,
+export const layerConfectActionCtx = <S extends GenericConfectSchema>() => Layer.effect(
+  ConfectActionCtx<S>(),
   Effect.gen(function* () {
-    const db = yield* MutationDB;
     const auth = yield* ConfectAuth;
     const storage = yield* ConfectStorageWriter;
     const scheduler = yield* ConfectScheduler;
     const runQuery = yield* ConfectQueryRunner;
     const runMutation = yield* ConfectMutationRunner;
+    const runAction = yield* ConfectActionRunner;
+    const vectorSearch = yield* ConfectVectorSearch<S>();
 
     return {
-      db,
       auth,
       storage,
       scheduler,
       runQuery,
       runMutation,
-    } as unknown as GenericMutationCtx<GenericDataModel>;
+      runAction,
+      vectorSearch,
+    };
   }),
 );
+
+// ===========================
+// ConvexActionCtx
+// ===========================
+
+export const ConvexActionCtx = <DataModel extends GenericDataModel>() => Context.GenericTag<GenericActionCtx<DataModel>>(
+  "@rjdellecese/confect/ConvexActionCtx",
+);
+export const layerActionCtx = <DataModel extends GenericDataModel>(ctx: GenericActionCtx<DataModel>) =>
+  Layer.succeed(ConvexActionCtx<DataModel>(), ctx);

@@ -23,12 +23,23 @@ Review code changes against Confect's rigorous standards:
 3. **Provide structured feedback** with severity levels
 4. **Suggest specific fixes** with code examples
 
+## Critical Review Question
+
+**For every `any` type found, ask:**
+> **"Could a generic parameter be used instead?"**
+
+Flag ALL `any` usage. Only accept it if:
+1. It's at a true API boundary (Convex integration)
+2. There's a detailed comment explaining why
+3. No generic could possibly work
+
 ## Review Standards
 
 ### ❌ CRITICAL (Must Fix)
 
 **Type Safety Violations:**
-- Any use of `any` type
+- Any use of `any` type (unless at documented API boundary)
+- Effect requirements typed as `any` (should be precise union of requirements)
 - Type casting with `as` or `as never` (except third-party API boundaries)
 - Type drift (independent TableInfo, DataModel generics)
 

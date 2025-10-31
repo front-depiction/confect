@@ -14,7 +14,7 @@ import type { WithSystemFields } from "./schemas/SystemFields";
 
 export type GenericConfectDocumentWithSystemFields = WithSystemFields<
   string,
-  GenericConfectDoc<any, any>
+  GenericConfectDoc
 >;
 
 export type GenericEncodedConfectDocument = ReadonlyRecord<
@@ -52,7 +52,7 @@ export type TableInfoFromConfectTableInfo<
 };
 
 export type GenericConfectTableInfo = {
-  confectDocument: GenericConfectDoc<any, any>;
+  confectDocument: GenericConfectDoc;
   encodedConfectDocument: GenericEncodedConfectDocument;
   convexDocument: GenericDocument;
   fieldPaths: GenericFieldPaths;
@@ -72,8 +72,8 @@ export type TableSchemaFromConfectTableInfo<
  * The Confect document encoded for storage in Convex. This is the data as it is stored in the database.
  */
 export type GenericConfectDoc<
-  ConfectDataModel extends GenericConfectDataModel,
-  TableName extends TableNamesInConfectDataModel<ConfectDataModel>,
+  ConfectDataModel extends GenericConfectDataModel = GenericConfectDataModel,
+  TableName extends TableNamesInConfectDataModel<ConfectDataModel> = TableNamesInConfectDataModel<ConfectDataModel>,
 > = ConfectDataModel[TableName]["encodedConfectDocument"];
 
 export type ConvexDataModel<ConfectSchema extends GenericConfectSchemaDefinition> =
@@ -140,51 +140,3 @@ export type DerivedTableSchema<
   TN extends TableNamesFromSchema<S>,
   I = never
 > = Schema.Schema<ConfectDocumentFromSchema<S, TN>, I, never>;
-
-// ===========================
-// Legacy Aliases (for backwards compatibility)
-// ===========================
-// These wrap the SchemaDefinition but internally use the Schema-based aliases
-
-/**
- * @deprecated Use ConfectDataModelFromSchema instead
- */
-export type ConfectDataModelFromSchemaDefinition<
-  SD extends GenericConfectSchemaDefinition
-> = ConfectDataModelFromConfectSchemaDefinition<SD>;
-
-/**
- * @deprecated Use TableNamesFromSchema instead
- */
-export type TableNamesFromSchemaDefinition<
-  SD extends GenericConfectSchemaDefinition
-> = TableNamesInConfectDataModel<ConfectDataModelFromSchemaDefinition<SD>>;
-
-/**
- * @deprecated Use TableSchemaFromSchema instead
- */
-export type TableSchemaFromSchemaDefinition<
-  SD extends GenericConfectSchemaDefinition,
-  TableName extends TableNamesFromSchemaDefinition<SD>
-> = SD["tableSchemas"][TableName]["withoutSystemFields"];
-
-/**
- * @deprecated Use ConfectDocumentFromSchema instead
- */
-export type ConfectDocumentFromSchemaDefinition<
-  SD extends GenericConfectSchemaDefinition,
-  TableName extends TableNamesFromSchemaDefinition<SD>
-> = ConfectDocumentByName<
-  ConfectDataModelFromSchemaDefinition<SD>,
-  TableName
->;
-
-/**
- * @deprecated Use TableInfoFromSchema instead
- */
-export type TableInfoFromSchemaDefinition<
-  SD extends GenericConfectSchemaDefinition,
-  TableName extends TableNamesFromSchemaDefinition<SD>
-> = TableInfoFromConfectTableInfo<
-  ConfectDataModelFromSchemaDefinition<SD>[TableName]
->;

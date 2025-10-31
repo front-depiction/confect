@@ -20,8 +20,9 @@ export const getById = confectQuery({
   handler: ({ noteId }) =>
     Effect.gen(function* () {
       const reader = yield* ConfectDatabaseReader;
+      const table = yield* reader.table("notes");
 
-      return yield* reader.table("notes").get(noteId);
+      return yield* table.get(noteId);
     }),
 });
 
@@ -35,10 +36,9 @@ export const getByIndex = confectQuery({
   handler: ({ name, role, text }) =>
     Effect.gen(function* () {
       const reader = yield* ConfectDatabaseReader;
+      const table = yield* reader.table("notes");
 
-      return yield* reader
-        .table("notes")
-        .get("by_name_and_role_and_text", name, role, text);
+      return yield* table.get("by_name_and_role_and_text", name, role, text);
     }),
 });
 
@@ -48,7 +48,8 @@ export const first = confectQuery({
   handler: () =>
     Effect.gen(function* () {
       const reader = yield* ConfectDatabaseReader;
-      return yield* reader.table("notes").index("by_text").first();
+      const table = yield* reader.table("notes");
+      return yield* table.index("by_text").first();
     }),
 });
 
@@ -60,8 +61,9 @@ export const take = confectQuery({
   handler: ({ n }) =>
     Effect.gen(function* () {
       const reader = yield* ConfectDatabaseReader;
+      const table = yield* reader.table("notes");
 
-      return yield* reader.table("notes").index("by_creation_time").take(n);
+      return yield* table.index("by_creation_time").take(n);
     }),
 });
 
@@ -71,7 +73,8 @@ export const collect = confectQuery({
   handler: () =>
     Effect.gen(function* () {
       const reader = yield* ConfectDatabaseReader;
-      return yield* reader.table("notes").index("by_creation_time").collect();
+      const table = yield* reader.table("notes");
+      return yield* table.index("by_creation_time").collect();
     }),
 });
 
@@ -84,9 +87,9 @@ export const paginate = confectQuery({
   handler: ({ cursor, numItems }) =>
     Effect.gen(function* () {
       const reader = yield* ConfectDatabaseReader;
+      const table = yield* reader.table("notes");
 
-      return yield* reader
-        .table("notes")
+      return yield* table
         .index("by_creation_time")
         .paginate({ cursor, numItems });
     }),
@@ -100,9 +103,9 @@ export const stream = confectQuery({
   handler: ({ until }) =>
     Effect.gen(function* () {
       const reader = yield* ConfectDatabaseReader;
+      const table = yield* reader.table("notes");
 
-      return yield* reader
-        .table("notes")
+      return yield* table
         .index("by_creation_time")
         .stream()
         .pipe(

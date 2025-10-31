@@ -62,11 +62,12 @@ const make = <S extends GenericConfectSchema>(
   ) => Effect.promise(() => vectorSearch(tableName, indexName, query)),
 });
 
-export const ConfectVectorSearch = Context.GenericTag<ConfectVectorSearch>(
-  "@rjdellecese/confect/ConfectVectorSearch",
-);
+export const ConfectVectorSearch = <S extends GenericConfectSchema = GenericConfectSchema>() =>
+  Context.GenericTag<ConfectVectorSearch<S>>(
+    "@rjdellecese/confect/ConfectVectorSearch",
+  );
 
 export const layer = <S extends GenericConfectSchema>(
   vectorSearch: VectorSearch<S>,
 ): Layer.Layer<ConfectVectorSearch<S>> =>
-  Layer.succeed(ConfectVectorSearch, make(vectorSearch));
+  Layer.succeed(ConfectVectorSearch<S>(), make(vectorSearch));

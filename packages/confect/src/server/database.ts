@@ -21,9 +21,10 @@ import type { GenericId } from "convex/values";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ParseResult from "effect/ParseResult";
-import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
+import * as ParseResult from "effect/ParseResult";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import type {
   ConfectDocumentFromSchema,
   ConvexDataModel,
@@ -37,14 +38,13 @@ import {
   makeQueryInitializer,
   type ConfectQueryInitializer,
 } from "./query";
-
-// Re-export error classes for convenience
-export { DocumentDecodeError, GetByIdFailure };
 import type {
   ConfectSchemaDefinition,
   GenericConfectSchema,
 } from "./schema";
-import * as Predicate from "effect/Predicate";
+
+// Re-export error classes for convenience
+export { DocumentDecodeError, GetByIdFailure };
 
 
 
@@ -54,8 +54,8 @@ import * as Predicate from "effect/Predicate";
 
 export interface QueryDB<
   S extends GenericConfectSchema = GenericConfectSchema,
-> {
-  readonly get: <TN extends TableNamesFromSchema<S>>(
+> extends GenericDatabaseReader<ConvexDataModel<ConfectSchemaDefinition<S>>> {
+  readonly getWithSchema: <TN extends TableNamesFromSchema<S>>(
     tableName: TN,
     id: GenericId<TN>,
   ) => Effect.Effect<
@@ -68,10 +68,9 @@ export interface QueryDB<
   ) => Effect.Effect<ConfectQueryInitializer<TableInfoFromSchema<S, TN>>>;
 }
 
-export const QueryDB = Context.GenericTag<QueryDB>(
+export const QueryDB = <S extends GenericConfectSchema>() => Context.GenericTag<QueryDB<S>>(
   "@rjdellecese/confect/QueryDB",
 );
-
 // Legacy export for backward compatibility
 /** @deprecated Use QueryDB instead */
 export const ConfectDatabaseReader = QueryDB;
@@ -82,7 +81,14 @@ export const makeQueryDB = <
   confectSchemaDefinition: ConfectSchemaDefinition<S>,
   convexDatabaseReader: GenericDatabaseReader<ConvexDataModel<ConfectSchemaDefinition<S>>>,
 ): QueryDB<S> => ({
-  get: (tableName, id) => {
+  // Convex GenericDatabaseReader methods (pass through)
+  get: (id) => convexDatabaseReader.get(id),
+  query: (tableName) => convexDatabaseReader.query(tableName),
+  normalizeId: (tableName, id) => convexDatabaseReader.normalizeId(tableName, id),
+  system: convexDatabaseReader.system,
+
+  // Confect enhanced methods
+  getWithSchema: (tableName, id) => {
     const maybeSchema = Option.fromNullable(confectSchemaDefinition.confectSchema[tableName]?.tableSchema)
     return Effect.promise(() => convexDatabaseReader.get(id)).pipe(
       Effect.map(Option.fromNullable),
@@ -116,7 +122,7 @@ export const layerQueryDB = <
   convexDatabaseReader: GenericDatabaseReader<ConvexDataModel<ConfectSchemaDefinition<S>>>,
 ): Layer.Layer<QueryDB<S>> =>
   Layer.succeed(
-    QueryDB,
+    QueryDB<S>(),
     makeQueryDB(confectSchemaDefinition, convexDatabaseReader),
   );
 
@@ -132,28 +138,28 @@ export const layerDatabaseReader = layerQueryDB;
 
 export interface MutationDB<
   S extends GenericConfectSchema = GenericConfectSchema,
-> extends QueryDB<S> {
-  readonly insert: <TN extends TableNamesFromSchema<S>>(
+> extends QueryDB<S>, GenericDatabaseWriter<ConvexDataModel<ConfectSchemaDefinition<S>>> {
+  readonly insertWithSchema: <TN extends TableNamesFromSchema<S>>(
     tableName: TN,
     document: WithoutSystemFields<ConfectDocumentFromSchema<S, TN>>,
   ) => Effect.Effect<GenericId<TN>, DocumentEncodeError>;
-  readonly patch: <TN extends TableNamesFromSchema<S>>(
+  readonly patchWithSchema: <TN extends TableNamesFromSchema<S>>(
     tableName: TN,
     id: GenericId<TN>,
     patchedValues: Partial<WithoutSystemFields<ConfectDocumentFromSchema<S, TN>>>,
   ) => Effect.Effect<void, DocumentEncodeError | DocumentDecodeError | GetByIdFailure>;
-  readonly replace: <TN extends TableNamesFromSchema<S>>(
+  readonly replaceWithSchema: <TN extends TableNamesFromSchema<S>>(
     tableName: TN,
     id: GenericId<TN>,
     value: WithoutSystemFields<ConfectDocumentFromSchema<S, TN>>,
   ) => Effect.Effect<void, DocumentEncodeError>;
-  readonly delete: <TN extends TableNamesFromSchema<S>>(
+  readonly deleteWithSchema: <TN extends TableNamesFromSchema<S>>(
     tableName: TN,
     id: GenericId<TN>,
   ) => Effect.Effect<void>;
 }
 
-export const MutationDB = Context.GenericTag<MutationDB>(
+export const MutationDB = <S extends GenericConfectSchema>() => Context.GenericTag<MutationDB<S>>(
   "@rjdellecese/confect/MutationDB",
 );
 
@@ -172,7 +178,14 @@ export const makeMutationDB = <
   return {
     ...reader,
 
-    insert: (tableName, document) =>
+    // Convex GenericDatabaseWriter methods (pass through)
+    insert: (tableName, document) => convexDatabaseWriter.insert(tableName, document),
+    patch: (id, value) => convexDatabaseWriter.patch(id, value),
+    replace: (id, value) => convexDatabaseWriter.replace(id, value),
+    delete: (id) => convexDatabaseWriter.delete(id),
+
+    // Confect enhanced methods with schema validation
+    insertWithSchema: (tableName, document) =>
       Effect.gen(function* () {
         const tableDefinition = confectSchemaDefinition.confectSchema[tableName];
         const encodedDocument = yield* encodeDocument(
@@ -185,7 +198,7 @@ export const makeMutationDB = <
         );
       }),
 
-    patch: (tableName, id, patchedValues) =>
+    patchWithSchema: (tableName, id, patchedValues) =>
       Effect.gen(function* () {
         const tableDefinition = confectSchemaDefinition.confectSchema[tableName];
         const original = yield* getDocumentById(
@@ -205,7 +218,7 @@ export const makeMutationDB = <
         );
       }),
 
-    replace: (tableName, id, value) =>
+    replaceWithSchema: (tableName, id, value) =>
       Effect.gen(function* () {
         const tableDefinition = confectSchemaDefinition.confectSchema[tableName];
         const encodedDocument = yield* encodeDocument(
@@ -218,7 +231,7 @@ export const makeMutationDB = <
         );
       }),
 
-    delete: (_tableName, id) => Effect.promise(() => convexDatabaseWriter.delete(id)),
+    deleteWithSchema: (_tableName, id) => Effect.promise(() => convexDatabaseWriter.delete(id)),
   };
 };
 
@@ -227,11 +240,15 @@ export const layerMutationDB = <
 >(
   confectSchemaDefinition: ConfectSchemaDefinition<S>,
   convexDatabaseWriter: GenericDatabaseWriter<ConvexDataModel<ConfectSchemaDefinition<S>>>,
-): Layer.Layer<MutationDB<S>> =>
-  Layer.succeed(
-    MutationDB,
-    makeMutationDB(confectSchemaDefinition, convexDatabaseWriter),
-  );
+): Layer.Layer<MutationDB<S> | QueryDB<S>> => {
+  const db = makeMutationDB(confectSchemaDefinition, convexDatabaseWriter)
+  return Layer.merge(
+    Layer.succeed(MutationDB<S>(), db),
+     Layer.succeed(QueryDB<S>(), db) 
+    )
+
+}
+  
 
 // Legacy exports for backward compatibility
 /** @deprecated Use makeMutationDB instead */

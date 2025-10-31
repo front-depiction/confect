@@ -1,33 +1,19 @@
 import { ConvexReactClient } from "convex/react";
 import { FunctionReference } from "convex/server";
-import { Effect, ParseResult, Record, Schema } from "effect";
-import { ConfectApiGroupAnyWithProps } from "./ConfectApiGroup";
-import * as ConfectApi from "./ConfectApi";
+import { Effect, Record, Schema } from "effect";
+import type {
+  ApiClient,
+  GenericConfectApi,
+  GenericConfectApiGroup,
+} from "./data_model";
 import * as ConfectApiFunctionPath from "./ConfectApiFunctionPath";
 
-export type ConfectApiClient<
-  Api extends ConfectApi.ConfectApi<
-    string,
-    ConfectApiGroupAnyWithProps
-  >,
-> = {
-  [GroupName in keyof Api["groups"]]: {
-    [FunctionName in keyof Api["groups"][GroupName]["functions"]]: (
-      args: Api["groups"][GroupName]["functions"][FunctionName]["args"]["Type"]
-    ) => Effect.Effect<
-      Api["groups"][GroupName]["functions"][FunctionName]["returns"]["Type"],
-      ParseResult.ParseError
-    >;
-  };
-};
+export type ConfectApiClient<Api extends GenericConfectApi> = ApiClient<Api>;
 
-export const make = <
-  Api extends ConfectApi.ConfectApi<
-    string,
-    ConfectApiGroupAnyWithProps
-  >,
->(
-  confectApi: Api,
+export const make = <Api extends GenericConfectApi>(
+  confectApi: Api & {
+    readonly groups: Record.ReadonlyRecord<string, GenericConfectApiGroup>;
+  },
   convexReactClient: ConvexReactClient
 ): ConfectApiClient<Api> =>
   Record.map(confectApi.groups, (group) =>

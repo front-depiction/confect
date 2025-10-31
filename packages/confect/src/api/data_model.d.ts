@@ -28,8 +28,8 @@
 import type { RegisteredQuery } from "convex/server";
 import type * as Effect from "effect/Effect";
 import type * as ParseResult from "effect/ParseResult";
-import type * as Schema from "effect/Schema";
 import type { ReadonlyRecord } from "effect/Record";
+import type * as Schema from "effect/Schema";
 import type { GenericConfectSchema } from "../server/schema";
 
 // ===========================
@@ -269,10 +269,26 @@ export type ApiGroupAtPath<
   Path extends string,
 > = Path extends `${infer Head}.${infer Tail}`
   ? Head extends ApiGroupNames<Api>
-    ? ApiGroupAtPath<ApiGroupByName<Api, Head>, Tail>
+    ? GroupAtPath<ApiGroupByName<Api, Head>, Tail>
     : never
   : Path extends ApiGroupNames<Api>
     ? ApiGroupByName<Api, Path>
+    : never;
+
+/**
+ * Internal helper: Extract a group from nested groups by path.
+ *
+ * @internal
+ */
+type GroupAtPath<
+  Group extends GenericConfectApiGroup,
+  Path extends string,
+> = Path extends `${infer Head}.${infer Tail}`
+  ? Head extends GroupNestedGroupNames<Group>
+    ? GroupAtPath<Group["groups"][Head], Tail>
+    : never
+  : Path extends GroupNestedGroupNames<Group>
+    ? Group["groups"][Path]
     : never;
 
 // ===========================
@@ -366,100 +382,21 @@ export type FunctionReturnsEncoded<Fn extends GenericConfectApiFunction> =
 // Handler Type Construction (Server-Side)
 // ===========================
 
-// Import service types from server layer
-import type {
-  ConfectAuth,
-  ConfectStorageReader,
-  ConfectStorageWriter,
-  ConfectStorageActionWriter,
-  ConfectScheduler,
-  ConfectVectorSearch,
-  ConfectQueryRunner,
-  ConfectMutationRunner,
-  ConfectActionRunner,
-  ConvexQueryCtx,
-  ConvexMutationCtx,
-  ConvexActionCtx,
-  QueryDB,
-  MutationDB,
-} from "../server";
-
-/**
- * Effect requirements (services) available to Query handlers.
- *
- * Queries are read-only and have access to:
- * - Database reader (QueryDB)
- * - Auth service
- * - Storage reader
- * - Query runner (for calling other queries)
- * - Convex query context
- */
-export type QueryRequirements =
-  | typeof QueryDB
-  | ConfectAuth
-  | ConfectStorageReader
-  | typeof ConfectQueryRunner
-  | typeof ConvexQueryCtx;
-
-/**
- * Effect requirements (services) available to Mutation handlers.
- *
- * Mutations can read and write and have access to:
- * - Database reader and writer (QueryDB, MutationDB)
- * - Auth service
- * - Scheduler (for scheduling actions)
- * - Storage reader and writer
- * - Query and mutation runners
- * - Convex mutation context
- */
-export type MutationRequirements =
-  | typeof QueryDB
-  | typeof MutationDB
-  | ConfectAuth
-  | ConfectScheduler
-  | ConfectStorageReader
-  | ConfectStorageWriter
-  | typeof ConfectQueryRunner
-  | typeof ConfectMutationRunner
-  | typeof ConvexMutationCtx;
-
-/**
- * Effect requirements (services) available to Action handlers.
- *
- * Actions can perform side effects and have access to:
- * - Scheduler
- * - Auth service
- * - Storage (reader, writer, action writer)
- * - All runners (query, mutation, action)
- * - Vector search
- * - Convex action context
- */
-export type ActionRequirements =
-  | ConfectScheduler
-  | ConfectAuth
-  | ConfectStorageReader
-  | ConfectStorageWriter
-  | ConfectStorageActionWriter
-  | typeof ConfectQueryRunner
-  | typeof ConfectMutationRunner
-  | typeof ConfectActionRunner
-  | typeof ConfectVectorSearch
-  | typeof ConvexActionCtx;
-
 /**
  * Extract the Effect requirements for a function handler based on its type.
  *
+ * The actual requirements are implementation-specific and depend on the
+ * function type (Query/Mutation/Action). See src/server/functions.ts for
+ * the concrete requirement types used in handlers.
+ *
+ * This is intentionally kept generic (any) to avoid circular dependencies
+ * and coupling to server implementation details.
+ *
  * @example
- * type Reqs = FunctionHandlerRequirements<CreateUserFn>  // MutationRequirements
+ * type Reqs = FunctionHandlerRequirements<CreateUserFn>  // any
  */
 export type FunctionHandlerRequirements<Fn extends GenericConfectApiFunction> =
-  FunctionType<Fn> extends "Query"
-    ? QueryRequirements
-    : FunctionType<Fn> extends "Mutation"
-      ? MutationRequirements
-      : FunctionType<Fn> extends "Action"
-        ? ActionRequirements
-        : never;
+  any;
 
 /**
  * Handler type for a specific function.

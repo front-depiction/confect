@@ -1,3 +1,8 @@
+import type {
+  GenericActionCtx,
+  GenericMutationCtx,
+  GenericQueryCtx,
+} from "convex/server";
 import {
   ConvexActionCtx,
   ConvexMutationCtx,
@@ -12,17 +17,27 @@ import { makeConfectFunctions } from "../../src/server/functions";
 import type { ConfectDataModelFromConfectSchemaDefinition } from "../../src/server/schema";
 import { GenericId } from "../../src/server/schemas/GenericId";
 import { confectSchema } from "../convex/schema";
+import type { QueryDB, MutationDB } from "../../src/server/database";
 
-export const {
+const {
   confectQuery,
   confectInternalQuery,
   confectMutation,
   confectInternalMutation,
   confectAction,
   confectInternalAction,
-  QueryDB,
-  MutationDB,
+  QueryDB: QueryDBFactory,
+  MutationDB: MutationDBFactory,
 } = makeConfectFunctions(confectSchema);
+
+export {
+  confectQuery,
+  confectInternalQuery,
+  confectMutation,
+  confectInternalMutation,
+  confectAction,
+  confectInternalAction,
+};
 
 type ConfectSchema = typeof confectSchema;
 
@@ -40,8 +55,11 @@ export const Id = <TableName extends TableNames>(tableName: TableName) =>
   GenericId<TableName>(tableName);
 export type Id<TableName extends TableNames> = GenericId<TableName>;
 
-export type ConfectDatabaseReader = typeof QueryDB.Type;
-export type ConfectDatabaseWriter = typeof MutationDB.Type;
+// Create tag instances for use in test handlers
+export const ConfectDatabaseReader = QueryDBFactory<ConfectSchema>();
+export type ConfectDatabaseReader = QueryDB<ConfectSchema>;
+export const ConfectDatabaseWriter = MutationDBFactory<ConfectSchema>();
+export type ConfectDatabaseWriter = MutationDB<ConfectSchema>;
 
 export { ConfectAuth } from "../../src/server/auth";
 export {
@@ -59,9 +77,9 @@ export { ConfectVectorSearch } from "../../src/server/vector_search";
 
 type DataModel = DataModelFromConfectDataModel<ConfectDataModel>;
 
-export const QueryCtx = ConvexQueryCtx<DataModel>;
-export type QueryCtx = typeof QueryCtx.Type;
-export const MutationCtx = ConvexMutationCtx<DataModel>;
-export type MutationCtx = typeof MutationCtx.Type;
-export const ActionCtx = ConvexActionCtx<DataModel>;
-export type ActionCtx = typeof ActionCtx.Type;
+export const QueryCtx = ConvexQueryCtx<DataModel>();
+export type QueryCtx = GenericQueryCtx<DataModel>;
+export const MutationCtx = ConvexMutationCtx<DataModel>();
+export type MutationCtx = GenericMutationCtx<DataModel>;
+export const ActionCtx = ConvexActionCtx<DataModel>();
+export type ActionCtx = GenericActionCtx<DataModel>;

@@ -54,8 +54,11 @@ const confectSchemaDefinition = defineConfectSchema({
   ),
 });
 
-const Api = ConfectApi.make("Api").add(Group).add(Group4);
+const Api = ConfectApi.make(confectSchemaDefinition, "Api")
+  .add(Group)
+  .add(Group4);
 
+// Deprecated: keeping for backward compatibility testing
 const ApiWithDatabaseSchema = ConfectApiWithDatabaseSchema.make(
   confectSchemaDefinition,
   Api
