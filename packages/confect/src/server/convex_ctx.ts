@@ -3,19 +3,14 @@ import type {
   GenericActionCtx,
   GenericMutationCtx,
   GenericQueryCtx,
-  NamedTableInfo,
   Scheduler,
   StorageActionWriter,
   StorageReader,
   StorageWriter,
-  VectorIndexNames,
-  VectorSearch,
 } from "convex/server";
 import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
 import type { DataModelFromConfectSchema, GenericConfectSchema } from "./schema";
-import { TableInfoFromSchema, TableNamesFromSchema } from "./data_model";
-import { TableNames } from "../../test/convex/_generated/dataModel";
 
 /**
  * ConvexQueryCtx - Entry point for query contexts
@@ -62,6 +57,7 @@ export const ConvexActionCtx = Context.GenericTag<GenericActionCtx<any>>(
 export const layerActionCtx = <S extends GenericConfectSchema, DM extends GenericActionCtx<DataModelFromConfectSchema<S>>>(
   ctx: DM
 ) => Layer.succeed(ConvexActionCtx, ctx).pipe(
+
   Layer.merge(Layer.succeed(ConvexScheduler, ctx.scheduler)),
   Layer.merge(Layer.succeed(ConvexAuth, ctx.auth)),
   Layer.merge(Layer.succeed(ConvexStorageActionWriter, ctx.storage)),
@@ -71,23 +67,49 @@ export const layerActionCtx = <S extends GenericConfectSchema, DM extends Generi
 export const ConvexScheduler = Context.GenericTag<Scheduler>(
   "@rjdellecese/confect/ConvexScheduler"
 );
+
 export const ConvexAuth = Context.GenericTag<Auth>(
   "@rjdellecese/confect/ConvexAuth"
 );
+
 export const ConvexStorageReader = Context.GenericTag<StorageReader>(
   "@rjdellecese/confect/ConvexStorageReader"
-)
+);
+
 export const ConvexStorageWriter = Context.GenericTag<StorageWriter>(
-  "@rjdellecese/confect/ConvexStorageWriter"
-)
+  "@rjdellecese/confect/StorageWriter"
+);
+
 export const ConvexStorageActionWriter = Context.GenericTag<StorageActionWriter>(
   "@rjdellecese/confect/StorageActionWriter"
-)
+);
 
-interface ConvexVectorSearch<S extends GenericConfectSchema> {
-  vectorSearch: GenericActionCtx<DataModelFromConfectSchema<S>>["vectorSearch"]
+// Query Runner
+export interface ConvexQueryRunner<S extends GenericConfectSchema> {
+  runQuery: GenericQueryCtx<DataModelFromConfectSchema<S>>["runQuery"];
 }
-export const ConvexVectorSearch = <S extends GenericConfectSchema>() => Context.GenericTag<ConvexVectorSearch<S>>(
-  "@rjdellecese/confect/StorageAciwctionWriter"
-)
+export const ConvexQueryRunner = <S extends GenericConfectSchema>() =>
+  Context.GenericTag<ConvexQueryRunner<S>>("@rjdellecese/confect/ConvexQueryRunner");
+
+// Mutation Runner
+export interface ConvexMutationRunner<S extends GenericConfectSchema> {
+  runMutation: GenericMutationCtx<DataModelFromConfectSchema<S>>["runMutation"];
+}
+export const ConvexMutationRunner = <S extends GenericConfectSchema>() =>
+  Context.GenericTag<ConvexMutationRunner<S>>("@rjdellecese/confect/ConvexMutationRunner");
+
+// Action Runner
+export interface ConvexActionRunner<S extends GenericConfectSchema> {
+  runAction: GenericActionCtx<DataModelFromConfectSchema<S>>["runAction"];
+}
+
+export interface ConvexVectorSearch<S extends GenericConfectSchema> {
+  vectorSearch: GenericActionCtx<DataModelFromConfectSchema<S>>["vectorSearch"];
+}
+
+export const ConvexActionRunner = <S extends GenericConfectSchema>() =>
+  Context.GenericTag<ConvexActionRunner<S>>("@rjdellecese/confect/ConvexActionRunner");
+
+export const ConvexVectorSearch = <S extends GenericConfectSchema>() =>
+  Context.GenericTag<ConvexVectorSearch<S>>("@rjdellecese/confect/ConvexVectorSearchRunner");
 

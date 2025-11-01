@@ -11,20 +11,18 @@
  * - Depends on Convex runner tags from convex_ctx for raw runner access
  */
 
+import type { GenericActionCtx, GenericMutationCtx, GenericQueryCtx } from "convex/server";
 import {
   getFunctionName,
   type FunctionReference,
   type FunctionReturnType,
-  type GenericDataModel,
   type OptionalRestArgs,
 } from "convex/server";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import type { GenericConfectSchema } from "./schema";
-import type { GenericActionCtx, GenericMutationCtx, GenericQueryCtx } from "convex/server";
-import { ConvexActionCtx, ConvexMutationCtx, ConvexQueryCtx } from "./convex_ctx";
+import { ConvexActionRunner, ConvexMutationRunner, ConvexQueryRunner } from "./convex_ctx";
 
 // ===========================
 // ConfectQueryRunner
@@ -49,17 +47,21 @@ const makeQueryRunner = (runQuery: GenericQueryCtx<never>["runQuery"]): ConfectQ
   ) => Effect.promise(() => runQuery(query, ...args)),
 });
 
-export const ConfectQueryRunner = Context.GenericTag<ConfectQueryRunner>(
+const _ConfectQueryRunner = Context.GenericTag<ConfectQueryRunner>(
   "@rjdellecese/confect/ConfectQueryRunner",
 );
 
-export const layerQueryRunner = Layer.effect(
-  ConfectQueryRunner,
+const DefaultConfectQueryRunner = Layer.effect(
+  _ConfectQueryRunner,
   Effect.gen(function* () {
-    const { runQuery } = yield* ConvexQueryCtx;
+    const { runQuery } = yield* ConvexQueryRunner();
     return makeQueryRunner(runQuery);
   })
 );
+
+export const ConfectQueryRunner = Object.assign(_ConfectQueryRunner, {
+  Default: DefaultConfectQueryRunner,
+});
 
 // ===========================
 // ConfectMutationRunner
@@ -94,18 +96,21 @@ const makeMutationRunner = (
     }),
 });
 
-export const ConfectMutationRunner = Context.GenericTag<ConfectMutationRunner>(
+const _ConfectMutationRunner = Context.GenericTag<ConfectMutationRunner>(
   "@rjdellecese/confect/ConfectMutationRunner",
 );
 
-export const layerMutationRunner =
-  Layer.effect(
-    ConfectMutationRunner,
-    Effect.gen(function* () {
-      const { runMutation } = yield* ConvexMutationCtx;
-      return makeMutationRunner(runMutation);
-    })
-  );
+const DefaultConfectMutationRunner = Layer.effect(
+  _ConfectMutationRunner,
+  Effect.gen(function* () {
+    const { runMutation } = yield* ConvexMutationRunner();
+    return makeMutationRunner(runMutation);
+  })
+);
+
+export const ConfectMutationRunner = Object.assign(_ConfectMutationRunner, {
+  Default: DefaultConfectMutationRunner,
+});
 
 // ===========================
 // ConfectActionRunner
@@ -130,17 +135,21 @@ const makeActionRunner = (runAction: GenericActionCtx<never>["runAction"]): Conf
   ) => Effect.promise(() => runAction(action, ...args)),
 });
 
-export const ConfectActionRunner = Context.GenericTag<ConfectActionRunner>(
+const _ConfectActionRunner = Context.GenericTag<ConfectActionRunner>(
   "@rjdellecese/confect/ConfectActionRunner",
 );
 
-export const layerActionRunner = Layer.effect(
-  ConfectActionRunner,
+const DefaultConfectActionRunner = Layer.effect(
+  _ConfectActionRunner,
   Effect.gen(function* () {
-    const { runAction } = yield* ConvexActionCtx;
+    const { runAction } = yield* ConvexActionRunner();
     return makeActionRunner(runAction);
   })
 );
+
+export const ConfectActionRunner = Object.assign(_ConfectActionRunner, {
+  Default: DefaultConfectActionRunner,
+});
 
 // ===========================
 // Errors

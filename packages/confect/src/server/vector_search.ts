@@ -16,10 +16,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { GenericConfectSchema } from "./schema";
 import type { TableInfoFromSchema, TableNamesFromSchema } from "./data_model";
-import {
-  ConvexVectorSearch,
-} from "./convex_ctx";
 import type { GenericActionCtx } from "convex/server";
+import { ConvexActionCtx, ConvexVectorSearch } from "./convex_ctx";
 
 const ConfectVectorSearchTypeId = Symbol.for("@rjdellecese/confect/ConfectVectorSearch");
 type ConfectVectorSearchTypeId = typeof ConfectVectorSearchTypeId;
@@ -42,7 +40,7 @@ export interface ConfectVectorSearch<
 }
 
 const make = <S extends GenericConfectSchema>(
-  vectorSearch: GenericActionCtx<never>["vectorSearch"],
+  vectorSearch: GenericActionCtx<any>["vectorSearch"],
 ): ConfectVectorSearch<S> => ({
   [ConfectVectorSearchTypeId]: ConfectVectorSearchTypeId,
   search: <
@@ -62,7 +60,7 @@ export const ConfectVectorSearch = Context.GenericTag<ConfectVectorSearch>(
 export const layer = Layer.effect(
   ConfectVectorSearch,
   Effect.gen(function* () {
-    const vectorSearch = yield* ConvexVectorSearch();
+    const { vectorSearch } = yield* ConvexVectorSearch();
     return make(vectorSearch);
   })
 );

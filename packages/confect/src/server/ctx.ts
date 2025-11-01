@@ -44,15 +44,15 @@ export interface ConfectQueryCtx<S extends GenericConfectSchema = GenericConfect
   readonly runQuery: ConfectQueryRunner;
 }
 
-const ConfectQueryCtx = Context.GenericTag<ConfectQueryCtx>(
+const _ConfectQueryCtx = Context.GenericTag<ConfectQueryCtx>(
   "@rjdellecese/confect/ConfectQueryCtx",
 );
 
 /**
  * Build ConfectQueryCtx from capability services using Layer.effect.
  */
-export const layerConfectQueryCtx = Layer.effect(
-  ConfectQueryCtx,
+const DefaultConfectQueryCtx = Layer.effect(
+  _ConfectQueryCtx,
   Effect.gen(function* () {
     const db = yield* QueryDB;
     const auth = yield* ConfectAuth;
@@ -67,6 +67,10 @@ export const layerConfectQueryCtx = Layer.effect(
     };
   }),
 );
+
+export const ConfectQueryCtx = Object.assign(_ConfectQueryCtx, { Default: DefaultConfectQueryCtx });
+
+
 
 // ===========================
 // ConfectMutationCtx
@@ -85,15 +89,15 @@ export interface ConfectMutationCtx<S extends GenericConfectSchema> {
   readonly runMutation: ConfectMutationRunner;
 }
 
-const ConfectMutationCtx = <S extends GenericConfectSchema>() => Context.GenericTag<ConfectMutationCtx<S>>(
+const _ConfectMutationCtx = <S extends GenericConfectSchema>() => Context.GenericTag<ConfectMutationCtx<S>>(
   "@rjdellecese/confect/ConfectMutationCtx",
 );
 
 /**
  * Build ConfectMutationCtx from capability services using Layer.effect.
  */
-export const _layerConfectMutationCtx = <S extends GenericConfectSchema>() => Layer.effect(
-  ConfectMutationCtx<S>(),
+const DefaultConfectMutationCtx = <S extends GenericConfectSchema>() => Layer.effect(
+  _ConfectMutationCtx<S>(),
   Effect.gen(function* () {
     const db = yield* MutationDB<S>();
     const auth = yield* ConfectAuth;
@@ -113,8 +117,8 @@ export const _layerConfectMutationCtx = <S extends GenericConfectSchema>() => La
   }),
 );
 
-export const layerConfectMutationCtx = <S extends GenericConfectSchema>() =>
-  Layer.merge(_layerConfectMutationCtx<S>(), layerConfectQueryCtx<S>())
+export const ConfectMutationCtx = Object.assign(_ConfectMutationCtx, { Default: DefaultConfectMutationCtx });
+
 
 // ===========================
 // ConfectActionCtx
@@ -134,15 +138,15 @@ export interface ConfectActionCtx<S extends GenericConfectSchema = GenericConfec
   readonly vectorSearch: ConfectVectorSearch<S>;
 }
 
-const ConfectActionCtx = Context.GenericTag<ConfectActionCtx>(
+const _ConfectActionCtx = Context.GenericTag<ConfectActionCtx>(
   "@rjdellecese/confect/ConfectActionCtx",
 );
 
 /**
  * Build ConfectActionCtx from capability services using Layer.effect.
  */
-export const layerConfectActionCtx = Layer.effect(
-  ConfectActionCtx,
+const DefaultConfectActionCtx = Layer.effect(
+  _ConfectActionCtx,
   Effect.gen(function* () {
     const auth = yield* ConfectAuth;
     const storage = yield* ConfectStorageWriter;
@@ -163,3 +167,6 @@ export const layerConfectActionCtx = Layer.effect(
     };
   }),
 );
+
+export const ConfectActionCtx = Object.assign(_ConfectActionCtx, { Default: DefaultConfectActionCtx.pipe(Layer.provide) });
+
