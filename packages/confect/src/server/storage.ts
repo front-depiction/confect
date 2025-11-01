@@ -8,6 +8,7 @@
  * - Returns Effect for composability
  * - Uses typed errors for failure cases
  * - Decodes URLs using Schema.URL for type safety
+ * - Depends on Convex storage tags from convex_ctx for raw Convex storage access
  */
 
 import type {
@@ -22,6 +23,13 @@ import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
 import * as Context from "effect/Context";
+import {
+  ConvexStorageReader,
+  ConvexStorageWriter,
+  ConvexStorageActionWriter,
+} from "./convex_ctx";
+import type { GenericConfectSchema } from "./schema";
+import type { GenericDataModel } from "convex/server";
 
 // ===========================
 // ConfectStorageReader
@@ -54,10 +62,13 @@ export const ConfectStorageReader = Context.GenericTag<ConfectStorageReader>(
   "@rjdellecese/confect/ConfectStorageReader",
 );
 
-export const layerStorageReader = (
-  storageReader: StorageReader,
-): Layer.Layer<ConfectStorageReader> =>
-  Layer.succeed(ConfectStorageReader, makeStorageReader(storageReader));
+export const layerStorageReader = Layer.effect(
+  ConfectStorageReader,
+  Effect.gen(function* () {
+    const storageReader = yield* ConvexStorageReader;
+    return makeStorageReader(storageReader);
+  })
+);
 
 // ===========================
 // ConfectStorageWriter
@@ -90,10 +101,13 @@ export const ConfectStorageWriter = Context.GenericTag<ConfectStorageWriter>(
   "@rjdellecese/confect/ConfectStorageWriter",
 );
 
-export const layerStorageWriter = (
-  storageWriter: StorageWriter,
-): Layer.Layer<ConfectStorageWriter> =>
-  Layer.succeed(ConfectStorageWriter, makeStorageWriter(storageWriter));
+export const layerStorageWriter = Layer.effect(
+  ConfectStorageWriter,
+  Effect.gen(function* () {
+    const storageWriter = yield* ConvexStorageWriter;
+    return makeStorageWriter(storageWriter);
+  })
+);
 
 // ===========================
 // ConfectStorageActionWriter
@@ -129,10 +143,13 @@ export const ConfectStorageActionWriter = Context.GenericTag<ConfectStorageActio
   "@rjdellecese/confect/ConfectStorageActionWriter",
 );
 
-export const layerStorageActionWriter = (
-  storageActionWriter: StorageActionWriter,
-): Layer.Layer<ConfectStorageActionWriter> =>
-  Layer.succeed(ConfectStorageActionWriter, makeStorageActionWriter(storageActionWriter));
+export const layerStorageActionWriter = Layer.effect(
+  ConfectStorageActionWriter,
+  Effect.gen(function* () {
+    const storageActionWriter = yield* ConvexStorageActionWriter;
+    return makeStorageActionWriter(storageActionWriter);
+  })
+);
 
 // ===========================
 // Errors

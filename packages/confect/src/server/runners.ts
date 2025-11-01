@@ -8,22 +8,23 @@
  * - Returns Effect for composability
  * - Mutation runner uses tryPromise to catch rollback errors
  * - Query and Action runners use promise (no expected errors from Convex)
+ * - Depends on Convex runner tags from convex_ctx for raw runner access
  */
 
 import {
   getFunctionName,
   type FunctionReference,
   type FunctionReturnType,
-  type GenericActionCtx,
   type GenericDataModel,
-  type GenericMutationCtx,
-  type GenericQueryCtx,
   type OptionalRestArgs,
 } from "convex/server";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import type { GenericConfectSchema } from "./schema";
+import type { GenericActionCtx, GenericMutationCtx, GenericQueryCtx } from "convex/server";
+import { ConvexActionCtx, ConvexMutationCtx, ConvexQueryCtx } from "./convex_ctx";
 
 // ===========================
 // ConfectQueryRunner
@@ -40,9 +41,7 @@ export interface ConfectQueryRunner {
   ) => Effect.Effect<FunctionReturnType<Query>>;
 }
 
-const makeQueryRunner = (
-  runQuery: GenericQueryCtx<GenericDataModel>["runQuery"],
-): ConfectQueryRunner => ({
+const makeQueryRunner = (runQuery: GenericQueryCtx<never>["runQuery"]): ConfectQueryRunner => ({
   [ConfectQueryRunnerTypeId]: ConfectQueryRunnerTypeId,
   run: <Query extends FunctionReference<"query", "public" | "internal">>(
     query: Query,
@@ -54,10 +53,13 @@ export const ConfectQueryRunner = Context.GenericTag<ConfectQueryRunner>(
   "@rjdellecese/confect/ConfectQueryRunner",
 );
 
-export const layerQueryRunner = (
-  runQuery: GenericQueryCtx<GenericDataModel>["runQuery"],
-): Layer.Layer<ConfectQueryRunner> =>
-  Layer.succeed(ConfectQueryRunner, makeQueryRunner(runQuery));
+export const layerQueryRunner = Layer.effect(
+  ConfectQueryRunner,
+  Effect.gen(function* () {
+    const { runQuery } = yield* ConvexQueryCtx;
+    return makeQueryRunner(runQuery);
+  })
+);
 
 // ===========================
 // ConfectMutationRunner
@@ -75,7 +77,7 @@ export interface ConfectMutationRunner {
 }
 
 const makeMutationRunner = (
-  runMutation: GenericMutationCtx<GenericDataModel>["runMutation"],
+  runMutation: GenericMutationCtx<never>["runMutation"],
 ): ConfectMutationRunner => ({
   [ConfectMutationRunnerTypeId]: ConfectMutationRunnerTypeId,
   run: <Mutation extends FunctionReference<"mutation", "public" | "internal">>(
@@ -96,10 +98,14 @@ export const ConfectMutationRunner = Context.GenericTag<ConfectMutationRunner>(
   "@rjdellecese/confect/ConfectMutationRunner",
 );
 
-export const layerMutationRunner = (
-  runMutation: GenericMutationCtx<GenericDataModel>["runMutation"],
-): Layer.Layer<ConfectMutationRunner> =>
-  Layer.succeed(ConfectMutationRunner, makeMutationRunner(runMutation));
+export const layerMutationRunner =
+  Layer.effect(
+    ConfectMutationRunner,
+    Effect.gen(function* () {
+      const { runMutation } = yield* ConvexMutationCtx;
+      return makeMutationRunner(runMutation);
+    })
+  );
 
 // ===========================
 // ConfectActionRunner
@@ -116,9 +122,7 @@ export interface ConfectActionRunner {
   ) => Effect.Effect<FunctionReturnType<Action>>;
 }
 
-const makeActionRunner = (
-  runAction: GenericActionCtx<GenericDataModel>["runAction"],
-): ConfectActionRunner => ({
+const makeActionRunner = (runAction: GenericActionCtx<never>["runAction"]): ConfectActionRunner => ({
   [ConfectActionRunnerTypeId]: ConfectActionRunnerTypeId,
   run: <Action extends FunctionReference<"action", "public" | "internal">>(
     action: Action,
@@ -130,10 +134,13 @@ export const ConfectActionRunner = Context.GenericTag<ConfectActionRunner>(
   "@rjdellecese/confect/ConfectActionRunner",
 );
 
-export const layerActionRunner = (
-  runAction: GenericActionCtx<GenericDataModel>["runAction"],
-): Layer.Layer<ConfectActionRunner> =>
-  Layer.succeed(ConfectActionRunner, makeActionRunner(runAction));
+export const layerActionRunner = Layer.effect(
+  ConfectActionRunner,
+  Effect.gen(function* () {
+    const { runAction } = yield* ConvexActionCtx;
+    return makeActionRunner(runAction);
+  })
+);
 
 // ===========================
 // Errors

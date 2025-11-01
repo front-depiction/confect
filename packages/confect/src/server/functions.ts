@@ -20,6 +20,7 @@ import * as Schema from "effect/Schema";
 import { ConfectAuth, layer as layerAuth } from "./auth";
 import {
   layerActionCtx,
+  layerConfectActionCtx,
   layerMutationCtx,
   layerQueryCtx,
 } from "./ctx";
@@ -28,7 +29,7 @@ import {
   MutationDB,
   layerQueryDB,
   layerMutationDB,
-} from "./database";
+ from "./database";
 import {
   ConfectActionRunner,
   ConfectMutationRunner,
@@ -52,6 +53,7 @@ import {
   layerStorageWriter,
 } from "./storage";
 import { ConfectVectorSearch, layer as layerVectorSearch } from "./vector_search";
+import { ConvexActionCtx } from "./convex_ctx";
 
 export const makeConfectFunctions = <
   ConfectSchema extends GenericConfectSchema,
@@ -374,22 +376,10 @@ export const makeConfectFunctions = <
       ctx: GenericActionCtx<any>,
       actualArgs: ConvexValue
     ): Promise<ConvexReturns> => {
-      const layers: Layer.Layer<any> = Layer.mergeAll(
-        layerScheduler(ctx.scheduler),
-        layerAuth(ctx.auth),
-        layerStorageReader(ctx.storage),
-        layerStorageWriter(ctx.storage),
-        layerStorageActionWriter(ctx.storage),
-        layerQueryRunner(ctx.runQuery),
-        layerMutationRunner(ctx.runMutation),
-        layerActionRunner(ctx.runAction),
-        layerVectorSearch(ctx.vectorSearch),
-        layerActionCtx(ctx)
-      );
       return Schema.decode(args)(actualArgs).pipe(
         Effect.orDie,
         Effect.flatMap(handler),
-        Effect.provide(layers),
+        Effect.provide(layerConfectActionCtx.pipe(Layer.provideMerge(layerActionCtx(ctx)))),
         Effect.flatMap(Schema.encodeUnknown(returns)),
         Effect.runPromise
       );

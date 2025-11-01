@@ -20,7 +20,7 @@ import * as Layer from "effect/Layer";
 import { pipe } from "effect";
 import * as Record from "effect/Record";
 import { ConfectAuth, layer as layerAuth } from "./auth";
-import { layerActionCtx } from "./ctx";
+import { layerActionCtx } from "./convex_ctx";
 import {
   ConfectActionRunner,
   ConfectMutationRunner,
@@ -73,15 +73,17 @@ const makeHandler =
     const ApiLive = apiLive.pipe(
       Layer.provide(
         Layer.mergeAll(
-          layerQueryRunner(ctx.runQuery),
-          layerMutationRunner(ctx.runMutation),
-          layerActionRunner(ctx.runAction),
-          layerScheduler(ctx.scheduler),
-          layerAuth(ctx.auth),
-          layerStorageReader(ctx.storage),
-          layerStorageWriter(ctx.storage),
-          layerStorageActionWriter(ctx.storage),
-          layerActionCtx(ctx),
+          // Entry point layer (provides all Convex components)
+          layerActionCtx<any>(ctx),
+          // Confect service layers
+          layerQueryRunner<any>(),
+          layerMutationRunner<any>(),
+          layerActionRunner<any>(),
+          layerScheduler<any>(),
+          layerAuth<any>(),
+          layerStorageReader<any>(),
+          layerStorageWriter<any>(),
+          layerStorageActionWriter<DataModel>(),
         ),
       ),
     );

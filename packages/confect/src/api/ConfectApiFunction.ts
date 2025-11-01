@@ -11,7 +11,7 @@ import {
   ConvexActionCtx,
   ConvexMutationCtx,
   ConvexQueryCtx,
-} from "../server/ctx";
+} from "../server/convex_ctx";
 import { QueryDB, MutationDB } from "../server/database";
 import {
   ConfectActionRunner,

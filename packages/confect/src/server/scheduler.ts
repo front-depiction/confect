@@ -7,6 +7,7 @@
  * - Uses Effect.Duration instead of milliseconds for type safety
  * - Uses Effect.DateTime instead of timestamps for clarity
  * - Returns Effect for composability
+ * - Depends on ConvexScheduler from convex_ctx for raw Convex scheduler access
  */
 
 import type {
@@ -19,6 +20,7 @@ import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
 import * as DateTime from "effect/DateTime";
 import * as Context from "effect/Context";
+import { ConvexScheduler } from "./convex_ctx";
 
 const ConfectSchedulerTypeId = Symbol.for("@rjdellecese/confect/ConfectScheduler");
 type ConfectSchedulerTypeId = typeof ConfectSchedulerTypeId;
@@ -67,7 +69,11 @@ const make = (scheduler: Scheduler): ConfectScheduler => ({
   },
 });
 
+export const layer = Layer.effect(
+  ConfectScheduler,
+  Effect.gen(function* () {
+    const scheduler = yield* ConvexScheduler;
+    return make(scheduler);
+  })
+);
 
-
-export const layer = (scheduler: Scheduler): Layer.Layer<ConfectScheduler> =>
-  Layer.succeed(ConfectScheduler, make(scheduler));
