@@ -25,6 +25,7 @@ import * as Option from "effect/Option";
 import * as ParseResult from "effect/ParseResult";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import { ConvexMutationCtx, ConvexQueryCtx } from "./convex_ctx";
 import type {
   ConfectDocumentFromSchema,
   ConvexDataModel,
@@ -38,7 +39,6 @@ import {
   makeQueryInitializer,
   type ConfectQueryInitializer,
 } from "./query";
-import { ConvexQueryCtx, ConvexMutationCtx } from "./convex_ctx";
 import type {
   ConfectSchemaDefinition,
   DataModelFromConfectSchema,
@@ -57,10 +57,17 @@ export { DocumentDecodeError, GetByIdFailure };
 export interface QueryDB<
   S extends GenericConfectSchema = GenericConfectSchema
 > extends GenericDatabaseReader<DataModelFromConfectSchema<S>> {
-  readonly get: <TN extends TableNamesFromSchema<S>>(
+  /**
+   * Fetch a single document from the database by its {@link GenericId}, providing a table name.
+   *
+   * @param tableName - The name of the table to fetch the document from.
+   * @param id - The {@link GenericId} of the document to fetch from the database.
+   * @returns - An Effect containing the Option of the decoded document, or fails with DocumentDecodeError.
+   */
+  get<TN extends TableNamesFromSchema<S>>(
     tableName: TN,
     id: GenericId<TN>,
-  ) => Effect.Effect<
+  ): Effect.Effect<
     Option.Option<ConfectDocumentFromSchema<S, TN>>,
     DocumentDecodeError
   >;
@@ -84,7 +91,7 @@ export const makeQueryDB = <
   convexDatabaseReader: GenericDatabaseReader<ConvexDataModel<ConfectSchemaDefinition<S>>>,
 ): QueryDB<S> => ({
   // Convex GenericDatabaseReader methods (pass through)
-  query: (tableName) => convexDatabaseReader.query(tableName),
+  query: (tableName) => makeQueryInitializer(convexDatabaseReader.query(tableName), tableName, confectSchemaDefinition.confectSchema[tableName]?.tableSchema),
   normalizeId: (tableName, id) => convexDatabaseReader.normalizeId(tableName, id),
   system: convexDatabaseReader.system,
 

@@ -9,20 +9,30 @@
 
 import type {
   DocumentByInfo,
+  ExpressionOrValue,
+  FilterBuilder,
   GenericTableInfo,
+  IndexNames,
+  IndexRange,
+  IndexRangeBuilder,
+  NamedIndex,
+  NamedSearchIndex,
   OrderedQuery,
   PaginationResult,
   Query,
-  QueryInitializer
+  QueryInitializer,
+  SearchFilter,
+  SearchFilterBuilder,
+  SearchIndexNames,
 } from "convex/server";
 import type { GenericId } from "convex/values";
 
 import {
   identity
 } from "effect";
-import * as ParseResult from "effect/ParseResult";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as ParseResult from "effect/ParseResult";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type {
@@ -64,18 +74,34 @@ export interface ConfectOrderedQuery<TableInfo extends GenericTableInfo> {
     cursor: string | null;
     numItems: number;
   }) => Effect.Effect<PaginationResult<DocumentByInfo<TableInfo>>, DocumentDecodeError>;
+
+  readonly filter: (
+    predicate: (q: FilterBuilder<TableInfo>) => ExpressionOrValue<boolean>
+  ) => ConfectOrderedQuery<TableInfo>;
+
+  readonly unique: () => Effect.Effect<
+    Option.Option<DocumentByInfo<TableInfo>>,
+    DocumentDecodeError
+  >;
+}
+
+/** A query that extends OrderedQuery with the ability to define order. */
+export interface ConfectQuery<TableInfo extends GenericTableInfo> extends ConfectOrderedQuery<TableInfo> {
+  readonly order: (order: "asc" | "desc") => ConfectOrderedQuery<TableInfo>;
 }
 
 /** Entry point for building queries over a Confect table. */
 export interface ConfectQueryInitializer<TableInfo extends GenericTableInfo> {
-  readonly index: (
-    indexName: string,
-    order?: "asc" | "desc",
-  ) => ConfectOrderedQuery<TableInfo>;
+  readonly fullTableScan: () => ConfectQuery<TableInfo>;
 
-  readonly search: (
-    indexName: string,
-    searchFilter: unknown,
+  readonly withIndex: <IndexName extends IndexNames<TableInfo>>(
+    indexName: IndexName,
+    indexRange?: (q: IndexRangeBuilder<DocumentByInfo<TableInfo>, NamedIndex<TableInfo, IndexName>>) => IndexRange
+  ) => ConfectQuery<TableInfo>;
+
+  readonly withSearchIndex: <IndexName extends SearchIndexNames<TableInfo>>(
+    indexName: IndexName,
+    searchFilter: (q: SearchFilterBuilder<DocumentByInfo<TableInfo>, NamedSearchIndex<TableInfo, IndexName>>) => SearchFilter
   ) => ConfectOrderedQuery<TableInfo>;
 }
 
@@ -89,7 +115,7 @@ export const makeOrderedQuery = <
   TN extends TableNamesFromSchema<S>,
   I = never
 >(
-  query: OrderedQuery<TableInfoFromSchema<S, TN>> | Query<TableInfoFromSchema<S, TN>>,
+  query: OrderedQuery<TableInfoFromSchema<S, TN>>,
   tableName: TN,
   tableSchema: DerivedTableSchema<S, TN, I> | undefined,
 ): ConfectOrderedQuery<TableInfoFromSchema<S, TN>> => ({
@@ -138,7 +164,47 @@ export const makeOrderedQuery = <
         ),
       ),
     ),
+
+  filter: (predicate) =>
+    makeOrderedQuery(
+      query.filter(predicate),
+      tableName,
+      tableSchema
+    ),
+
+  unique: () =>
+    Effect.promise(() => query.unique()).pipe(
+      Effect.map(Option.fromNullable),
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.succeed(Option.none()),
+          onSome: (doc) =>
+            decodeDocument(doc, tableName, tableSchema).pipe(
+              Effect.map(Option.some),
+            ),
+        }),
+      ),
+    ),
 });
+
+/** Create a query wrapper from a Convex query. */
+export const makeQuery = <
+  S extends GenericConfectSchema,
+  TN extends TableNamesFromSchema<S>,
+  I = never
+>(
+  query: Query<TableInfoFromSchema<S, TN>>,
+  tableName: TN,
+  tableSchema: DerivedTableSchema<S, TN, I> | undefined,
+): ConfectQuery<TableInfoFromSchema<S, TN>> =>
+  Object.assign(makeOrderedQuery(query, tableName, tableSchema), {
+    order: (order: "asc" | "desc") =>
+      makeOrderedQuery(
+        query.order(order),
+        tableName,
+        tableSchema
+      ),
+  });
 
 /** Create a query initializer wrapper from a Convex query initializer. */
 export const makeQueryInitializer = <
@@ -149,20 +215,33 @@ export const makeQueryInitializer = <
   query: QueryInitializer<TableInfoFromSchema<S, TN>>,
   tableName: TN,
   tableSchema: DerivedTableSchema<S, TN, I> | undefined,
-): Effect.Effect<ConfectQueryInitializer<TableInfoFromSchema<S, TN>>, never, never> =>
+): Effect.Effect<ConfectQueryInitializer<TableInfoFromSchema<S, TN>>> =>
   Effect.succeed({
-    index: (indexName: string, order: "asc" | "desc" = "asc") => {
-      const ordered = query.withIndex(indexName as never).order(order);
-      return makeOrderedQuery(ordered, tableName, tableSchema);
-    },
+    fullTableScan: () =>
+      makeQuery(
+        query.fullTableScan(),
+        tableName,
+        tableSchema
+      ),
 
-    search: (indexName: string, searchFilter: unknown) => {
-      const ordered = query.withSearchIndex(
-        indexName as never,
-        searchFilter as never,
-      );
-      return makeOrderedQuery(ordered, tableName, tableSchema);
-    },
+    withIndex: (indexName, indexRange) =>
+      makeQuery(
+        query.withIndex(indexName, indexRange),
+        tableName,
+        tableSchema
+      ),
+
+    withSearchIndex: (indexName, searchFilter) =>
+      makeOrderedQuery(
+        query.withSearchIndex(indexName, searchFilter),
+        tableName,
+        tableSchema
+      ),
+
+    
+    count: () =>
+      // @ts-expect-error - QueryInitializer count is internal
+      Effect.promise(() => query.count() as Promise<number>),
   });
 
 // ===========================

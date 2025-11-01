@@ -18,18 +18,15 @@ import type {
 } from "convex/server";
 import type { GenericId } from "convex/values";
 import { pipe } from "effect";
-import * as Schema from "effect/Schema";
-import * as Option from "effect/Option";
-import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
-import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import {
+  ConvexStorageActionWriter,
   ConvexStorageReader,
   ConvexStorageWriter,
-  ConvexStorageActionWriter,
 } from "./convex_ctx";
-import type { GenericConfectSchema } from "./schema";
-import type { GenericDataModel } from "convex/server";
 
 // ===========================
 // ConfectStorageReader
@@ -38,14 +35,14 @@ import type { GenericDataModel } from "convex/server";
 const ConfectStorageReaderTypeId = Symbol.for("@rjdellecese/confect/ConfectStorageReader");
 type ConfectStorageReaderTypeId = typeof ConfectStorageReaderTypeId;
 
-export interface ConfectStorageReader {
+export interface ConfectStorageReaderShape {
   readonly [ConfectStorageReaderTypeId]: ConfectStorageReaderTypeId;
   readonly getUrl: (
     storageId: GenericId<"_storage">,
   ) => Effect.Effect<URL, FileNotFoundError>;
 }
 
-const makeStorageReader = (storageReader: StorageReader): ConfectStorageReader => ({
+const makeStorageReader = (storageReader: StorageReader): ConfectStorageReaderShape => ({
   [ConfectStorageReaderTypeId]: ConfectStorageReaderTypeId,
   getUrl: (storageId: GenericId<"_storage">) =>
     Effect.promise(() => storageReader.getUrl(storageId)).pipe(
@@ -58,17 +55,17 @@ const makeStorageReader = (storageReader: StorageReader): ConfectStorageReader =
     ),
 });
 
-export const ConfectStorageReader = Context.GenericTag<ConfectStorageReader>(
-  "@rjdellecese/confect/ConfectStorageReader",
-);
-
-export const layerStorageReader = Layer.effect(
-  ConfectStorageReader,
-  Effect.gen(function* () {
+export class ConfectStorageReader extends Effect.Service<ConfectStorageReader>()("@rjdellecese/confect/ConfectStorageReader", {
+  effect: Effect.gen(function* () {
     const storageReader = yield* ConvexStorageReader;
     return makeStorageReader(storageReader);
-  })
-);
+  }),
+  accessors: true,
+}) {}
+
+// Factory function for providing a specific StorageReader instance
+export const layerStorageReader = (storageReader: StorageReader) =>
+  Layer.succeed(ConfectStorageReader as any, makeStorageReader(storageReader) as any);
 
 // ===========================
 // ConfectStorageWriter
@@ -77,7 +74,7 @@ export const layerStorageReader = Layer.effect(
 const ConfectStorageWriterTypeId = Symbol.for("@rjdellecese/confect/ConfectStorageWriter");
 type ConfectStorageWriterTypeId = typeof ConfectStorageWriterTypeId;
 
-export interface ConfectStorageWriter {
+export interface IConfectStorageWriter {
   readonly [ConfectStorageWriterTypeId]: ConfectStorageWriterTypeId;
   readonly generateUploadUrl: () => Effect.Effect<URL>;
   readonly delete: (
@@ -85,7 +82,7 @@ export interface ConfectStorageWriter {
   ) => Effect.Effect<void, FileNotFoundError>;
 }
 
-const makeStorageWriter = (storageWriter: StorageWriter): ConfectStorageWriter => ({
+const makeStorageWriter = (storageWriter: StorageWriter): IConfectStorageWriter => ({
   [ConfectStorageWriterTypeId]: ConfectStorageWriterTypeId,
   generateUploadUrl: () => Effect.promise(() => storageWriter.generateUploadUrl()).pipe(
     Effect.flatMap(Schema.decode(Schema.URL)),
@@ -97,17 +94,17 @@ const makeStorageWriter = (storageWriter: StorageWriter): ConfectStorageWriter =
   }),
 });
 
-export const ConfectStorageWriter = Context.GenericTag<ConfectStorageWriter>(
-  "@rjdellecese/confect/ConfectStorageWriter",
-);
-
-export const layerStorageWriter = Layer.effect(
-  ConfectStorageWriter,
-  Effect.gen(function* () {
+export class ConfectStorageWriter extends Effect.Service<ConfectStorageWriter>()("@rjdellecese/confect/ConfectStorageWriter", {
+  effect: Effect.gen(function* () {
     const storageWriter = yield* ConvexStorageWriter;
     return makeStorageWriter(storageWriter);
-  })
-);
+  }),
+  accessors: true,
+}) {}
+
+// Factory function for providing a specific StorageWriter instance
+export const layerStorageWriter = (storageWriter: StorageWriter) =>
+  Layer.succeed(ConfectStorageWriter as any, makeStorageWriter(storageWriter) as any);
 
 // ===========================
 // ConfectStorageActionWriter
@@ -116,7 +113,7 @@ export const layerStorageWriter = Layer.effect(
 const ConfectStorageActionWriterTypeId = Symbol.for("@rjdellecese/confect/ConfectStorageActionWriter");
 type ConfectStorageActionWriterTypeId = typeof ConfectStorageActionWriterTypeId;
 
-export interface ConfectStorageActionWriter {
+export interface ConfectStorageActionWriterShape {
   readonly [ConfectStorageActionWriterTypeId]: ConfectStorageActionWriterTypeId;
   readonly get: (
     storageId: GenericId<"_storage">,
@@ -124,12 +121,12 @@ export interface ConfectStorageActionWriter {
   readonly store: (
     blob: Blob,
     options?: { sha256?: string },
-  ) => Effect.Effect<GenericId<"_storage">, never>;
+  ) => Effect.Effect<GenericId<"_storage">>;
 }
 
 const makeStorageActionWriter = (
   storageActionWriter: StorageActionWriter,
-): ConfectStorageActionWriter => ({
+): ConfectStorageActionWriterShape => ({
   [ConfectStorageActionWriterTypeId]: ConfectStorageActionWriterTypeId,
   get: (storageId: GenericId<"_storage">) =>
     Effect.promise(() => storageActionWriter.get(storageId)).pipe(
@@ -139,17 +136,17 @@ const makeStorageActionWriter = (
   store: (blob: Blob, options?: { sha256?: string }) => Effect.promise(() => storageActionWriter.store(blob, options)),
 });
 
-export const ConfectStorageActionWriter = Context.GenericTag<ConfectStorageActionWriter>(
-  "@rjdellecese/confect/ConfectStorageActionWriter",
-);
-
-export const layerStorageActionWriter = Layer.effect(
-  ConfectStorageActionWriter,
-  Effect.gen(function* () {
+export class ConfectStorageActionWriter extends Effect.Service<ConfectStorageActionWriter>()("@rjdellecese/confect/ConfectStorageActionWriter", {
+  effect: Effect.gen(function* () {
     const storageActionWriter = yield* ConvexStorageActionWriter;
     return makeStorageActionWriter(storageActionWriter);
-  })
-);
+  }),
+  accessors: true,
+}) {}
+
+// Factory function for providing a specific StorageActionWriter instance
+export const layerStorageActionWriter = (storageActionWriter: StorageActionWriter) =>
+  Layer.succeed(ConfectStorageActionWriter as any, makeStorageActionWriter(storageActionWriter) as any);
 
 // ===========================
 // Errors

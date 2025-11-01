@@ -18,9 +18,7 @@ import {
   type FunctionReturnType,
   type OptionalRestArgs,
 } from "convex/server";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { ConvexActionRunner, ConvexMutationRunner, ConvexQueryRunner } from "./convex_ctx";
 
@@ -31,7 +29,7 @@ import { ConvexActionRunner, ConvexMutationRunner, ConvexQueryRunner } from "./c
 const ConfectQueryRunnerTypeId = Symbol.for("@rjdellecese/confect/ConfectQueryRunner");
 type ConfectQueryRunnerTypeId = typeof ConfectQueryRunnerTypeId;
 
-export interface ConfectQueryRunner {
+export interface IConfectQueryRunner {
   readonly [ConfectQueryRunnerTypeId]: ConfectQueryRunnerTypeId;
   readonly run: <Query extends FunctionReference<"query", "public" | "internal">>(
     query: Query,
@@ -39,7 +37,7 @@ export interface ConfectQueryRunner {
   ) => Effect.Effect<FunctionReturnType<Query>>;
 }
 
-const makeQueryRunner = (runQuery: GenericQueryCtx<never>["runQuery"]): ConfectQueryRunner => ({
+const makeQueryRunner = (runQuery: GenericQueryCtx<never>["runQuery"]): IConfectQueryRunner => ({
   [ConfectQueryRunnerTypeId]: ConfectQueryRunnerTypeId,
   run: <Query extends FunctionReference<"query", "public" | "internal">>(
     query: Query,
@@ -47,21 +45,13 @@ const makeQueryRunner = (runQuery: GenericQueryCtx<never>["runQuery"]): ConfectQ
   ) => Effect.promise(() => runQuery(query, ...args)),
 });
 
-const _ConfectQueryRunner = Context.GenericTag<ConfectQueryRunner>(
-  "@rjdellecese/confect/ConfectQueryRunner",
-);
-
-const DefaultConfectQueryRunner = Layer.effect(
-  _ConfectQueryRunner,
-  Effect.gen(function* () {
+export class ConfectQueryRunner extends Effect.Service<ConfectQueryRunner>()("@rjdellecese/confect/ConfectQueryRunner", {
+  effect: Effect.gen(function* () {
     const { runQuery } = yield* ConvexQueryRunner();
     return makeQueryRunner(runQuery);
-  })
-);
-
-export const ConfectQueryRunner = Object.assign(_ConfectQueryRunner, {
-  Default: DefaultConfectQueryRunner,
-});
+  }),
+  accessors: true,
+}) {}
 
 // ===========================
 // ConfectMutationRunner
@@ -70,7 +60,7 @@ export const ConfectQueryRunner = Object.assign(_ConfectQueryRunner, {
 const ConfectMutationRunnerTypeId = Symbol.for("@rjdellecese/confect/ConfectMutationRunner");
 type ConfectMutationRunnerTypeId = typeof ConfectMutationRunnerTypeId;
 
-export interface ConfectMutationRunner {
+export interface IConfectMutationRunner {
   readonly [ConfectMutationRunnerTypeId]: ConfectMutationRunnerTypeId;
   readonly run: <Mutation extends FunctionReference<"mutation", "public" | "internal">>(
     mutation: Mutation,
@@ -80,7 +70,7 @@ export interface ConfectMutationRunner {
 
 const makeMutationRunner = (
   runMutation: GenericMutationCtx<never>["runMutation"],
-): ConfectMutationRunner => ({
+): IConfectMutationRunner => ({
   [ConfectMutationRunnerTypeId]: ConfectMutationRunnerTypeId,
   run: <Mutation extends FunctionReference<"mutation", "public" | "internal">>(
     mutation: Mutation,
@@ -96,21 +86,13 @@ const makeMutationRunner = (
     }),
 });
 
-const _ConfectMutationRunner = Context.GenericTag<ConfectMutationRunner>(
-  "@rjdellecese/confect/ConfectMutationRunner",
-);
-
-const DefaultConfectMutationRunner = Layer.effect(
-  _ConfectMutationRunner,
-  Effect.gen(function* () {
+export class ConfectMutationRunner extends Effect.Service<ConfectMutationRunner>()("@rjdellecese/confect/ConfectMutationRunner", {
+  effect: Effect.gen(function* () {
     const { runMutation } = yield* ConvexMutationRunner();
     return makeMutationRunner(runMutation);
-  })
-);
-
-export const ConfectMutationRunner = Object.assign(_ConfectMutationRunner, {
-  Default: DefaultConfectMutationRunner,
-});
+  }),
+  accessors: true,
+}) {}
 
 // ===========================
 // ConfectActionRunner
@@ -119,7 +101,7 @@ export const ConfectMutationRunner = Object.assign(_ConfectMutationRunner, {
 const ConfectActionRunnerTypeId = Symbol.for("@rjdellecese/confect/ConfectActionRunner");
 type ConfectActionRunnerTypeId = typeof ConfectActionRunnerTypeId;
 
-export interface ConfectActionRunner {
+export interface IConfectActionRunner {
   readonly [ConfectActionRunnerTypeId]: ConfectActionRunnerTypeId;
   readonly run: <Action extends FunctionReference<"action", "public" | "internal">>(
     action: Action,
@@ -127,7 +109,7 @@ export interface ConfectActionRunner {
   ) => Effect.Effect<FunctionReturnType<Action>>;
 }
 
-const makeActionRunner = (runAction: GenericActionCtx<never>["runAction"]): ConfectActionRunner => ({
+const makeActionRunner = (runAction: GenericActionCtx<never>["runAction"]): IConfectActionRunner => ({
   [ConfectActionRunnerTypeId]: ConfectActionRunnerTypeId,
   run: <Action extends FunctionReference<"action", "public" | "internal">>(
     action: Action,
@@ -135,21 +117,13 @@ const makeActionRunner = (runAction: GenericActionCtx<never>["runAction"]): Conf
   ) => Effect.promise(() => runAction(action, ...args)),
 });
 
-const _ConfectActionRunner = Context.GenericTag<ConfectActionRunner>(
-  "@rjdellecese/confect/ConfectActionRunner",
-);
-
-const DefaultConfectActionRunner = Layer.effect(
-  _ConfectActionRunner,
-  Effect.gen(function* () {
+export class ConfectActionRunner extends Effect.Service<ConfectActionRunner>()("@rjdellecese/confect/ConfectActionRunner", {
+  effect: Effect.gen(function* () {
     const { runAction } = yield* ConvexActionRunner();
     return makeActionRunner(runAction);
-  })
-);
-
-export const ConfectActionRunner = Object.assign(_ConfectActionRunner, {
-  Default: DefaultConfectActionRunner,
-});
+  }),
+  accessors: true,
+}) {}
 
 // ===========================
 // Errors

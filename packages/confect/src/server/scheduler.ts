@@ -15,17 +15,15 @@ import type {
   SchedulableFunctionReference,
   Scheduler,
 } from "convex/server";
-import * as Layer from "effect/Layer";
-import * as Effect from "effect/Effect";
-import * as Duration from "effect/Duration";
 import * as DateTime from "effect/DateTime";
-import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 import { ConvexScheduler } from "./convex_ctx";
 
 const ConfectSchedulerTypeId = Symbol.for("@rjdellecese/confect/ConfectScheduler");
 type ConfectSchedulerTypeId = typeof ConfectSchedulerTypeId;
 
-export interface ConfectScheduler {
+export interface IConfectScheduler {
   readonly [ConfectSchedulerTypeId]: ConfectSchedulerTypeId;
   readonly runAfter: <FuncRef extends SchedulableFunctionReference>(
     delay: Duration.DurationInput,
@@ -38,11 +36,8 @@ export interface ConfectScheduler {
     ...args: OptionalRestArgs<FuncRef>
   ) => Effect.Effect<void>;
 }
-export const ConfectScheduler = Context.GenericTag<ConfectScheduler>(
-  "@rjdellecese/confect/ConfectScheduler",
-);
 
-const make = (scheduler: Scheduler): ConfectScheduler => ({
+const make = (scheduler: Scheduler): IConfectScheduler => ({
 
   [ConfectSchedulerTypeId]: ConfectSchedulerTypeId,
 
@@ -69,11 +64,10 @@ const make = (scheduler: Scheduler): ConfectScheduler => ({
   },
 });
 
-export const layer = Layer.effect(
-  ConfectScheduler,
-  Effect.gen(function* () {
+export class ConfectScheduler extends Effect.Service<ConfectScheduler>()("@rjdellecese/confect/ConfectScheduler", {
+  effect: Effect.gen(function* () {
     const scheduler = yield* ConvexScheduler;
     return make(scheduler);
-  })
-);
-
+  }),
+  accessors: true,
+}) {}

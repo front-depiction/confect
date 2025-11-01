@@ -18,16 +18,14 @@
  * - ConfectVectorSearch from "./vector_search"
  */
 
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { ConfectAuth } from "./auth";
+import { ConfectAuth, IConfectAuthShape } from "./auth";
 import { MutationDB, QueryDB } from "./database";
-import { ConfectActionRunner, ConfectMutationRunner, ConfectQueryRunner } from "./runners";
-import { ConfectScheduler } from "./scheduler";
+import { ConfectActionRunner, ConfectMutationRunner, ConfectQueryRunner, IConfectActionRunner, IConfectMutationRunner, IConfectQueryRunner } from "./runners";
+import { ConfectScheduler, IConfectScheduler } from "./scheduler";
 import type { GenericConfectSchema } from "./schema";
-import { ConfectStorageReader, ConfectStorageWriter } from "./storage";
-import { ConfectVectorSearch } from "./vector_search";
+import { ConfectStorageReader, ConfectStorageWriter, IConfectStorageWriter } from "./storage";
+import { ConfectVectorSearch, IConfectVectorSearch } from "./vector_search";
 
 // ===========================
 // ConfectQueryCtx
@@ -37,23 +35,15 @@ import { ConfectVectorSearch } from "./vector_search";
  * Query context that aggregates read-only capability services.
  * Provides familiar Convex context shape.
  */
-export interface ConfectQueryCtx<S extends GenericConfectSchema = GenericConfectSchema> {
+interface ConfectQueryCtxShape<S extends GenericConfectSchema = GenericConfectSchema> {
   readonly db: QueryDB<S>;
   readonly auth: ConfectAuth;
   readonly storage: ConfectStorageReader;
   readonly runQuery: ConfectQueryRunner;
 }
 
-const _ConfectQueryCtx = Context.GenericTag<ConfectQueryCtx>(
-  "@rjdellecese/confect/ConfectQueryCtx",
-);
-
-/**
- * Build ConfectQueryCtx from capability services using Layer.effect.
- */
-const DefaultConfectQueryCtx = Layer.effect(
-  _ConfectQueryCtx,
-  Effect.gen(function* () {
+export class ConfectQueryCtx extends Effect.Service<ConfectQueryCtx>()("@rjdellecese/confect/ConfectQueryCtx", {
+  effect: Effect.gen(function* () {
     const db = yield* QueryDB;
     const auth = yield* ConfectAuth;
     const storage = yield* ConfectStorageReader;
@@ -64,11 +54,15 @@ const DefaultConfectQueryCtx = Layer.effect(
       auth,
       storage,
       runQuery,
-    };
+    } satisfies ConfectQueryCtxShape;
   }),
-);
-
-export const ConfectQueryCtx = Object.assign(_ConfectQueryCtx, { Default: DefaultConfectQueryCtx });
+  dependencies: [
+    ConfectAuth.Default,
+    ConfectStorageReader.Default,
+    ConfectQueryRunner.Default,
+  ],
+  accessors: false,
+}) {}
 
 
 
@@ -80,26 +74,18 @@ export const ConfectQueryCtx = Object.assign(_ConfectQueryCtx, { Default: Defaul
  * Mutation context that aggregates read-write capability services.
  * Provides familiar Convex context shape.
  */
-export interface ConfectMutationCtx<S extends GenericConfectSchema> {
+export interface ConfectMutationCtxShape<S extends GenericConfectSchema = GenericConfectSchema> {
   readonly db: MutationDB<S>;
-  readonly auth: ConfectAuth;
-  readonly storage: ConfectStorageWriter;
-  readonly scheduler: ConfectScheduler;
-  readonly runQuery: ConfectQueryRunner;
-  readonly runMutation: ConfectMutationRunner;
+  readonly auth: IConfectAuthShape;
+  readonly storage: IConfectStorageWriter;
+  readonly scheduler: IConfectScheduler;
+  readonly runQuery: IConfectQueryRunner;
+  readonly runMutation: IConfectMutationRunner;
 }
 
-const _ConfectMutationCtx = <S extends GenericConfectSchema>() => Context.GenericTag<ConfectMutationCtx<S>>(
-  "@rjdellecese/confect/ConfectMutationCtx",
-);
-
-/**
- * Build ConfectMutationCtx from capability services using Layer.effect.
- */
-const DefaultConfectMutationCtx = <S extends GenericConfectSchema>() => Layer.effect(
-  _ConfectMutationCtx<S>(),
-  Effect.gen(function* () {
-    const db = yield* MutationDB<S>();
+export class ConfectMutationCtx extends Effect.Service<ConfectMutationCtx>()("@rjdellecese/confect/ConfectMutationCtx", {
+  effect: Effect.gen(function* () {
+    const db = yield* MutationDB();
     const auth = yield* ConfectAuth;
     const storage = yield* ConfectStorageWriter;
     const scheduler = yield* ConfectScheduler;
@@ -113,11 +99,17 @@ const DefaultConfectMutationCtx = <S extends GenericConfectSchema>() => Layer.ef
       scheduler,
       runQuery,
       runMutation,
-    };
+    } satisfies ConfectMutationCtxShape;
   }),
-);
-
-export const ConfectMutationCtx = Object.assign(_ConfectMutationCtx, { Default: DefaultConfectMutationCtx });
+  dependencies: [
+    ConfectAuth.Default,
+    ConfectStorageWriter.Default,
+    ConfectScheduler.Default,
+    ConfectQueryRunner.Default,
+    ConfectMutationRunner.Default,
+  ],
+  accessors: false,
+}) {}
 
 
 // ===========================
@@ -128,26 +120,18 @@ export const ConfectMutationCtx = Object.assign(_ConfectMutationCtx, { Default: 
  * Action context that aggregates all capability services.
  * Provides familiar Convex context shape with access to storage writes, scheduling, and runners.
  */
-export interface ConfectActionCtx<S extends GenericConfectSchema = GenericConfectSchema> {
-  readonly auth: ConfectAuth;
-  readonly storage: ConfectStorageWriter;
-  readonly scheduler: ConfectScheduler;
-  readonly runQuery: ConfectQueryRunner;
-  readonly runMutation: ConfectMutationRunner;
-  readonly runAction: ConfectActionRunner;
-  readonly vectorSearch: ConfectVectorSearch<S>;
+export interface ConfectActionCtxShape<S extends GenericConfectSchema = GenericConfectSchema> {
+  readonly auth: IConfectAuthShape;
+  readonly storage: IConfectAuthShape;
+  readonly scheduler: IConfectScheduler;
+  readonly runQuery: IConfectQueryRunner;
+  readonly runMutation: IConfectMutationRunner;
+  readonly runAction: IConfectActionRunner;
+  readonly vectorSearch: IConfectVectorSearch<S>;
 }
 
-const _ConfectActionCtx = Context.GenericTag<ConfectActionCtx>(
-  "@rjdellecese/confect/ConfectActionCtx",
-);
-
-/**
- * Build ConfectActionCtx from capability services using Layer.effect.
- */
-const DefaultConfectActionCtx = Layer.effect(
-  _ConfectActionCtx,
-  Effect.gen(function* () {
+export class ConfectActionCtx extends Effect.Service<ConfectActionCtx>()("@rjdellecese/confect/ConfectActionCtx", {
+  effect: Effect.gen(function* () {
     const auth = yield* ConfectAuth;
     const storage = yield* ConfectStorageWriter;
     const scheduler = yield* ConfectScheduler;
@@ -166,7 +150,16 @@ const DefaultConfectActionCtx = Layer.effect(
       vectorSearch,
     };
   }),
-);
+  dependencies: [
+    ConfectAuth.Default,
+    ConfectStorageWriter.Default,
+    ConfectScheduler.Default,
+    ConfectQueryRunner.Default,
+    ConfectMutationRunner.Default,
+    ConfectActionRunner.Default,
+    ConfectVectorSearch.Default,
+  ],
+  accessors: false,
+}) {}
 
-export const ConfectActionCtx = Object.assign(_ConfectActionCtx, { Default: DefaultConfectActionCtx.pipe(Layer.provide) });
 

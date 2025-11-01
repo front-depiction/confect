@@ -10,19 +10,17 @@
  * - Depends on ConvexVectorSearch from convex_ctx for raw vector search access
  */
 
-import type { Expand, VectorIndexNames, VectorSearchQuery } from "convex/server";
-import * as Context from "effect/Context";
+import type { Expand, GenericActionCtx, VectorIndexNames, VectorSearchQuery } from "convex/server";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { GenericConfectSchema } from "./schema";
+import { ConvexVectorSearch } from "./convex_ctx";
 import type { TableInfoFromSchema, TableNamesFromSchema } from "./data_model";
-import type { GenericActionCtx } from "convex/server";
-import { ConvexActionCtx, ConvexVectorSearch } from "./convex_ctx";
+import type { GenericConfectSchema } from "./schema";
 
 const ConfectVectorSearchTypeId = Symbol.for("@rjdellecese/confect/ConfectVectorSearch");
 type ConfectVectorSearchTypeId = typeof ConfectVectorSearchTypeId;
 
-export interface ConfectVectorSearch<
+export interface IConfectVectorSearch<
   S extends GenericConfectSchema = GenericConfectSchema,
 > {
   readonly [ConfectVectorSearchTypeId]: ConfectVectorSearchTypeId;
@@ -34,14 +32,13 @@ export interface ConfectVectorSearch<
     indexName: IndexName,
     query: Expand<VectorSearchQuery<TableInfoFromSchema<S, TN>, IndexName>>,
   ) => Effect.Effect<
-    Awaited<ReturnType<GenericActionCtx<never>["vectorSearch"]>>,
-    never
+    Awaited<ReturnType<GenericActionCtx<never>["vectorSearch"]>>
   >;
 }
 
 const make = <S extends GenericConfectSchema>(
   vectorSearch: GenericActionCtx<any>["vectorSearch"],
-): ConfectVectorSearch<S> => ({
+): IConfectVectorSearch<S> => ({
   [ConfectVectorSearchTypeId]: ConfectVectorSearchTypeId,
   search: <
     TN extends TableNamesFromSchema<S>,
@@ -53,14 +50,16 @@ const make = <S extends GenericConfectSchema>(
   ) => Effect.promise(() => vectorSearch(tableName, indexName, query)),
 });
 
-export const ConfectVectorSearch = Context.GenericTag<ConfectVectorSearch>(
-  "@rjdellecese/confect/ConfectVectorSearch",
-);
-
-export const layer = Layer.effect(
-  ConfectVectorSearch,
-  Effect.gen(function* () {
+export class ConfectVectorSearch extends Effect.Service<ConfectVectorSearch>()("@rjdellecese/confect/ConfectVectorSearch", {
+  effect: Effect.gen(function* () {
     const { vectorSearch } = yield* ConvexVectorSearch();
     return make(vectorSearch);
-  })
-);
+  }),
+  accessors: true,
+}) {}
+
+// Factory function for providing a specific vectorSearch instance
+export const layerVectorSearch = (vectorSearch: GenericActionCtx<any>["vectorSearch"]) =>
+  Layer.succeed(ConfectVectorSearch as any, make(vectorSearch) as any);
+
+export const layer = ConfectVectorSearch.Default;
