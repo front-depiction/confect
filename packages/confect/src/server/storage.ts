@@ -60,7 +60,7 @@ export class ConfectStorageReader extends Effect.Service<ConfectStorageReader>()
     return makeStorageReader(storageReader);
   }),
   accessors: true,
-}) {}
+}) { }
 
 // ===========================
 // ConfectStorageWriter
@@ -94,8 +94,7 @@ export class ConfectStorageWriter extends Effect.Service<ConfectStorageWriter>()
     const storageWriter = yield* ConvexStorageWriter;
     return makeStorageWriter(storageWriter);
   }),
-  accessors: true,
-}) {}
+}) { }
 
 // ===========================
 // ConfectStorageActionWriter
@@ -133,7 +132,7 @@ export class ConfectStorageActionWriter extends Effect.Service<ConfectStorageAct
     return makeStorageActionWriter(storageActionWriter);
   }),
   accessors: true,
-}) {}
+}) { }
 
 // ===========================
 // Errors

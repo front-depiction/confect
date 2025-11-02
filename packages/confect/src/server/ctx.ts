@@ -27,7 +27,7 @@ import type { ConfectSchemaDefinition, DataModelFromConfectSchema, GenericConfec
 import { ConfectStorageReader, ConfectStorageWriter, IConfectStorageWriter } from "./storage";
 import { ConfectVectorSearch, IConfectVectorSearch } from "./vector_search";
 import * as Layer from "effect/Layer";
-import { Auth, GenericQueryCtx, Scheduler, StorageReader, StorageWriter } from "convex/server";
+import { Auth, GenericMutationCtx, GenericQueryCtx, Scheduler, StorageReader, StorageWriter } from "convex/server";
 
 // ===========================
 // ConfectQueryCtx
@@ -115,14 +115,13 @@ export class ConfectMutationCtx extends Effect.Service<ConfectMutationCtx>()("@r
     ConfectQueryRunner.Default,
     ConfectMutationRunner.Default,
   ],
-  accessors: false,
 }) {
   static TypedDefault<S extends GenericConfectSchema>() {
     return this.Default as Layer.Layer<
       ConfectMutationCtx,
       never,
       | ConfectSchemaDefinition<S>
-      | GenericQueryCtx<DataModelFromConfectSchema<S>>
+      | GenericMutationCtx<DataModelFromConfectSchema<S>>
       | Auth
       | StorageReader
       | StorageWriter

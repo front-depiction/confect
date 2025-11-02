@@ -15,6 +15,7 @@
 import type {
   GenericDatabaseReader,
   GenericDatabaseWriter,
+  GenericMutationCtx,
   GenericQueryCtx,
   SystemDataModel,
   WithOptionalSystemFields,
@@ -331,10 +332,9 @@ export class MutationDB extends Effect.Service<MutationDB>()("@rjdellecese/confe
     const schemaDefinition = yield* ConfectSchemaDefinition();
     return makeMutationDB(schemaDefinition, ctx.db);
   }),
-  dependencies: [QueryDB.Default],
 }) {
   static TypedDefault<S extends GenericConfectSchema>() {
-    return this.Default as Layer.Layer<MutationDB, never, ReturnType<typeof ConvexMutationCtx<S>> | ConfectSchemaDefinition<S>>
+    return this.Default as Layer.Layer<MutationDB, never, GenericMutationCtx<DataModelFromConfectSchema<S>> | ConfectSchemaDefinition<S>>
   }
 }
 // ===========================
