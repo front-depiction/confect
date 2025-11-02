@@ -44,7 +44,8 @@ export const layerMutationCtx = <S extends GenericConfectSchema>(
 ) => Layer.succeed(ConvexMutationCtx<S>(), ctx).pipe(
   Layer.merge(layerQueryCtx(ctx)),
   Layer.merge(Layer.succeed(ConvexScheduler, ctx.scheduler)),
-  Layer.merge(Layer.succeed(ConvexStorageWriter, ctx.storage))
+  Layer.merge(Layer.succeed(ConvexStorageWriter, ctx.storage)),
+  Layer.merge(Layer.succeed(ConvexMutationRunner<S>(), ctx))
 )
 /**
  * ConvexActionCtx - Entry point for action contexts
@@ -60,8 +61,13 @@ export const layerActionCtx = <S extends GenericConfectSchema>(
 ) => Layer.succeed(ConvexActionCtx<S>(), ctx).pipe(
   Layer.merge(Layer.succeed(ConvexScheduler, ctx.scheduler)),
   Layer.merge(Layer.succeed(ConvexAuth, ctx.auth)),
+  Layer.merge(Layer.succeed(ConvexStorageReader, ctx.storage)),
+  Layer.merge(Layer.succeed(ConvexStorageWriter, ctx.storage)),
   Layer.merge(Layer.succeed(ConvexStorageActionWriter, ctx.storage)),
-  Layer.merge(Layer.succeed(ConvexVectorSearch<S>(), ctx))
+  Layer.merge(Layer.succeed(ConvexVectorSearch<S>(), ctx)),
+  Layer.merge(Layer.succeed(ConvexQueryRunner<S>(), ctx)),
+  Layer.merge(Layer.succeed(ConvexMutationRunner<S>(), ctx)),
+  Layer.merge(Layer.succeed(ConvexActionRunner<S>(), ctx))
 )
 
 export const ConvexScheduler = Context.GenericTag<Scheduler>(
