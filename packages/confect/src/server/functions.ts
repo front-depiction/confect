@@ -1,14 +1,14 @@
 import {
   actionGeneric,
-  type DefaultFunctionArgs,
-  type GenericActionCtx,
-  type GenericMutationCtx,
-  type GenericQueryCtx,
   internalActionGeneric,
   internalMutationGeneric,
   internalQueryGeneric,
   mutationGeneric,
   queryGeneric,
+  type DefaultFunctionArgs,
+  type GenericActionCtx,
+  type GenericMutationCtx,
+  type GenericQueryCtx,
   type RegisteredAction,
   type RegisteredMutation,
   type RegisteredQuery,
@@ -17,22 +17,21 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import { ConfectAuth, layer as layerAuth } from "./auth";
+import { ConfectAuth } from "./auth";
 
+import { layerActionCtx } from "./convex_ctx";
 import {
-  QueryDB,
   MutationDB,
-  layerQueryDB,
+  QueryDB,
   layerMutationDB,
+  layerQueryDB,
 } from "./database";
 import {
   ConfectActionRunner,
   ConfectMutationRunner,
   ConfectQueryRunner,
-  layerMutationRunner,
-  layerQueryRunner,
 } from "./runners";
-import { ConfectScheduler, layer as layerScheduler } from "./scheduler";
+import { ConfectScheduler } from "./scheduler";
 import type {
   ConfectSchemaDefinition,
   GenericConfectSchema,
@@ -46,8 +45,6 @@ import {
   layerStorageWriter,
 } from "./storage";
 import { ConfectVectorSearch } from "./vector_search";
-import { layerConfectActionCtx } from "./ctx";
-import { layerActionCtx } from "./convex_ctx";
 
 export const makeConfectFunctions = <
   ConfectSchema extends GenericConfectSchema,
@@ -139,12 +136,12 @@ export const makeConfectFunctions = <
       ctx: GenericQueryCtx<any>,
       actualArgs: ConvexArgs
     ): Promise<ConvexReturns> => {
-      const layers: Layer.Layer<any> = Layer.mergeAll(
-        layerQueryDB<ConfectSchema>(confectSchemaDefinition, ctx.db),
-        layerAuth(ctx.auth),
-        layerStorageReader(ctx.storage),
-        layerQueryRunner(ctx.runQuery),
-        layerQueryCtx(ctx)
+      const layers = Layer.mergeAll(
+        layerQueryDB<ConfectSchema>(),
+        ConfectAuth.Default,
+        ConfectStorageReader.Default,
+        ConfectQueryRunner.TypedDefault<ConfectSchema>(),
+        ConfectStorageReader.Default
       );
       return Schema.decode(args)(actualArgs).pipe(
         Effect.orDie,

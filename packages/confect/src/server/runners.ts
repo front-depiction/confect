@@ -19,8 +19,10 @@ import {
   type OptionalRestArgs,
 } from "convex/server";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { ConvexActionRunner, ConvexMutationRunner, ConvexQueryRunner } from "./convex_ctx";
+import { GenericConfectSchema } from "./schema";
 
 // ===========================
 // ConfectQueryRunner
@@ -51,7 +53,13 @@ export class ConfectQueryRunner extends Effect.Service<ConfectQueryRunner>()("@r
     return makeQueryRunner(runQuery);
   }),
   accessors: true,
-}) {}
+}) {
+  static TypedDefault<S extends GenericConfectSchema>() {
+    return this.Default as Layer.Layer<ConfectQueryRunner, never, ConvexQueryRunner<S>>
+  }
+}
+
+
 
 // ===========================
 // ConfectMutationRunner

@@ -63,10 +63,6 @@ export class ConfectStorageReader extends Effect.Service<ConfectStorageReader>()
   accessors: true,
 }) {}
 
-// Factory function for providing a specific StorageReader instance
-export const layerStorageReader = (storageReader: StorageReader) =>
-  Layer.succeed(ConfectStorageReader as any, makeStorageReader(storageReader) as any);
-
 // ===========================
 // ConfectStorageWriter
 // ===========================

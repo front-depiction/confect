@@ -20,7 +20,7 @@
 
 import * as Effect from "effect/Effect";
 import { ConfectAuth, IConfectAuthShape } from "./auth";
-import { MutationDB, QueryDB } from "./database";
+import { IMutationDB, IQueryDB, MutationDB, QueryDB } from "./database";
 import { ConfectActionRunner, ConfectMutationRunner, ConfectQueryRunner, IConfectActionRunner, IConfectMutationRunner, IConfectQueryRunner } from "./runners";
 import { ConfectScheduler, IConfectScheduler } from "./scheduler";
 import type { GenericConfectSchema } from "./schema";
@@ -36,7 +36,7 @@ import { ConfectVectorSearch, IConfectVectorSearch } from "./vector_search";
  * Provides familiar Convex context shape.
  */
 interface ConfectQueryCtxShape<S extends GenericConfectSchema = GenericConfectSchema> {
-  readonly db: QueryDB<S>;
+  readonly db: IQueryDB<S>;
   readonly auth: ConfectAuth;
   readonly storage: ConfectStorageReader;
   readonly runQuery: ConfectQueryRunner;
@@ -44,7 +44,7 @@ interface ConfectQueryCtxShape<S extends GenericConfectSchema = GenericConfectSc
 
 export class ConfectQueryCtx extends Effect.Service<ConfectQueryCtx>()("@rjdellecese/confect/ConfectQueryCtx", {
   effect: Effect.gen(function* () {
-    const db = yield* QueryDB;
+    const db = yield* QueryDB();
     const auth = yield* ConfectAuth;
     const storage = yield* ConfectStorageReader;
     const runQuery = yield* ConfectQueryRunner;
@@ -75,7 +75,7 @@ export class ConfectQueryCtx extends Effect.Service<ConfectQueryCtx>()("@rjdelle
  * Provides familiar Convex context shape.
  */
 export interface ConfectMutationCtxShape<S extends GenericConfectSchema = GenericConfectSchema> {
-  readonly db: MutationDB<S>;
+  readonly db: IMutationDB<S>;
   readonly auth: IConfectAuthShape;
   readonly storage: IConfectStorageWriter;
   readonly scheduler: IConfectScheduler;

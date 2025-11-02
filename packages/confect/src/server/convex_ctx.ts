@@ -6,7 +6,7 @@ import type {
   Scheduler,
   StorageActionWriter,
   StorageReader,
-  StorageWriter,
+  StorageWriter
 } from "convex/server";
 import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
@@ -17,13 +17,13 @@ import type { DataModelFromConfectSchema, GenericConfectSchema } from "./schema"
  *
  * Accepts raw GenericQueryCtx from Convex and provides it to component layers.
  */
-export const ConvexQueryCtx = Context.GenericTag<GenericQueryCtx<any>>(
+export const ConvexQueryCtx = <S extends GenericConfectSchema>() => Context.GenericTag<GenericQueryCtx<DataModelFromConfectSchema<S>>>(
   "@rjdellecese/confect/ConvexQueryCtx"
 );
 
 export const layerQueryCtx = <S extends GenericConfectSchema>(
   ctx: GenericQueryCtx<DataModelFromConfectSchema<S>>
-) => Layer.succeed(ConvexQueryCtx, ctx).pipe(
+) => Layer.succeed(ConvexQueryCtx<S>(), ctx).pipe(
   Layer.merge(Layer.succeed(ConvexAuth, ctx.auth)),
   Layer.merge(Layer.succeed(ConvexStorageReader, ctx.storage))
 )
@@ -34,13 +34,13 @@ export const layerQueryCtx = <S extends GenericConfectSchema>(
  * Accepts raw GenericMutationCtx from Convex and provides it to component layers.
  * Also provides ConvexQueryCtx since mutation contexts extend query contexts.
  */
-export const ConvexMutationCtx = Context.GenericTag<GenericMutationCtx<any>>(
+export const ConvexMutationCtx = <S extends GenericConfectSchema>() => Context.GenericTag<GenericMutationCtx<DataModelFromConfectSchema<S>>>(
   "@rjdellecese/confect/ConvexMutationCtx"
 );
 
 export const layerMutationCtx = <S extends GenericConfectSchema>(
   ctx: GenericMutationCtx<DataModelFromConfectSchema<S>>
-) => Layer.succeed(ConvexMutationCtx, ctx).pipe(
+) => Layer.succeed(ConvexMutationCtx<S>(), ctx).pipe(
   Layer.merge(layerQueryCtx(ctx)),
   Layer.merge(Layer.succeed(ConvexScheduler, ctx.scheduler)),
   Layer.merge(Layer.succeed(ConvexStorageWriter, ctx.storage))
@@ -50,14 +50,13 @@ export const layerMutationCtx = <S extends GenericConfectSchema>(
  *
  * Accepts raw GenericActionCtx from Convex and provides it to component layers.
  */
-export const ConvexActionCtx = Context.GenericTag<GenericActionCtx<any>>(
+export const ConvexActionCtx = <S extends GenericConfectSchema>() => Context.GenericTag<GenericActionCtx<DataModelFromConfectSchema<S>>>(
   "@rjdellecese/confect/ConvexActionCtx"
 );
 
-export const layerActionCtx = <S extends GenericConfectSchema, DM extends GenericActionCtx<DataModelFromConfectSchema<S>>>(
-  ctx: DM
-) => Layer.succeed(ConvexActionCtx, ctx).pipe(
-
+export const layerActionCtx = <S extends GenericConfectSchema>(
+  ctx: GenericActionCtx<DataModelFromConfectSchema<S>>
+) => Layer.succeed(ConvexActionCtx<S>(), ctx).pipe(
   Layer.merge(Layer.succeed(ConvexScheduler, ctx.scheduler)),
   Layer.merge(Layer.succeed(ConvexAuth, ctx.auth)),
   Layer.merge(Layer.succeed(ConvexStorageActionWriter, ctx.storage)),

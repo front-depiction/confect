@@ -11,7 +11,6 @@
  */
 import type { Auth, UserIdentity } from "convex/server";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { ConvexAuth } from "./convex_ctx";
 
@@ -38,9 +37,3 @@ export class ConfectAuth extends Effect.Service<ConfectAuth>()("@rjdellecese/con
   accessors: true,
 }) {}
 
-// Factory function for providing a specific Auth instance
-// Uses the service as a tag to create a layer with a specific implementation
-export const layerAuth = (auth: Auth) =>
-  Layer.succeed(ConfectAuth as any, make(auth) as any);
-
-export const layer = ConfectAuth.Default;
