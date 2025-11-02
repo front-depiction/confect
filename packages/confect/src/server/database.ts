@@ -15,6 +15,7 @@
 import type {
   GenericDatabaseReader,
   GenericDatabaseWriter,
+  GenericQueryCtx,
   SystemDataModel,
   WithOptionalSystemFields,
   WithoutSystemFields,
@@ -41,7 +42,7 @@ import {
   makeQueryInitializer,
   type ConfectQueryInitializer,
 } from "./query";
-import type {
+import {
   ConfectSchemaDefinition,
   DataModelFromConfectSchema,
   GenericConfectSchema,
@@ -154,7 +155,7 @@ const makeQueryDB = <S extends GenericConfectSchema>(
       Effect.map(Option.fromNullable),
       Effect.flatMap((maybeDoc) =>
         Option.match(maybeSchema, {
-          onNone: () => Effect.succeed(maybeDoc as Option.Option<ConfectDocumentFromSchema<S, typeof tableName>>),
+          onNone: () => Effect.succeed(maybeDoc),
           onSome: (schema) =>
             Option.match(maybeDoc, {
               onNone: () => Effect.succeed(Option.none()),
@@ -182,18 +183,17 @@ const makeQueryDB = <S extends GenericConfectSchema>(
   },
 });
 
-export const QueryDB = <S extends GenericConfectSchema = GenericConfectSchema>() =>
-  Context.GenericTag<IQueryDB<S>>("@rjdellecese/confect/QueryDB");
-
-export const layerQueryDB = <S extends GenericConfectSchema>() =>
-  Layer.effect(
-    QueryDB<S>(),
-    Effect.gen(function* () {
-      const ctx = yield* ConvexQueryCtx<S>();
-      const schemaDefinition = yield* ConfectSchemaDefinitionTag<S>();
-      return makeQueryDB(schemaDefinition, ctx.db);
-    }),
-  );
+export class QueryDB extends Effect.Service<QueryDB>()("@rjdellecese/confect/QueryDB", {
+  effect: Effect.gen(function* () {
+    const ctx = yield* ConvexQueryCtx();
+    const schemaDefinition = yield* ConfectSchemaDefinition();
+    return makeQueryDB(schemaDefinition, ctx.db);
+  }),
+}) {
+  static TypedDefault<S extends GenericConfectSchema>() {
+    return this.Default as Layer.Layer<QueryDB, never, GenericQueryCtx<DataModelFromConfectSchema<S>> | ConfectSchemaDefinition<S>>
+  }
+}
 
 // ===========================
 // MutationDB - Read and write database operations
@@ -326,32 +326,18 @@ const makeMutationDB = <S extends GenericConfectSchema>(
   };
 };
 
-export const MutationDB = <S extends GenericConfectSchema = GenericConfectSchema>() =>
-  Context.GenericTag<IMutationDB<S>>("@rjdellecese/confect/MutationDB");
-
-export const layerMutationDB = <S extends GenericConfectSchema>() =>
-  Layer.effect(
-    MutationDB<S>(),
-    Effect.gen(function* () {
-      const ctx = yield* ConvexMutationCtx<S>();
-      const schemaDefinition = yield* ConfectSchemaDefinitionTag<S>();
-      return makeMutationDB(schemaDefinition, ctx.db);
-    }),
-  ).pipe(Layer.provideMerge(layerQueryDB<S>()));
-
-// ===========================
-// Schema Definition Tag (for providing schema via Context)
-// ===========================
-
-export const ConfectSchemaDefinitionTag = <S extends GenericConfectSchema>() =>
-  Context.GenericTag<ConfectSchemaDefinition<S>>(
-    "@rjdellecese/confect/ConfectSchemaDefinition",
-  );
-
-export const layerConfectSchemaDefinition = <S extends GenericConfectSchema>(
-  schemaDefinition: ConfectSchemaDefinition<S>,
-) => Layer.succeed(ConfectSchemaDefinitionTag<S>(), schemaDefinition);
-
+export class MutationDB extends Effect.Service<MutationDB>()("@rjdellecese/confect/MutationDB", {
+  effect: Effect.gen(function* () {
+    const ctx = yield* ConvexMutationCtx();
+    const schemaDefinition = yield* ConfectSchemaDefinition();
+    return makeMutationDB(schemaDefinition, ctx.db);
+  }),
+  dependencies: [QueryDB.Default],
+}) {
+  static TypedDefault<S extends GenericConfectSchema>() {
+    return this.Default as Layer.Layer<MutationDB, never, ReturnType<typeof ConvexMutationCtx<S>> | ConfectSchemaDefinition<S>>
+  }
+}
 // ===========================
 // Encoding Helper
 // ===========================

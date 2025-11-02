@@ -19,40 +19,33 @@ import * as Schema from "effect/Schema";
 
 import { ConfectAuth } from "./auth";
 
-import { layerActionCtx } from "./convex_ctx";
-import {
-  MutationDB,
-  QueryDB,
-  layerMutationDB,
-  layerQueryDB,
-} from "./database";
+import { layerActionCtx, layerMutationCtx, layerQueryCtx } from "./convex_ctx";
+import { MutationDB, QueryDB } from "./database";
 import {
   ConfectActionRunner,
   ConfectMutationRunner,
   ConfectQueryRunner,
 } from "./runners";
 import { ConfectScheduler } from "./scheduler";
-import type {
-  ConfectSchemaDefinition,
-  GenericConfectSchema,
+import {
+  layerConfectSchemaDefinition,
+  type ConfectSchemaDefinition,
+  type GenericConfectSchema,
 } from "./schema";
 import { compileArgsSchema, compileReturnsSchema } from "./schema_to_validator";
 import {
   ConfectStorageActionWriter,
   ConfectStorageReader,
   ConfectStorageWriter,
-  layerStorageReader,
-  layerStorageWriter,
 } from "./storage";
 import { ConfectVectorSearch } from "./vector_search";
+import { ConfectQueryCtx } from "./ctx";
 
 export const makeConfectFunctions = <
   ConfectSchema extends GenericConfectSchema,
 >(
   confectSchemaDefinition: ConfectSchemaDefinition<ConfectSchema>
 ) => {
-  type QueryDBTag = ReturnType<typeof QueryDB<ConfectSchema>>;
-  type MutationDBTag = ReturnType<typeof MutationDB<ConfectSchema>>;
 
   const confectQuery = <
     ConvexArgs extends DefaultFunctionArgs,
@@ -72,7 +65,7 @@ export const makeConfectFunctions = <
     ) => Effect.Effect<
       ConfectReturns,
       E,
-      | QueryDBTag
+      | QueryDB
       | typeof ConfectAuth
       | typeof ConfectStorageReader
       | typeof ConfectQueryRunner
@@ -124,10 +117,11 @@ export const makeConfectFunctions = <
     ) => Effect.Effect<
       ConfectReturns,
       E,
-      | QueryDBTag
-      | typeof ConfectAuth
-      | typeof ConfectStorageReader
-      | typeof ConfectQueryRunner
+      | ConfectQueryCtx
+      | QueryDB
+      | ConfectAuth
+      | ConfectStorageReader
+      | ConfectQueryRunner
     >;
   }) => ({
     args: compileArgsSchema(args),
@@ -136,13 +130,18 @@ export const makeConfectFunctions = <
       ctx: GenericQueryCtx<any>,
       actualArgs: ConvexArgs
     ): Promise<ConvexReturns> => {
+
       const layers = Layer.mergeAll(
-        layerQueryDB<ConfectSchema>(),
+        ConfectQueryCtx.TypedDefault<ConfectSchema>(),
+        QueryDB.TypedDefault<ConfectSchema>(),
+        ConfectQueryRunner.TypedDefault<ConfectSchema>(),
         ConfectAuth.Default,
         ConfectStorageReader.Default,
-        ConfectQueryRunner.TypedDefault<ConfectSchema>(),
-        ConfectStorageReader.Default
+      ).pipe(
+        Layer.provideMerge(layerQueryCtx(ctx)),
+        Layer.provideMerge(layerConfectSchemaDefinition(confectSchemaDefinition))
       );
+
       return Schema.decode(args)(actualArgs).pipe(
         Effect.orDie,
         Effect.flatMap(handler),
@@ -249,21 +248,26 @@ export const makeConfectFunctions = <
       ctx: GenericMutationCtx<any>,
       actualArgs: ConvexArgs
     ): Promise<ConvexReturns> => {
-      const layers: Layer.Layer<any> = Layer.mergeAll(
-        layerQueryDB<ConfectSchema>(confectSchemaDefinition, ctx.db),
-        layerMutationDB<ConfectSchema>(confectSchemaDefinition, ctx.db),
-        layerAuth(ctx.auth),
-        layerScheduler(ctx.scheduler),
-        layerStorageReader(ctx.storage),
-        layerStorageWriter(ctx.storage),
-        layerQueryRunner(ctx.runQuery),
-        layerMutationRunner(ctx.runMutation),
-        layerMutationCtx(ctx)
+      const baseLayers = Layer.mergeAll(
+        layerMutationCtx(ctx),
+        confectSchemaDefin(confectSchemaDefinition)
       );
+      const serviceLayers = Layer.mergeAll(
+        QueryDB.TypedDefault<ConfectSchema>(),
+        MutationDB.TypedDefault<ConfectSchema>(),
+        ConfectAuth.Default,
+        ConfectScheduler.Default,
+        ConfectStorageReader.Default,
+        ConfectStorageWriter.Default,
+        ConfectQueryRunner.TypedDefault<ConfectSchema>(),
+        ConfectMutationRunner.Default
+      );
+      const allLayers = Layer.provide(serviceLayers, baseLayers);
+
       return Schema.decode(args)(actualArgs).pipe(
         Effect.orDie,
         Effect.flatMap(handler),
-        Effect.provide(layers),
+        Effect.provide(allLayers),
         Effect.flatMap(Schema.encodeUnknown(returns)),
         Effect.runPromise
       );
@@ -367,16 +371,24 @@ export const makeConfectFunctions = <
       ctx: GenericActionCtx<any>,
       actualArgs: ConvexValue
     ): Promise<ConvexReturns> => {
+      const baseLayers = layerActionCtx(ctx);
+      const serviceLayers = Layer.mergeAll(
+        ConfectAuth.Default,
+        ConfectScheduler.Default,
+        ConfectStorageReader.Default,
+        ConfectStorageWriter.Default,
+        ConfectStorageActionWriter.Default,
+        ConfectQueryRunner.TypedDefault<ConfectSchema>(),
+        ConfectMutationRunner.Default,
+        ConfectActionRunner.Default,
+        ConfectVectorSearch.Default
+      );
+      const allLayers = Layer.provide(serviceLayers, baseLayers);
 
-      const layers = Layer.mergeAll(
-        ConfectAuth,
-        ConfectScheduler,
-      )
-      const layer = Layer.provideMerge(layerConfectActionCtx, layerActionCtx(ctx))
       return Schema.decode(args)(actualArgs).pipe(
         Effect.orDie,
         Effect.flatMap(handler),
-        Effect.provide(layer),
+        Effect.provide(allLayers),
         Effect.flatMap(Schema.encodeUnknown(returns)),
         Effect.runPromise
       );

@@ -52,7 +52,6 @@ export class ConfectQueryRunner extends Effect.Service<ConfectQueryRunner>()("@r
     const { runQuery } = yield* ConvexQueryRunner();
     return makeQueryRunner(runQuery);
   }),
-  accessors: true,
 }) {
   static TypedDefault<S extends GenericConfectSchema>() {
     return this.Default as Layer.Layer<ConfectQueryRunner, never, ConvexQueryRunner<S>>
@@ -100,7 +99,7 @@ export class ConfectMutationRunner extends Effect.Service<ConfectMutationRunner>
     return makeMutationRunner(runMutation);
   }),
   accessors: true,
-}) {}
+}) { }
 
 // ===========================
 // ConfectActionRunner
@@ -131,7 +130,7 @@ export class ConfectActionRunner extends Effect.Service<ConfectActionRunner>()("
     return makeActionRunner(runAction);
   }),
   accessors: true,
-}) {}
+}) { }
 
 // ===========================
 // Errors

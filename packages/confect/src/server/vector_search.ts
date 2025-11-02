@@ -12,7 +12,6 @@
 
 import type { Expand, GenericActionCtx, VectorIndexNames, VectorSearchQuery } from "convex/server";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { ConvexVectorSearch } from "./convex_ctx";
 import type { TableInfoFromSchema, TableNamesFromSchema } from "./data_model";
 import type { GenericConfectSchema } from "./schema";
@@ -57,9 +56,3 @@ export class ConfectVectorSearch extends Effect.Service<ConfectVectorSearch>()("
   }),
   accessors: true,
 }) {}
-
-// Factory function for providing a specific vectorSearch instance
-export const layerVectorSearch = (vectorSearch: GenericActionCtx<any>["vectorSearch"]) =>
-  Layer.succeed(ConfectVectorSearch as any, make(vectorSearch) as any);
-
-export const layer = ConfectVectorSearch.Default;

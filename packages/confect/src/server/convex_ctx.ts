@@ -25,7 +25,8 @@ export const layerQueryCtx = <S extends GenericConfectSchema>(
   ctx: GenericQueryCtx<DataModelFromConfectSchema<S>>
 ) => Layer.succeed(ConvexQueryCtx<S>(), ctx).pipe(
   Layer.merge(Layer.succeed(ConvexAuth, ctx.auth)),
-  Layer.merge(Layer.succeed(ConvexStorageReader, ctx.storage))
+  Layer.merge(Layer.succeed(ConvexStorageReader, ctx.storage)),
+  Layer.merge(Layer.succeed(ConvexQueryRunner<S>(), ctx))
 )
 
 /**

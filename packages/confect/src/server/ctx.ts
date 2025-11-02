@@ -23,9 +23,11 @@ import { ConfectAuth, IConfectAuthShape } from "./auth";
 import { IMutationDB, IQueryDB, MutationDB, QueryDB } from "./database";
 import { ConfectActionRunner, ConfectMutationRunner, ConfectQueryRunner, IConfectActionRunner, IConfectMutationRunner, IConfectQueryRunner } from "./runners";
 import { ConfectScheduler, IConfectScheduler } from "./scheduler";
-import type { GenericConfectSchema } from "./schema";
+import type { ConfectSchemaDefinition, DataModelFromConfectSchema, GenericConfectSchema } from "./schema";
 import { ConfectStorageReader, ConfectStorageWriter, IConfectStorageWriter } from "./storage";
 import { ConfectVectorSearch, IConfectVectorSearch } from "./vector_search";
+import * as Layer from "effect/Layer";
+import { Auth, GenericQueryCtx, StorageReader } from "convex/server";
 
 // ===========================
 // ConfectQueryCtx
@@ -44,7 +46,7 @@ interface ConfectQueryCtxShape<S extends GenericConfectSchema = GenericConfectSc
 
 export class ConfectQueryCtx extends Effect.Service<ConfectQueryCtx>()("@rjdellecese/confect/ConfectQueryCtx", {
   effect: Effect.gen(function* () {
-    const db = yield* QueryDB();
+    const db = yield* QueryDB;
     const auth = yield* ConfectAuth;
     const storage = yield* ConfectStorageReader;
     const runQuery = yield* ConfectQueryRunner;
@@ -57,12 +59,16 @@ export class ConfectQueryCtx extends Effect.Service<ConfectQueryCtx>()("@rjdelle
     } satisfies ConfectQueryCtxShape;
   }),
   dependencies: [
+    QueryDB.Default,
     ConfectAuth.Default,
     ConfectStorageReader.Default,
     ConfectQueryRunner.Default,
   ],
-  accessors: false,
-}) {}
+}) {
+  static TypedDefault<S extends GenericConfectSchema>() {
+    return this.Default as Layer.Layer<ConfectQueryCtx, never, ConfectSchemaDefinition<S> | GenericQueryCtx<DataModelFromConfectSchema<S>> | Auth | StorageReader>
+  }
+}
 
 
 
@@ -85,7 +91,7 @@ export interface ConfectMutationCtxShape<S extends GenericConfectSchema = Generi
 
 export class ConfectMutationCtx extends Effect.Service<ConfectMutationCtx>()("@rjdellecese/confect/ConfectMutationCtx", {
   effect: Effect.gen(function* () {
-    const db = yield* MutationDB();
+    const db = yield* MutationDB;
     const auth = yield* ConfectAuth;
     const storage = yield* ConfectStorageWriter;
     const scheduler = yield* ConfectScheduler;
@@ -102,6 +108,7 @@ export class ConfectMutationCtx extends Effect.Service<ConfectMutationCtx>()("@r
     } satisfies ConfectMutationCtxShape;
   }),
   dependencies: [
+    MutationDB.Default,
     ConfectAuth.Default,
     ConfectStorageWriter.Default,
     ConfectScheduler.Default,
@@ -109,7 +116,7 @@ export class ConfectMutationCtx extends Effect.Service<ConfectMutationCtx>()("@r
     ConfectMutationRunner.Default,
   ],
   accessors: false,
-}) {}
+}) { }
 
 
 // ===========================
@@ -160,6 +167,6 @@ export class ConfectActionCtx extends Effect.Service<ConfectActionCtx>()("@rjdel
     ConfectVectorSearch.Default,
   ],
   accessors: false,
-}) {}
+}) { }
 
 

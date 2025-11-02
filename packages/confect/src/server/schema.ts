@@ -30,6 +30,8 @@ import {
   type ExtendWithSystemFields,
   extendWithSystemFields,
 } from "./schemas/SystemFields";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
 
 export const confectSystemTableSchemas = {
   _scheduled_functions: Schema.Struct({
@@ -108,9 +110,19 @@ export interface ConfectSchemaDefinition<
   tableSchemas: TableSchemasFromConfectSchema<ConfectSchema>;
 }
 
+
+export const ConfectSchemaDefinition = <S extends GenericConfectSchema>() =>
+  Context.GenericTag<ConfectSchemaDefinition<S>>(
+    "@rjdellecese/confect/ConfectSchemaDefinition",
+  );
+
+export const layerConfectSchemaDefinition = <S extends GenericConfectSchema>(
+  schemaDefinition: ConfectSchemaDefinition<S>,
+) => Layer.succeed(ConfectSchemaDefinition<S>(), schemaDefinition);
+
+
 class ConfectSchemaDefinitionImpl<ConfectSchema extends GenericConfectSchema>
-  implements ConfectSchemaDefinition<ConfectSchema>
-{
+  implements ConfectSchemaDefinition<ConfectSchema> {
   confectSchema: ConfectSchema;
   convexSchemaDefinition: SchemaDefinition<
     SchemaDefinitionFromConfectSchemaDefinition<ConfectSchema>,
@@ -136,7 +148,7 @@ type SchemaDefinitionFromConfectSchemaDefinition<
   ConfectSchema extends GenericConfectSchema,
 > = Expand<{
   [TableName in keyof ConfectSchema &
-    string]: ConfectSchema[TableName]["tableDefinition"];
+  string]: ConfectSchema[TableName]["tableDefinition"];
 }>;
 
 /**
@@ -150,7 +162,7 @@ export const defineConfectSchema = <ConfectSchema extends GenericConfectSchema>(
 export interface ConfectTableDefinition<
   TableSchema extends Schema.Schema.AnyNoContext,
   TableValidator extends
-    GenericValidator = TableSchemaToTableValidator<TableSchema>,
+  GenericValidator = TableSchemaToTableValidator<TableSchema>,
   Indexes extends GenericTableIndexes = {},
   SearchIndexes extends GenericTableSearchIndexes = {},
   VectorIndexes extends GenericTableVectorIndexes = {},
@@ -177,10 +189,10 @@ export interface ConfectTableDefinition<
     TableValidator,
     Expand<
       Indexes &
-        Record<
-          IndexName,
-          [FirstFieldPath, ...RestFieldPaths, IndexTiebreakerField]
-        >
+      Record<
+        IndexName,
+        [FirstFieldPath, ...RestFieldPaths, IndexTiebreakerField]
+      >
     >,
     SearchIndexes,
     VectorIndexes
@@ -198,13 +210,13 @@ export interface ConfectTableDefinition<
     Indexes,
     Expand<
       SearchIndexes &
-        Record<
-          IndexName,
-          {
-            searchField: SearchField;
-            filterFields: FilterFields;
-          }
-        >
+      Record<
+        IndexName,
+        {
+          searchField: SearchField;
+          filterFields: FilterFields;
+        }
+      >
     >,
     VectorIndexes
   >;
@@ -222,14 +234,14 @@ export interface ConfectTableDefinition<
     SearchIndexes,
     Expand<
       VectorIndexes &
-        Record<
-          IndexName,
-          {
-            vectorField: VectorField;
-            dimensions: number;
-            filterFields: FilterFields;
-          }
-        >
+      Record<
+        IndexName,
+        {
+          vectorField: VectorField;
+          dimensions: number;
+          filterFields: FilterFields;
+        }
+      >
     >
   >;
 }
@@ -238,8 +250,8 @@ export type ConfectSchemaFromConfectSchemaDefinition<
   ConfectSchemaDef extends GenericConfectSchemaDefinition,
 > =
   ConfectSchemaDef extends ConfectSchemaDefinition<infer ConfectSchema>
-    ? ConfectSchema
-    : never;
+  ? ConfectSchema
+  : never;
 
 /**
  * @ignore
@@ -248,8 +260,8 @@ export type ConfectDataModelFromConfectSchemaDefinition<
   ConfectSchemaDef extends GenericConfectSchemaDefinition,
 > =
   ConfectSchemaDef extends ConfectSchemaDefinition<infer ConfectSchema>
-    ? ConfectDataModelFromConfectSchema<ConfectSchema>
-    : never;
+  ? ConfectDataModelFromConfectSchema<ConfectSchema>
+  : never;
 
 export type DataModelFromConfectSchema<
   ConfectSchema extends GenericConfectSchema,
@@ -268,14 +280,13 @@ class ConfectTableDefinitionImpl<
   SearchIndexes extends GenericTableSearchIndexes = {},
   VectorIndexes extends GenericTableVectorIndexes = {},
 > implements
-    ConfectTableDefinition<
-      TableSchema,
-      TableValidator,
-      Indexes,
-      SearchIndexes,
-      VectorIndexes
-    >
-{
+  ConfectTableDefinition<
+    TableSchema,
+    TableValidator,
+    Indexes,
+    SearchIndexes,
+    VectorIndexes
+  > {
   tableDefinition: TableDefinition<
     TableValidator,
     Indexes,
@@ -309,10 +320,10 @@ class ConfectTableDefinitionImpl<
     TableValidator,
     Expand<
       Indexes &
-        Record<
-          IndexName,
-          [FirstFieldPath, ...RestFieldPaths, IndexTiebreakerField]
-        >
+      Record<
+        IndexName,
+        [FirstFieldPath, ...RestFieldPaths, IndexTiebreakerField]
+      >
     >,
     SearchIndexes,
     VectorIndexes
@@ -339,13 +350,13 @@ class ConfectTableDefinitionImpl<
     Indexes,
     Expand<
       SearchIndexes &
-        Record<
-          IndexName,
-          {
-            searchField: SearchField;
-            filterFields: FilterFields;
-          }
-        >
+      Record<
+        IndexName,
+        {
+          searchField: SearchField;
+          filterFields: FilterFields;
+        }
+      >
     >,
     VectorIndexes
   > {
@@ -372,14 +383,14 @@ class ConfectTableDefinitionImpl<
     SearchIndexes,
     Expand<
       VectorIndexes &
-        Record<
-          IndexName,
-          {
-            vectorField: VectorField;
-            dimensions: number;
-            filterFields: FilterFields;
-          }
-        >
+      Record<
+        IndexName,
+        {
+          vectorField: VectorField;
+          dimensions: number;
+          filterFields: FilterFields;
+        }
+      >
     >
   > {
     this.tableDefinition = this.tableDefinition.vectorIndex(name, indexConfig);
@@ -417,33 +428,33 @@ export type TableNamesInConfectSchemaDefinition<
 export type ConfectDataModelFromConfectSchema<
   ConfectSchema extends GenericConfectSchema,
 > = {
-  [TableName in keyof ConfectSchema &
+    [TableName in keyof ConfectSchema &
     string]: ConfectSchema[TableName] extends ConfectTableDefinition<
-    infer TableSchema,
-    infer TableValidator,
-    infer Indexes,
-    infer SearchIndexes,
-    infer VectorIndexes
-  >
+      infer TableSchema,
+      infer TableValidator,
+      infer Indexes,
+      infer SearchIndexes,
+      infer VectorIndexes
+    >
     ? TableSchema extends Schema.Schema.AnyNoContext
-      ? {
-          // It's pretty hard to recursively make an arbitrary TS type readonly/mutable, so we capture both the readonly version of the `convexDocument` (which is the `encodedConfectDocument`) and the mutable version (`convexDocument`).
-          confectDocument: ExtractConfectDocument<TableName, TableSchema>;
-          encodedConfectDocument: ExtractEncodedConfectDocument<
-            TableName,
-            TableSchema
-          >;
-          convexDocument: ExtractDocument<TableName, TableValidator>;
-          fieldPaths:
-            | keyof IdField<TableName>
-            | ExtractFieldPaths<TableValidator>;
-          indexes: Expand<Indexes & SystemIndexes>;
-          searchIndexes: SearchIndexes;
-          vectorIndexes: VectorIndexes;
-        }
-      : never
+    ? {
+      // It's pretty hard to recursively make an arbitrary TS type readonly/mutable, so we capture both the readonly version of the `convexDocument` (which is the `encodedConfectDocument`) and the mutable version (`convexDocument`).
+      confectDocument: ExtractConfectDocument<TableName, TableSchema>;
+      encodedConfectDocument: ExtractEncodedConfectDocument<
+        TableName,
+        TableSchema
+      >;
+      convexDocument: ExtractDocument<TableName, TableValidator>;
+      fieldPaths:
+      | keyof IdField<TableName>
+      | ExtractFieldPaths<TableValidator>;
+      indexes: Expand<Indexes & SystemIndexes>;
+      searchIndexes: SearchIndexes;
+      vectorIndexes: VectorIndexes;
+    }
+    : never
     : never;
-};
+  };
 
 type ExtractConfectDocument<
   TableName extends string,
@@ -511,11 +522,11 @@ type TableSchemasFromConfectSchema<ConfectSchema extends GenericConfectSchema> =
 export type TableSchemasFromConfectDataModel<
   ConfectDataModel extends GenericConfectDataModel,
 > = {
-  [TableName in keyof ConfectDataModel & string]: Schema.Schema<
-    ConfectDataModel[TableName]["confectDocument"],
-    ConfectDataModel[TableName]["encodedConfectDocument"]
-  >;
-};
+    [TableName in keyof ConfectDataModel & string]: Schema.Schema<
+      ConfectDataModel[TableName]["confectDocument"],
+      ConfectDataModel[TableName]["encodedConfectDocument"]
+    >;
+  };
 
 // Vendored types from convex-js, partially modified. Ideally we could use these directly. See https://github.com/get-convex/convex-js/pull/14
 

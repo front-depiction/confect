@@ -19,7 +19,6 @@ import type {
 import type { GenericId } from "convex/values";
 import { pipe } from "effect";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
@@ -98,10 +97,6 @@ export class ConfectStorageWriter extends Effect.Service<ConfectStorageWriter>()
   accessors: true,
 }) {}
 
-// Factory function for providing a specific StorageWriter instance
-export const layerStorageWriter = (storageWriter: StorageWriter) =>
-  Layer.succeed(ConfectStorageWriter as any, makeStorageWriter(storageWriter) as any);
-
 // ===========================
 // ConfectStorageActionWriter
 // ===========================
@@ -139,10 +134,6 @@ export class ConfectStorageActionWriter extends Effect.Service<ConfectStorageAct
   }),
   accessors: true,
 }) {}
-
-// Factory function for providing a specific StorageActionWriter instance
-export const layerStorageActionWriter = (storageActionWriter: StorageActionWriter) =>
-  Layer.succeed(ConfectStorageActionWriter as any, makeStorageActionWriter(storageActionWriter) as any);
 
 // ===========================
 // Errors
