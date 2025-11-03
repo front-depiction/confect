@@ -105,7 +105,88 @@ If you need `as` or `as never`, the types are wrong. Redesign them to align natu
 const convexCtx = ctx as unknown as GenericActionCtx<DataModel>;
 ```
 
+## Variance Pattern (Effect Standard)
+
+When creating branded types with variance tracking, follow Effect's standard pattern:
+
+### Pattern Structure
+
+```typescript
+// 1. Symbol for TypeId
+export const MyTypeTypeId: unique symbol = Symbol.for("@confect/MyType")
+export type MyTypeTypeId = typeof MyTypeTypeId
+
+// 2. Namespace with Variance interface
+export declare namespace MyType {
+  export interface Variance<A, B, C> {
+    readonly _a: Types.Covariant<A>
+    readonly _b: Types.Invariant<B>
+    readonly _c: Types.Contravariant<C>
+  }
+}
+
+// 3. Interface using Variance
+export interface MyType<out A, B, in C> {
+  readonly [MyTypeTypeId]: MyType.Variance<A, B, C>
+  // Public API here
+}
+```
+
+### Runtime Implementation
+
+```typescript
+// Variance marker object (zero runtime cost)
+const myTypeVariance = {
+  _a: (_: never) => _,
+  _b: (_: never) => _,
+  _c: (_: never) => _,
+}
+
+// Apply in constructor
+export const make = <A, B, C>(...): MyType<A, B, C> => ({
+  [MyTypeTypeId]: myTypeVariance,
+  // Public fields
+})
+```
+
+### Variance Rules
+
+- **`out` parameters** → `Types.Covariant<T>` → `(_: never) => _`
+- **No variance** → `Types.Invariant<T>` → `(_: T) => T` or `(_: never) => _`
+- **`in` parameters** → `Types.Contravariant<T>` → `(_: T) => void` or `(_: never) => _`
+
+### Examples from Effect
+
+**RcMap:**
+```typescript
+export declare namespace RcMap {
+  export interface Variance<in K, out A, out E> {
+    readonly _K: Types.Contravariant<K>
+    readonly _A: Types.Covariant<A>
+    readonly _E: Types.Covariant<E>
+  }
+}
+
+export interface RcMap<in K, out A, out E = never> {
+  readonly [TypeId]: RcMap.Variance<K, A, E>
+}
+```
+
+**Take:**
+```typescript
+const takeVariance = {
+  _A: (_: never) => _,
+  _E: (_: never) => _,
+}
+
+class TakeImpl<out A, out E = never> implements Take.Take<A, E> {
+  readonly [TakeTypeId] = takeVariance
+  constructor(readonly exit: Exit.Exit<A, E>) {}
+}
+```
+
 ## Resources
 
 - Effect docs MCP is available: use `mcp__effect-docs__effect_docs_search` for Effect type questions
 - CLAUDE.md contains detailed type hierarchy documentation
+- Effect source examples: `effect/src/internal/take.ts`, `effect/src/RcMap.ts`, `effect/src/MetricPair.ts`

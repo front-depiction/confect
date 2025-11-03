@@ -207,7 +207,80 @@ Effect.promise(() => storageWriter.generateUploadUrl()).pipe(
 - Use method-style `.pipe()` over function-style `pipe()`
 - Chain operations fluently
 
+## Variance Pattern (Effect Standard)
+
+When creating branded types with variance tracking, follow Effect's standard pattern:
+
+### Type-Level Pattern
+
+```typescript
+// 1. Symbol and TypeId
+export const MyTypeTypeId: unique symbol = Symbol.for("@confect/MyType")
+export type MyTypeTypeId = typeof MyTypeTypeId
+
+// 2. Namespace with Variance interface
+export declare namespace MyType {
+  export interface Variance<A, B> {
+    readonly _a: Types.Covariant<A>
+    readonly _b: Types.Invariant<B>
+  }
+}
+
+// 3. Interface using Variance
+export interface MyType<out A, B> {
+  readonly [MyTypeTypeId]: MyType.Variance<A, B>
+  // Public API
+}
+```
+
+### Runtime Pattern
+
+```typescript
+// Variance marker (zero runtime cost - identity functions on never)
+const myTypeVariance = {
+  _a: (_: never) => _,  // Covariant: returns the parameter
+  _b: (_: never) => _,  // Invariant: also returns (simplified)
+}
+
+// Constructor applies variance marker
+export const make = <A, B>(...args): MyType<A, B> => ({
+  [MyTypeTypeId]: myTypeVariance,
+  // Actual fields
+})
+
+// Or in a class:
+class MyTypeImpl<out A, B> implements MyType<A, B> {
+  readonly [MyTypeTypeId] = myTypeVariance
+  constructor(...) {}
+}
+```
+
+### Key Points
+
+- **Symbol.for()** - Ensures unique identity across module boundaries
+- **Variance object** - Same instance shared across all instances (zero cost)
+- **Never-type functions** - Type-level only, no runtime behavior
+- **Readonly assignment** - Immutable marker
+
+### Example from Effect (Take)
+
+```typescript
+const TakeSymbolKey = "effect/Take"
+export const TakeTypeId: Take.TakeTypeId = Symbol.for(TakeSymbolKey)
+
+const takeVariance = {
+  _A: (_: never) => _,
+  _E: (_: never) => _,
+}
+
+export class TakeImpl<out A, out E = never> implements Take.Take<A, E> {
+  readonly [TakeTypeId] = takeVariance
+  constructor(readonly exit: Exit.Exit<A, E>) {}
+}
+```
+
 ## Resources
 
 - Effect docs MCP: `mcp__effect-docs__effect_docs_search` for Effect pattern questions
 - CLAUDE.md: Detailed Effect code patterns
+- Effect source: `effect/src/internal/take.ts`, `effect/src/RcMap.ts` for runtime examples

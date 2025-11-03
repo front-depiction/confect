@@ -29,6 +29,7 @@ Skills are **automatically loaded** and used when relevant.
 
 - **Effect docs MCP** - Available for querying Effect documentation
 - **`.claude/README.md`** - Complete configuration documentation
+- Effect github - Available at <https://github.com/effect-ts/effect> (example platform module link <https://github.com/Effect-TS/effect/blob/main/packages/platform/README.md>)
 
 ## Core Principles
 
@@ -45,12 +46,14 @@ All generic types derive from `GenericConfectSchema` (S):
 ```
 
 **Type aliases to use:**
+
 - `TableNamesFromSchema<S>`
 - `ConfectDocumentFromSchema<S, TN>`
 - `TableInfoFromSchema<S, TN>`
 - `DerivedTableSchema<S, TN, I = never>`
 
 **Never parametrize on:**
+
 - `DataModel` - derive from S
 - `SchemaDefinition` - derive from S
 - `TableInfo` - derive from S and TN
@@ -61,6 +64,7 @@ All generic types derive from `GenericConfectSchema` (S):
 ### 2. Effect Code Patterns
 
 **Import style (critical for tree-shaking):**
+
 ```typescript
 // ✅ Namespace imports from submodules
 import * as Effect from "effect/Effect";
@@ -71,6 +75,7 @@ import { Effect, Option } from "effect";
 ```
 
 **Key patterns:**
+
 - Avoid `flow` in Effect chains - use explicit pipe stages
 - Use `Effect.map` and `Effect.flatMap` explicitly - avoid `Effect.andThen` (it magically switches between map/flatMap)
 - Use `Predicate` utilities instead of manual type guards
@@ -83,32 +88,37 @@ import { Effect, Option } from "effect";
 ### 3. Type Safety
 
 **Critical Question Before Using `any`:**
+
 > **"Could a generic be used instead?"**
 >
 > Always ask this question. Most `any` usage can be replaced with proper generics.
 
 **Forbidden:**
+
 - `any` type - use `unknown` or proper generics
 - Type casting (`as`, `as never`) - redesign types to align naturally
 - Exception: Third-party API boundaries only (document why)
 
 **Required:**
+
 - Proper generic constraints instead of `any`
 - Natural type alignment (no casts needed)
 - Strict TypeScript compilation
 - Precise typing of Effect requirements (not `any`)
 
 **Example:**
+
 ```typescript
 // ❌ Wrong - using any for requirements
-handler: (a: Args["Type"]) => Effect.Effect<Returns["Encoded"], E, any>
+handler: (a: Args["Type"]) => Effect.Effect<Returns["Encoded"], E, any>;
 
 // ✅ Correct - precise requirement types
-handler: (a: Args["Type"]) => Effect.Effect<
-  Returns["Encoded"],
-  E,
-  QueryDB<S> | ConfectAuth | ConfectStorageReader
->
+handler: (a: Args["Type"]) =>
+  Effect.Effect<
+    Returns["Encoded"],
+    E,
+    QueryDB<S> | ConfectAuth | ConfectStorageReader
+  >;
 ```
 
 > 📖 **Details:** See `validation` skill or `code-reviewer` agent
@@ -120,16 +130,20 @@ Effect Schema is central to Confect:
 ```typescript
 // Encoding/decoding with error handling
 Schema.encode(schema)(value).pipe(
-  Effect.mapError((parseError) => new MyError({
-    parseError: ParseResult.TreeFormatter.formatErrorSync(parseError),
-  })),
-)
+  Effect.mapError(
+    (parseError) =>
+      new MyError({
+        parseError: ParseResult.TreeFormatter.formatErrorSync(parseError),
+      }),
+  ),
+);
 
 // Schema compilation to Convex validators
-compileTableSchema(schema) // See src/server/schema_to_validator.ts
+compileTableSchema(schema); // See src/server/schema_to_validator.ts
 ```
 
 **Key constraints:**
+
 - All schemas are `Schema.Schema.AnyNoContext` (R = never)
 - `I` parameter varies per schema (encoded type)
 - Always handle parse errors explicitly
@@ -145,6 +159,7 @@ bunx tsc --noEmit
 ```
 
 **Requirements:**
+
 - Zero TypeScript errors
 - Strict mode enabled
 - All imports resolve
@@ -158,6 +173,7 @@ bunx tsc --noEmit
 Task: Types have too many generics or need type casts
 
 **Solution:** Use `type-refactor` agent
+
 ```
 "Use the type-refactor agent to update makeOrderedQuery"
 ```
@@ -167,6 +183,7 @@ Task: Types have too many generics or need type casts
 Task: Code uses barrel imports or non-idiomatic patterns
 
 **Solution:** Use `effect-refactor` agent
+
 ```
 "Use the effect-refactor agent to clean up storage.ts"
 ```
@@ -176,6 +193,7 @@ Task: Code uses barrel imports or non-idiomatic patterns
 Task: Review changes before committing
 
 **Solution:** Use `code-reviewer` agent
+
 ```
 "Use the code-reviewer agent to check my recent changes"
 ```
@@ -185,6 +203,7 @@ Task: Review changes before committing
 Task: Compile schemas, add validation, handle encoding/decoding
 
 **Solution:** Use `schema-expert` agent
+
 ```
 "Use the schema-expert agent to add support for Date schemas"
 ```
@@ -218,10 +237,10 @@ The Effect docs MCP server provides access to Effect documentation:
 
 ```typescript
 // Search docs
-mcp__effect-docs__effect_docs_search({ query: "Effect.flatMap" })
+mcp__effect - docs__effect_docs_search({ query: "Effect.flatMap" });
 
 // Get specific doc
-mcp__effect-docs__get_effect_doc({ documentId: 123 })
+mcp__effect - docs__get_effect_doc({ documentId: 123 });
 ```
 
 All agents and skills have access to Effect docs for up-to-date API information.
@@ -254,9 +273,9 @@ Agents are automatically invoked when you work on relevant tasks, providing spec
 ## Getting Help
 
 - **Agent list:** Run `/agents` to see and manage agents
-- **Claude Code docs:** https://docs.claude.com/en/docs/claude-code/
-- **Sub-agents guide:** https://docs.claude.com/en/docs/claude-code/sub-agents
-- **Skills guide:** https://docs.claude.com/en/docs/claude-code/skills
+- **Claude Code docs:** <https://docs.claude.com/en/docs/claude-code/>
+- **Sub-agents guide:** <https://docs.claude.com/en/docs/claude-code/sub-agents>
+- **Skills guide:** <https://docs.claude.com/en/docs/claude-code/skills>
 - **Configuration:** See `.claude/README.md`
 
 ## Summary
