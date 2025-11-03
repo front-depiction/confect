@@ -19,8 +19,7 @@
  * - Convex validators need to be generated from schemas
  * - Schema definition includes computed metadata (tableSchemas, convexSchemaDefinition)
  *
- * Currently, the schema definition is passed via `ConfectApiWithDatabaseSchema` wrapper.
- * Future refactoring may integrate the full schema definition into `ConfectApi` directly.
+ * The full schema definition is now integrated into `ConfectApi` via the `schemaDefinition` field.
  *
  * ## Key Functions
  *
@@ -52,37 +51,43 @@ import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Record from "effect/Record";
 import * as Schema from "effect/Schema";
-import { layer as layerAuth } from "../server/auth";
+import { ConfectAuth } from "../server/auth";
 import {
   layerActionCtx,
   layerMutationCtx,
   layerQueryCtx,
 } from "../server/convex_ctx";
 import {
-  layerConfectActionCtx,
-  layerConfectMutationCtx,
+  ConfectActionCtx,
+  ConfectMutationCtx,
+  ConfectQueryCtx,
 } from "../server/ctx";
-import { layerMutationDB, layerQueryDB } from "../server/database";
+import { MutationDB, QueryDB } from "../server/database";
 import {
-  layerActionRunner,
-  layerMutationRunner,
-  layerQueryRunner,
+  ConfectActionRunner,
+  ConfectMutationRunner,
+  ConfectQueryRunner,
 } from "../server/runners";
-import { layer as layerScheduler } from "../server/scheduler";
-import { ConfectSchemaDefinition, DataModelFromConfectSchema, GenericConfectSchema } from "../server/schema";
+import { ConfectScheduler } from "../server/scheduler";
+import {
+  layerConfectSchemaDefinition,
+  ConfectSchemaDefinition,
+  DataModelFromConfectSchema,
+  GenericConfectSchema
+} from "../server/schema";
 import {
   compileArgsSchema,
   compileReturnsSchema,
 } from "../server/schema_to_validator";
 import {
-  layerStorageActionWriter,
-  layerStorageReader,
-  layerStorageWriter,
+  ConfectStorageActionWriter,
+  ConfectStorageReader,
+  ConfectStorageWriter,
 } from "../server/storage";
-import { layer as layerVectorSearch } from "../server/vector_search";
+import { ConfectVectorSearch } from "../server/vector_search";
 import * as ConfectApiBuilder from "./ConfectApiBuilder";
-import { ConfectApiGroupAnyWithProps } from "./ConfectApiGroup";
-import * as ConfectApiWithDatabaseSchema from "./ConfectApiWithDatabaseSchema";
+import { ConfectApiGroupAnyWithProps, type ConfectApiGroupName } from "./ConfectApiGroup";
+import * as ConfectApi from "./ConfectApi";
 import type {
   ApiServer,
 } from "./data_model";
@@ -170,13 +175,14 @@ const buildServerGroup = <
 >(
   confectSchemaDefinition: ConfectSchemaDefinition<S>,
   api: ConfectApiBuilder.ConfectApiService<S, ApiName, Groups>,
-  groupName: string,
-  group: ConfectApiGroupAnyWithProps
+  groupName: string
 ) =>
   pipe(
-    // Type assertion: group.name comes from Groups and is a valid group name at runtime.
-    // TypeScript can't infer this because groupName is widened to string by Record.toEntries.
-    api.groupHandler(group.name as any),
+    // API boundary cast: groupName comes from Record.toEntries which widens to string,
+    // but at runtime it's guaranteed to be a valid group name from Groups["name"].
+    // TypeScript's ConfectApiGroupName<Groups> expects the specific group type,
+    // not the union of all group names, so we need this cast.
+    api.groupHandler(groupName as ConfectApiGroupName<Groups>),
     Effect.map((groupHandler) => [
       groupName,
       buildGroupFunctions(confectSchemaDefinition, groupHandler.handlers),
@@ -199,8 +205,8 @@ const buildAllServerGroups = <
   pipe(
     groups,
     Record.toEntries,
-    Array.map(([groupName, group]) =>
-      buildServerGroup(confectSchemaDefinition, api, groupName, group)
+    Array.map(([groupName, _group]) =>
+      buildServerGroup(confectSchemaDefinition, api, groupName)
     ),
     Effect.all,
     Effect.map((entries) => ({
@@ -210,47 +216,53 @@ const buildAllServerGroups = <
   );
 
 export const make = <
-  Api extends ConfectApiWithDatabaseSchema.ConfectApiWithDatabaseSchemaAnyWithProps,
+  Api extends ConfectApi.ConfectApiAnyWithProps,
   E = never,
   R = never
 >(
-  apiWithDatabaseSchema: Api,
+  api: Api,
   // User-provided layer to construct the API service.
   // E and R are unconstrained - the layer determines its own error and requirement types.
   apiServiceLayer: Layer.Layer<
     ConfectApiBuilder.ConfectApiService<
-      Api["confectSchemaDefinition"]["confectSchema"],
-      Api["api"]["name"],
-      Api["api"]["groups"][keyof Api["api"]["groups"]]
+      Api["schemaDefinition"]["confectSchema"],
+      Api["name"],
+      Api["groups"][keyof Api["groups"]]
     >,
     E,
     R
   >
-): ApiServer<Api["api"]> =>
-  pipe(
-    ConfectApiBuilder.ConfectApiService(
-      apiWithDatabaseSchema.confectSchemaDefinition,
-      apiWithDatabaseSchema.api.name,
-      apiWithDatabaseSchema.api.groups
-    ),
-    Effect.flatMap((api) =>
+): ApiServer<Api> => {
+  const apiServiceTag = ConfectApiBuilder.ConfectApiService(
+    api.schemaDefinition,
+    api.name,
+    api.groups
+  );
+
+  const serverEffect = pipe(
+    apiServiceTag,
+    Effect.flatMap((apiService) =>
       buildAllServerGroups(
-        apiWithDatabaseSchema.confectSchemaDefinition,
-        api,
-        apiWithDatabaseSchema.api.groups as Record.ReadonlyRecord<
-          Api["api"]["groups"][keyof Api["api"]["groups"]]["name"],
-          Api["api"]["groups"][keyof Api["api"]["groups"]]
+        api.schemaDefinition,
+        apiService,
+        api.groups as Record.ReadonlyRecord<
+          Api["groups"][keyof Api["groups"]]["name"],
+          Api["groups"][keyof Api["groups"]]
         >
       )
     ),
     Effect.provide(apiServiceLayer),
-    Effect.scoped,
-    // API boundary cast: Convex requires synchronous function registration.
-    // Effect.runSync returns the unwrapped result but TypeScript can't infer
-    // the return type through the complex pipe chain. This is safe because
-    // buildAllServerGroups returns Effect<ApiServer<Api["api"]>>.
-    Effect.runSync as any
-  );
+    Effect.scoped
+  ) as unknown as Effect.Effect<ApiServer<Api>, E, never>;
+
+  // API boundary: Convex requires synchronous function registration.
+  // Effect.runSync executes the server building effect synchronously and returns
+  // the ApiServer<Api> result. The cast above is safe because:
+  // 1. apiServiceLayer provides all requirements (R)
+  // 2. Effect.scoped removes the Scope requirement
+  // 3. buildAllServerGroups returns the correct ApiServer<Api> type
+  return Effect.runSync(serverEffect);
+};
 
 // Internal handler runner that bridges Convex's untyped ctx with Effect's typed layer system.
 // API boundary notes:
@@ -290,8 +302,8 @@ const confectQueryFunction = <
   }: {
     args: Args;
     returns: Returns;
-    // Handler requirements are generic - handlers come from API builder with unknown requirements.
-    // The layers below provide all services available to queries.
+    // Handler comes from API builder as (unknown) => Effect<unknown, unknown, unknown>
+    // We accept it as a generic typed handler, then cast when calling runHandler
     handler: (a: Args["Type"]) => Effect.Effect<Returns["Encoded"], E, R>;
   }
 ) => ({
@@ -301,18 +313,29 @@ const confectQueryFunction = <
   // Type safety is enforced at the API builder level via handler constraints.
   handler: (ctx: GenericQueryCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
     const layers = Layer.mergeAll(
-      // Type assertion: ctx.db is structurally compatible but TypeScript can't prove it.
-      // DataModelFromConfectSchema<S> === ConvexDataModel<ConfectSchemaDefinition<S>> at runtime.
-      layerQueryDB(confectSchemaDefinition, ctx.db as any),
-      layerAuth(ctx.auth),
-      layerStorageReader(ctx.storage),
-      layerQueryRunner(ctx.runQuery),
-      layerQueryCtx(ctx)
+      ConfectQueryCtx.TypedDefault<S>(),
+      QueryDB.TypedDefault<S>(),
+      ConfectQueryRunner.TypedDefault<S>(),
+      ConfectAuth.Default,
+      ConfectStorageReader.Default,
+    ).pipe(
+      Layer.provide(layerQueryCtx<S>(ctx)),
+      Layer.provide(layerConfectSchemaDefinition(confectSchemaDefinition))
     );
 
-    // Type assertion: handler requirements R are satisfied by the layers we provide above.
-    // This is safe because the API builder ensures handlers only use available services.
-    return runHandler(args, returns, handler as any, layers, actualArgs);
+    // API boundary cast: Handler comes from builder with generic R, but we know
+    // it's constrained to QueryRequirements at the builder level. This cast is safe
+    // because the layers above provide all query services.
+    type QueryHandler = (a: Args["Type"]) => Effect.Effect<
+      Returns["Encoded"],
+      E,
+      | ConfectQueryCtx
+      | QueryDB
+      | ConfectQueryRunner
+      | ConfectAuth
+      | ConfectStorageReader
+    >;
+    return runHandler(args, returns, handler as QueryHandler, layers, actualArgs);
   },
 });
 
@@ -331,8 +354,8 @@ const confectMutationFunction = <
   }: {
     args: Args;
     returns: Returns;
-    // Handler requirements are generic - handlers come from API builder with unknown requirements.
-    // The layers below provide all services available to mutations.
+    // Handler comes from API builder as (unknown) => Effect<unknown, unknown, unknown>
+    // We accept it as a generic typed handler, then cast when calling runHandler
     handler: (a: Args["Type"]) => Effect.Effect<Returns["Encoded"], E, R>;
   }
 ) => ({
@@ -341,23 +364,40 @@ const confectMutationFunction = <
   // API boundary: Convex handlers receive/return untyped ctx and args.
   // Type safety is enforced at the API builder level via handler constraints.
   handler: (ctx: GenericMutationCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
-    const layers = layerConfectMutationCtx<S>().pipe(
-      Layer.provideMerge(Layer.mergeAll(
-        layerQueryDB(confectSchemaDefinition, ctx.db),
-        layerMutationDB(confectSchemaDefinition, ctx.db),
-        layerAuth(ctx.auth),
-        layerScheduler(ctx.scheduler),
-        layerStorageReader(ctx.storage),
-        layerStorageWriter(ctx.storage),
-        layerQueryRunner(ctx.runQuery),
-        layerMutationRunner(ctx.runMutation),
-        layerMutationCtx(ctx)
-      ))
+    const layers = Layer.mergeAll(
+      ConfectQueryCtx.TypedDefault<S>(),
+      ConfectMutationCtx.TypedDefault<S>(),
+      QueryDB.TypedDefault<S>(),
+      MutationDB.TypedDefault<S>(),
+      ConfectQueryRunner.TypedDefault<S>(),
+      ConfectMutationRunner.Default,
+      ConfectAuth.Default,
+      ConfectScheduler.Default,
+      ConfectStorageReader.Default,
+      ConfectStorageWriter.Default,
+    ).pipe(
+      Layer.provide(layerMutationCtx<S>(ctx)),
+      Layer.provide(layerConfectSchemaDefinition(confectSchemaDefinition))
     );
 
-    // Type assertion: handler requirements R are satisfied by the layers we provide above.
-    // This is safe because the API builder ensures handlers only use available services.
-    return runHandler(args, returns, handler as any, layers, actualArgs);
+    // API boundary cast: Handler comes from builder with generic R, but we know
+    // it's constrained to MutationRequirements at the builder level. This cast is safe
+    // because the layers above provide all mutation services.
+    type MutationHandler = (a: Args["Type"]) => Effect.Effect<
+      Returns["Encoded"],
+      E,
+      | ConfectQueryCtx
+      | ConfectMutationCtx
+      | QueryDB
+      | MutationDB
+      | ConfectQueryRunner
+      | ConfectMutationRunner
+      | ConfectAuth
+      | ConfectScheduler
+      | ConfectStorageReader
+      | ConfectStorageWriter
+    >;
+    return runHandler(args, returns, handler as MutationHandler, layers, actualArgs);
   },
 });
 
@@ -368,7 +408,7 @@ const confectActionFunction = <
   Args extends Schema.Schema.AnyNoContext,
   Returns extends Schema.Schema.AnyNoContext
 >(
-  _confectSchemaDefinition: ConfectSchemaDefinition<S>,
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
   {
     args,
     returns,
@@ -376,8 +416,8 @@ const confectActionFunction = <
   }: {
     args: Args;
     returns: Returns;
-    // Handler requirements are generic - handlers come from API builder with unknown requirements.
-    // The layers below provide all services available to actions.
+    // Handler comes from API builder as (unknown) => Effect<unknown, unknown, unknown>
+    // We accept it as a generic typed handler, then cast when calling runHandler
     handler: (a: Args["Type"]) => Effect.Effect<Returns["Encoded"], E, R>;
   }
 ) => ({
@@ -386,23 +426,39 @@ const confectActionFunction = <
   // API boundary: Convex handlers receive/return untyped ctx and args.
   // Type safety is enforced at the API builder level via handler constraints.
   handler: (ctx: GenericActionCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
-    const layers = layerConfectActionCtx<S>().pipe(
-      Layer.provideMerge(Layer.mergeAll(
-        layerScheduler(ctx.scheduler),
-        layerAuth(ctx.auth),
-        layerStorageReader(ctx.storage),
-        layerStorageWriter(ctx.storage),
-        layerStorageActionWriter(ctx.storage),
-        layerQueryRunner(ctx.runQuery),
-        layerMutationRunner(ctx.runMutation),
-        layerActionRunner(ctx.runAction),
-        layerVectorSearch(ctx.vectorSearch),
-        layerActionCtx(ctx)
-      ))
+    const layers = Layer.mergeAll(
+      ConfectActionCtx.TypedDefault<S>(),
+      ConfectQueryRunner.TypedDefault<S>(),
+      ConfectMutationRunner.Default,
+      ConfectActionRunner.Default,
+      ConfectAuth.Default,
+      ConfectScheduler.Default,
+      ConfectStorageReader.Default,
+      ConfectStorageWriter.Default,
+      ConfectStorageActionWriter.Default,
+      ConfectVectorSearch.Default,
+    ).pipe(
+      Layer.provide(layerActionCtx<S>(ctx)),
+      Layer.provide(layerConfectSchemaDefinition(confectSchemaDefinition))
     );
 
-    // Type assertion: handler requirements R are satisfied by the layers we provide above.
-    // This is safe because the API builder ensures handlers only use available services.
-    return runHandler(args, returns, handler as any, layers, actualArgs);
+    // API boundary cast: Handler comes from builder with generic R, but we know
+    // it's constrained to ActionRequirements at the builder level. This cast is safe
+    // because the layers above provide all action services.
+    type ActionHandler = (a: Args["Type"]) => Effect.Effect<
+      Returns["Encoded"],
+      E,
+      | ConfectActionCtx
+      | ConfectQueryRunner
+      | ConfectMutationRunner
+      | ConfectActionRunner
+      | ConfectAuth
+      | ConfectScheduler
+      | ConfectStorageReader
+      | ConfectStorageWriter
+      | ConfectStorageActionWriter
+      | ConfectVectorSearch
+    >;
+    return runHandler(args, returns, handler as ActionHandler, layers, actualArgs);
   },
 });

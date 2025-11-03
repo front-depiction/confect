@@ -32,11 +32,79 @@ import {
   ConfectApiGroupWithName,
   ConfectApiGroupWithPath,
 } from "./ConfectApiGroup";
-import * as ConfectApiWithDatabaseSchema from "./ConfectApiWithDatabaseSchema";
+import * as ConfectApi from "./ConfectApi";
 
 export const HandlersTypeId = Symbol.for("@rjdellecese/confect/Handlers");
 
 export type HandlersTypeId = typeof HandlersTypeId;
+
+/**
+ * Type assertion function for group path lookups.
+ * GroupPath is constrained to valid paths in Groups, so at runtime we know
+ * the lookup will succeed. This function provides TypeScript with the type narrowing.
+ *
+ * Note: The cast is necessary because TypeScript cannot statically verify that
+ * Record<string, Groups>[GroupPath] precisely equals ConfectApiGroupWithPath<Groups, GroupPath>,
+ * even though GroupPath is constrained to valid paths.
+ */
+function assertGroupPath<
+  Groups extends ConfectApiGroupAnyWithProps,
+  GroupPath extends ConfectApiGroupPath<Groups>
+>(
+  groups: Record.ReadonlyRecord<string, Groups>,
+  groupPath: GroupPath
+): ConfectApiGroupWithPath<Groups, GroupPath> {
+  const group = groups[groupPath];
+  if (!group) {
+    throw new Error(`Group not found at path: ${groupPath}`);
+  }
+  // TypeScript cannot prove the Record lookup returns the exact narrowed type
+  return group as unknown as ConfectApiGroupWithPath<Groups, GroupPath>;
+}
+
+/**
+ * Type assertion function for group name lookups.
+ * GroupName is constrained to valid names in Groups, so at runtime we know
+ * the lookup will succeed. This function provides TypeScript with the type narrowing.
+ *
+ * Note: The cast is necessary because TypeScript cannot statically verify that
+ * Record<string, Groups>[GroupName] precisely equals ConfectApiGroupWithName<Groups, GroupName>,
+ * even though GroupName is constrained to valid names.
+ */
+function assertGroupName<
+  Groups extends ConfectApiGroupAnyWithProps,
+  GroupName extends ConfectApiGroupName<Groups>
+>(
+  groups: Record.ReadonlyRecord<string, Groups>,
+  groupName: GroupName
+): ConfectApiGroupWithName<Groups, GroupName> {
+  const group = groups[groupName];
+  if (!group) {
+    throw new Error(`Group not found with name: ${groupName}`);
+  }
+  // TypeScript cannot prove the Record lookup returns the exact narrowed type
+  return group as unknown as ConfectApiGroupWithName<Groups, GroupName>;
+}
+
+/**
+ * Type assertion for validated handlers result.
+ * HandlersValidateReturn enforces compile-time validation that all functions are handled.
+ * At runtime, if the code compiles, we know the validation passed.
+ * This function bridges the compile-time validation type to the runtime type.
+ */
+function assertValidatedHandlers<
+  ConfectSchema extends GenericConfectSchema,
+  Group extends ConfectApiGroupAny,
+  Return
+>(
+  result: HandlersValidateReturn<Return>
+): HandlersFromGroup<ConfectSchema, Group> {
+  // At compile time, HandlersValidateReturn ensures Return is Handlers with all functions handled
+  // The type is either Handlers<...> or a string literal error (which would fail compilation)
+  // At runtime, if we reach here, validation succeeded
+  // We need 'as unknown' first because string literals don't overlap with Handlers
+  return result as unknown as HandlersFromGroup<ConfectSchema, Group>;
+}
 
 export interface Handlers<
   ConfectSchema extends GenericConfectSchema,
@@ -92,24 +160,18 @@ const HandlersProto = {
     handler: HandlerAnyWithProps
   ) {
     const function_ = this.group.functions[name];
-    // The handlers array is constructed incrementally through .handle() calls.
-    // Each call adds a new HandlerItem. While we know the structure is correct
-    // (function_ and handler are properly typed), TypeScript cannot verify the
-    // array spread preserves Chunk.Chunk invariants from the prototype method context.
-    // We use Array spread for simplicity and cast to Chunk at the boundary.
-    // This cast is safe because:
-    // 1. handlers is already Chunk.Chunk<HandlersItem<...>>
-    // 2. We're adding a conforming HandlerItem structure
-    // 3. The array structure matches Chunk's internal representation
+    if (!function_) {
+      throw new Error(`Function not found in group: ${name}`);
+    }
     return makeHandlers({
       group: this.group,
-      handlers: [
-        ...this.handlers,
-        {
+      handlers: pipe(
+        Chunk.fromIterable(this.handlers),
+        Chunk.append({
           function_,
           handler,
-        },
-      ] as unknown as Chunk.Chunk<HandlersItem<ConfectSchema, ConfectApiFunctionAnyWithProps>>,
+        })
+      ),
     });
   },
 };
@@ -117,11 +179,12 @@ const HandlersProto = {
 const makeHandlers = <
   ConfectSchema extends GenericConfectSchema,
   Functions extends ConfectApiFunctionAnyWithProps,
+  Group extends ConfectApiGroupAnyWithProps = ConfectApiGroupAnyWithProps,
 >({
   group,
   handlers,
 }: {
-  readonly group: ConfectApiGroupAnyWithProps;
+  readonly group: Group;
   readonly handlers: Chunk.Chunk<HandlersItem<ConfectSchema, Functions>>;
 }): Handlers<ConfectSchema, Functions> =>
   Object.assign(Object.create(HandlersProto), { group, handlers });
@@ -133,11 +196,7 @@ export const group = <
   const GroupPath extends ConfectApiGroupPath<Groups>,
   Return,
 >(
-  apiWithDatabaseSchema: ConfectApiWithDatabaseSchema.ConfectApiWithDatabaseSchema<
-    ConfectSchema,
-    ApiName,
-    Groups
-  >,
+  api: ConfectApi.ConfectApi<ConfectSchema, ApiName, Groups>,
   groupPath: GroupPath,
   build: (
     handlers: HandlersFromGroup<
@@ -159,37 +218,24 @@ export const group = <
     >
   >
 > => {
-  // GroupPath is a string literal type derived from Groups union.
-  // At runtime, we know groupPath is a valid key in api.groups, but TypeScript
-  // cannot statically verify the Record lookup returns the exact ConfectApiGroupWithPath type.
-  // This cast is safe because GroupPath constrains groupPath to valid paths in Groups.
-  const group = apiWithDatabaseSchema.api.groups[
-    groupPath
-  ]! as ConfectApiGroupWithPath<Groups, GroupPath>;
+  const group = assertGroupPath(api.groups, groupPath);
 
-  // Create initial empty handlers with explicit type parameters
-  // This cast is necessary because makeHandlers expects ConfectApiGroupAnyWithProps
-  // but 'group' has the more specific type ConfectApiGroupWithPath. The cast is safe
-  // because ConfectApiGroupWithPath extends ConfectApiGroupAnyWithProps.
   const initialHandlers = makeHandlers<
     ConfectSchema,
     ConfectApiGroupFunctions<
       ConfectApiGroupWithPath<Groups, GroupPath>
-    >
+    >,
+    ConfectApiGroupWithPath<Groups, GroupPath>
   >({
-    group: group as ConfectApiGroupAnyWithProps,
+    group,
     handlers: Chunk.empty(),
   });
 
-  // The build() function is a user-provided callback that chains .handle() calls.
-  // TypeScript's HandlersValidateReturn ensures all functions are handled, but returns
-  // a string literal error message if not. At runtime, if validation passes, we know
-  // the result is HandlersFromGroup. This cast bridges the compile-time validation
-  // type (string literal error or Handlers) to the runtime guarantee.
-  const populatedHandlers = build(initialHandlers) as unknown as HandlersFromGroup<
+  const populatedHandlers = assertValidatedHandlers<
     ConfectSchema,
-    ConfectApiGroupWithPath<Groups, GroupPath>
-  >;
+    ConfectApiGroupWithPath<Groups, GroupPath>,
+    Return
+  >(build(initialHandlers));
 
   // Use the populated result directly
   return Layer.succeed(
@@ -198,11 +244,11 @@ export const group = <
       ApiName,
       ConfectApiGroupWithPath<Groups, GroupPath>
     >({
-      apiName: apiWithDatabaseSchema.api.name,
+      apiName: api.name,
       group,
     }),
     {
-      apiName: apiWithDatabaseSchema.api.name,
+      apiName: api.name,
       handlers: populatedHandlers,
     }
   );
@@ -213,11 +259,7 @@ export const api = <
   const ApiName extends string,
   Groups extends ConfectApiGroupAnyWithProps,
 >(
-  apiWithDatabaseSchema: ConfectApiWithDatabaseSchema.ConfectApiWithDatabaseSchema<
-    ConfectSchema,
-    ApiName,
-    Groups
-  >
+  api: ConfectApi.ConfectApi<ConfectSchema, ApiName, Groups>
 ): Layer.Layer<
   ConfectApiService<ConfectSchema, ApiName, Groups>,
   never,
@@ -225,12 +267,12 @@ export const api = <
 > =>
   Layer.sync(
     ConfectApiService<ConfectSchema, ApiName, Groups>(
-      apiWithDatabaseSchema.confectSchemaDefinition,
-      apiWithDatabaseSchema.api.name,
-      apiWithDatabaseSchema.api.groups
+      api.schemaDefinition,
+      api.name,
+      api.groups
     ),
     () => ({
-      apiName: apiWithDatabaseSchema.api.name,
+      apiName: api.name,
       groupHandler: <
         GroupName extends ConfectApiGroupName<Groups>,
       >(
@@ -247,21 +289,16 @@ export const api = <
             GroupName
           >;
 
-          // GroupName is constrained to ConfectApiGroupName<Groups>, so groupName is a valid key.
-          // However, TypeScript cannot statically verify the Record lookup yields ConfectApiGroupWithName.
-          // This cast is safe because GroupName ensures we're looking up a group that exists in Groups.
-          const group = apiWithDatabaseSchema.api.groups[groupName]! as unknown as Group;
+          const group = assertGroupName(api.groups, groupName);
 
-          // Context.GenericTag returns a Tag<Service>, but yield* on a Tag should resolve to Service.
-          // TypeScript struggles with the complex generic inference through yield* and Context.GenericTag.
-          // This cast explicitly tells TypeScript that yielding the tag provides the service Effect.
-          // Safe because ConfectApiGroupService returns Context.GenericTag<ConfectApiGroupService<...>>.
-          const groupService = yield* ConfectApiGroupService({
-            apiName: apiWithDatabaseSchema.api.name,
+          const groupService = yield* ConfectApiGroupService<
+            ConfectSchema,
+            ApiName,
+            Group
+          >({
+            apiName: api.name,
             group,
-          }) as unknown as Effect.Effect<
-            ConfectApiGroupService<ConfectSchema, ApiName, Group>
-          >;
+          });
 
           return groupService.handlers;
         }),

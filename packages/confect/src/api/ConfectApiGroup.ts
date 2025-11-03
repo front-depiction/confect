@@ -152,6 +152,16 @@ export type ConfectApiGroupHandlersFrom<
   >;
 };
 
+const isFunctionBuilder = (
+  u: ConfectApiFunctionAnyWithProps | { build(): ConfectApiFunctionAnyWithProps }
+): u is { build(): ConfectApiFunctionAnyWithProps } =>
+  Predicate.hasProperty(u, "build");
+
+const extractFunction = (
+  function_: ConfectApiFunctionAnyWithProps | { build(): ConfectApiFunctionAnyWithProps }
+): ConfectApiFunctionAnyWithProps =>
+  isFunctionBuilder(function_) ? function_.build() : function_;
+
 const Proto = {
   [TypeId]: TypeId,
 
@@ -159,13 +169,7 @@ const Proto = {
     this: ConfectApiGroupAnyWithProps,
     function_: Function
   ) {
-    // Support both builder pattern (.query().args().returns()) and direct ConfectApiFunction.
-    // The "build" in function_ check narrows to builder objects, but TypeScript doesn't
-    // automatically narrow union types in ternary expressions. We know:
-    // - If "build" in function_ is true: function_.build() returns ConfectApiFunctionAnyWithProps
-    // - If "build" in function_ is false: function_ is ConfectApiFunctionAnyWithProps
-    // Either way, fn is ConfectApiFunctionAnyWithProps. This cast is safe.
-    const fn = ("build" in function_ ? function_.build() : function_) as ConfectApiFunctionAnyWithProps;
+    const fn = extractFunction(function_);
 
     return makeProto({
       name: this.name,

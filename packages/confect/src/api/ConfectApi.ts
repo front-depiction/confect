@@ -1,4 +1,5 @@
-import { Predicate, Record } from "effect";
+import * as Record from "effect/Record";
+import * as Predicate from "effect/Predicate";
 import {
   ConfectSchemaDefinition,
   GenericConfectSchema,
@@ -18,6 +19,7 @@ export interface ConfectApi<
 > {
   readonly [TypeId]: TypeId;
   readonly schema: S;
+  readonly schemaDefinition: ConfectSchemaDefinition<S>;
   readonly name: Name;
   readonly groups: {
     [GroupName in Groups["name"]]: Extract<Groups, { name: GroupName }>;
@@ -32,6 +34,7 @@ export interface ConfectApi<
 export interface ConfectApiAny {
   readonly [TypeId]: TypeId;
   readonly schema: GenericConfectSchema;
+  readonly schemaDefinition: ConfectSchemaDefinition<GenericConfectSchema>;
   readonly name: string;
 }
 
@@ -40,7 +43,7 @@ export interface ConfectApiAnyWithProps
     GenericConfectSchema,
     string,
     ConfectApiGroupAnyWithProps
-  > {}
+  > { }
 
 const Proto = {
   [TypeId]: TypeId,
@@ -51,6 +54,7 @@ const Proto = {
   ) {
     return makeProto({
       schema: this.schema,
+      schemaDefinition: this.schemaDefinition,
       name: this.name,
       groups: Record.set(this.groups, group.name, group),
     });
@@ -63,15 +67,18 @@ const makeProto = <
   Groups extends ConfectApiGroupAnyWithProps,
 >({
   schema,
+  schemaDefinition,
   name,
   groups,
 }: {
   schema: S;
+  schemaDefinition: ConfectSchemaDefinition<S>;
   name: Name;
   groups: Record.ReadonlyRecord<string, Groups>;
 }): ConfectApi<S, Name, Groups> =>
   Object.assign(Object.create(Proto), {
     schema,
+    schemaDefinition,
     name,
     groups,
   });
@@ -80,7 +87,12 @@ export const make = <S extends GenericConfectSchema, const Name extends string>(
   schemaDefinition: ConfectSchemaDefinition<S>,
   name: Name
 ): ConfectApi<S, Name> =>
-  makeProto({ schema: schemaDefinition.confectSchema, name, groups: Record.empty() });
+  makeProto({
+    schema: schemaDefinition.confectSchema,
+    schemaDefinition,
+    name,
+    groups: Record.empty()
+  });
 
 // ===========================
 // Type Utilities (using data_model.d.ts)

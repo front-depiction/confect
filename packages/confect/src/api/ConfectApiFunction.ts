@@ -249,9 +249,16 @@ class ConfectApiFunctionBuilder<
    *
    * @internal
    */
-  build(): Args extends Schema.Schema.AnyNoContext
-    ? Returns extends Schema.Schema.AnyNoContext
-      ? ConfectApiFunction<FT, Name, Args, Returns>
+  build(): this extends ConfectApiFunctionBuilder<
+    infer FT,
+    infer Name,
+    infer Args,
+    infer Returns
+  >
+    ? Args extends Schema.Schema.AnyNoContext
+      ? Returns extends Schema.Schema.AnyNoContext
+        ? ConfectApiFunction<FT, Name, Args, Returns>
+        : never
       : never
     : never {
     if (!this.argsSchema) {
@@ -265,20 +272,12 @@ class ConfectApiFunctionBuilder<
       );
     }
 
-    // Builder pattern invariant: Runtime checks guarantee argsSchema and returnsSchema are defined,
-    // which means Args and Returns are narrowed to Schema.Schema.AnyNoContext (not undefined).
-    // However, TypeScript's control flow analysis cannot narrow generic type parameters through
-    // runtime checks. The conditional return type requires Args/Returns to be non-undefined schemas,
-    // which we've verified at runtime. This cast bridges the runtime guarantee to the conditional
-    // return type. Safe because: (1) runtime checks prevent undefined schemas, (2) the builder API
-    // enforces .args() and .returns() must be called before .build(), (3) the returned structure
-    // matches ConfectApiFunction<FT, Name, Args, Returns> exactly.
     return Object.assign(Object.create(Proto), {
       functionType: this.functionType,
       name: this._name,
       args: this.argsSchema,
       returns: this.returnsSchema,
-    }) as any;
+    });
   }
 }
 

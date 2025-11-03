@@ -31,6 +31,25 @@ import type * as ParseResult from "effect/ParseResult";
 import type { ReadonlyRecord } from "effect/Record";
 import type * as Schema from "effect/Schema";
 import type { GenericConfectSchema } from "../server/schema";
+import type { ConfectAuth } from "../server/auth";
+import type {
+  ConfectQueryCtx,
+  ConfectMutationCtx,
+  ConfectActionCtx,
+} from "../server/ctx";
+import type { QueryDB, MutationDB } from "../server/database";
+import type {
+  ConfectQueryRunner,
+  ConfectMutationRunner,
+  ConfectActionRunner,
+} from "../server/runners";
+import type { ConfectScheduler } from "../server/scheduler";
+import type {
+  ConfectStorageReader,
+  ConfectStorageWriter,
+  ConfectStorageActionWriter,
+} from "../server/storage";
+import type { ConfectVectorSearch } from "../server/vector_search";
 
 // ===========================
 // Core Generic Types (Single Source of Truth)
@@ -383,20 +402,75 @@ export type FunctionReturnsEncoded<Fn extends GenericConfectApiFunction> =
 // ===========================
 
 /**
+ * Effect requirements for Query function handlers.
+ *
+ * Query handlers have read-only access to the database and related services.
+ *
+ * @see src/server/functions.ts (QueryR type) for the implementation
+ */
+export type QueryRequirements =
+  | ConfectQueryCtx
+  | QueryDB
+  | ConfectAuth
+  | ConfectStorageReader
+  | ConfectQueryRunner;
+
+/**
+ * Effect requirements for Mutation function handlers.
+ *
+ * Mutation handlers have read-write access to the database plus scheduling
+ * and storage mutation capabilities. Includes all QueryRequirements.
+ *
+ * @see src/server/functions.ts (MutationR type) for the implementation
+ */
+export type MutationRequirements =
+  | QueryRequirements
+  | ConfectMutationCtx
+  | MutationDB
+  | ConfectScheduler
+  | ConfectStorageWriter
+  | ConfectMutationRunner;
+
+/**
+ * Effect requirements for Action function handlers.
+ *
+ * Action handlers can run arbitrary code including external API calls,
+ * with access to scheduling and all runner types.
+ *
+ * @see src/server/functions.ts (ActionR type) for the implementation
+ */
+export type ActionRequirements =
+  | ConfectActionCtx
+  | ConfectScheduler
+  | ConfectAuth
+  | ConfectStorageReader
+  | ConfectStorageWriter
+  | ConfectStorageActionWriter
+  | ConfectQueryRunner
+  | ConfectMutationRunner
+  | ConfectActionRunner
+  | ConfectVectorSearch;
+
+/**
  * Extract the Effect requirements for a function handler based on its type.
  *
- * The actual requirements are implementation-specific and depend on the
- * function type (Query/Mutation/Action). See src/server/functions.ts for
- * the concrete requirement types used in handlers.
- *
- * This is intentionally kept generic (any) to avoid circular dependencies
- * and coupling to server implementation details.
+ * Maps function types to their requirement unions:
+ * - Query -> QueryRequirements
+ * - Mutation -> MutationRequirements
+ * - Action -> ActionRequirements
  *
  * @example
- * type Reqs = FunctionHandlerRequirements<CreateUserFn>  // any
+ * type Reqs = FunctionHandlerRequirements<CreateUserFn>
+ * // MutationRequirements (if CreateUserFn is a Mutation)
  */
 export type FunctionHandlerRequirements<Fn extends GenericConfectApiFunction> =
-  any;
+  Fn["functionType"] extends "Query"
+    ? QueryRequirements
+    : Fn["functionType"] extends "Mutation"
+      ? MutationRequirements
+      : Fn["functionType"] extends "Action"
+        ? ActionRequirements
+        : never;
 
 /**
  * Handler type for a specific function.

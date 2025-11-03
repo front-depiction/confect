@@ -5,7 +5,9 @@
 // 2. ConfectApiServer.make() now returns the assembled server object
 
 import { ConvexReactClient } from "convex/react";
-import { Effect, Layer, Schema } from "effect";
+import * as Schema from "effect/Schema";
+import * as Layer from "effect/Layer";
+import * as Effect from "effect/Effect";
 import { defineConfectSchema, defineConfectTable } from "../server";
 import * as ConfectApi from "./ConfectApi";
 import * as ConfectApiBuilder from "./ConfectApiBuilder";
@@ -13,7 +15,6 @@ import * as ConfectApiClient from "./ConfectApiClient";
 import * as ConfectApiFunction from "./ConfectApiFunction";
 import * as ConfectApiGroup from "./ConfectApiGroup";
 import * as ConfectApiServer from "./ConfectApiServer";
-import * as ConfectApiWithDatabaseSchema from "./ConfectApiWithDatabaseSchema";
 
 // New fluent API - more concise and readable!
 const Group = ConfectApiGroup.make("group")
@@ -58,14 +59,8 @@ const Api = ConfectApi.make(confectSchemaDefinition, "Api")
   .add(Group)
   .add(Group4);
 
-// Deprecated: keeping for backward compatibility testing
-const ApiWithDatabaseSchema = ConfectApiWithDatabaseSchema.make(
-  confectSchemaDefinition,
-  Api
-);
-
 const GroupLive = ConfectApiBuilder.group(
-  ApiWithDatabaseSchema,
+  Api,
   "group",
   (handlers) =>
     handlers
@@ -74,32 +69,32 @@ const GroupLive = ConfectApiBuilder.group(
 );
 
 const Group2Live = ConfectApiBuilder.group(
-  ApiWithDatabaseSchema,
+  Api,
   "group4.group2",
   (handlers) =>
     handlers.handle("myFunction3", (args) => Effect.succeed(`foo: ${args.foo}`))
 );
 
 const Group5Live = ConfectApiBuilder.group(
-  ApiWithDatabaseSchema,
+  Api,
   "group4.group3.group5",
   (handlers) => handlers
 );
 
 const Group3Live = ConfectApiBuilder.group(
-  ApiWithDatabaseSchema,
+  Api,
   "group4.group3",
   (handlers) =>
     handlers.handle("myFunction4", (args) => Effect.succeed(`foo: ${args.foo}`))
 ).pipe(Layer.provide(Group5Live));
 
 const Group4Live = ConfectApiBuilder.group(
-  ApiWithDatabaseSchema,
+  Api,
   "group4",
   (handlers) => handlers
 ).pipe(Layer.provide(Group2Live), Layer.provide(Group3Live));
 
-const ApiLive = ConfectApiBuilder.api(ApiWithDatabaseSchema).pipe(
+const ApiLive = ConfectApiBuilder.api(Api).pipe(
   Layer.provide(GroupLive),
   Layer.provide(Group4Live)
 );
@@ -110,7 +105,7 @@ const client = ConfectApiClient.make(
 );
 
 // Phase 1 Fix: Server generation now returns working object (not hole())
-const server = ConfectApiServer.make(ApiWithDatabaseSchema, ApiLive);
+const server = ConfectApiServer.make(Api, ApiLive);
 
 // Type-level verification that server has correct structure
 type _TypeCheck1 = typeof server.group.myFunction;

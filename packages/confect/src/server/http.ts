@@ -19,24 +19,18 @@ import * as Array from "effect/Array";
 import * as Layer from "effect/Layer";
 import { pipe } from "effect";
 import * as Record from "effect/Record";
-import { ConfectAuth, layer as layerAuth } from "./auth";
+import { ConfectAuth } from "./auth";
 import { layerActionCtx } from "./convex_ctx";
 import {
   ConfectActionRunner,
   ConfectMutationRunner,
   ConfectQueryRunner,
-  layerActionRunner,
-  layerMutationRunner,
-  layerQueryRunner,
 } from "./runners";
-import { ConfectScheduler, layer as layerScheduler } from "./scheduler";
+import { ConfectScheduler } from "./scheduler";
 import {
   ConfectStorageActionWriter,
   ConfectStorageReader,
   ConfectStorageWriter,
-  layerStorageActionWriter,
-  layerStorageReader,
-  layerStorageWriter,
 } from "./storage";
 
 type Middleware = (
@@ -73,17 +67,20 @@ const makeHandler =
     const ApiLive = apiLive.pipe(
       Layer.provide(
         Layer.mergeAll(
-          // Entry point layer (provides all Convex components)
-          layerActionCtx<any>(ctx),
           // Confect service layers
-          layerQueryRunner<any>(),
-          layerMutationRunner<any>(),
-          layerActionRunner<any>(),
-          layerScheduler<any>(),
-          layerAuth<any>(),
-          layerStorageReader<any>(),
-          layerStorageWriter<any>(),
-          layerStorageActionWriter<DataModel>(),
+          ConfectQueryRunner.TypedDefault<any>(),
+          ConfectMutationRunner.Default,
+          ConfectActionRunner.Default,
+          ConfectScheduler.Default,
+          ConfectAuth.Default,
+          ConfectStorageReader.Default,
+          ConfectStorageWriter.Default,
+          ConfectStorageActionWriter.Default,
+        ).pipe(
+          // Entry point layer (provides Convex context)
+          // Type cast: Convex's GenericDataModel is compatible with DataModelFromConfectSchema<any>
+          // This is an API boundary between Convex's generic types and Confect's schema-first types
+          Layer.provide(layerActionCtx<any>(ctx as any)),
         ),
       ),
     );
