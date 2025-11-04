@@ -94,7 +94,6 @@ export interface ConfectApiGroup<
   out Functions extends Record<string, Function.ConfectApiFunction>,
 > {
   readonly [GroupTypeId]: ConfectApiGroup.Variance<Name, Functions>;
-
   readonly name: Name;
   readonly functions: Functions;
 }
@@ -147,16 +146,14 @@ export interface ConfectApiGroup<
 export const group = <Name extends string>(name: Name) => ({
   functions: <Functions extends Record<string, Function.ConfectApiFunction>>(
     functions: Functions,
-  ): ConfectApiGroup<Name, Functions> => {
-    return {
-      [GroupTypeId]: {
-        _name: (() => name) as Types.Covariant<Name>,
-        _functions: (() => functions) as Types.Covariant<Functions>,
-      },
-      name,
-      functions,
-    } satisfies ConfectApiGroup<Name, Functions>;
-  },
+  ) => ({
+    [GroupTypeId]: {
+      _name: () => name,
+      _functions: () => functions,
+    },
+    name,
+    functions,
+  } satisfies ConfectApiGroup<Name, Functions>)
 });
 
 // =============================================================================
@@ -171,7 +168,7 @@ export const group = <Name extends string>(name: Name) => ({
  * @param u - Unknown value to check
  * @returns Type guard narrowing to ConfectApiGroup
  *
- * @category Predicates
+ * @category Refinements
  * @since 1.0.0
  *
  * @example
@@ -185,26 +182,6 @@ export const isGroup = (
   u: unknown,
 ): u is ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>> =>
   Predicate.hasProperty(u, GroupTypeId);
-
-/**
- * Refinement for filtering to groups.
- *
- * Use with `Record.filter` or `Array.filter` to narrow types.
- *
- * @category Refinements
- * @since 1.0.0
- *
- * @example
- * import * as Record from "effect/Record"
- *
- * const items: Record<string, unknown> = { ... }
- * const groups = Record.filter(items, Group.GroupRefinement)
- * // groups has type Record<string, ConfectApiGroup>
- */
-export const GroupRefinement: Predicate.Refinement<
-  unknown,
-  ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-> = isGroup;
 
 // =============================================================================
 // Type Extraction Utilities
@@ -284,58 +261,16 @@ export const addFunction = <
   group: ConfectApiGroup<Name, Functions>,
   name: Key,
   fn: Fn,
-): ConfectApiGroup<Name, Functions & Record<Key, Fn>> => {
-  const newFunctions = { ...group.functions, [name]: fn } as Functions & Record<Key, Fn>;
-
+) => {
+  const newFunctions = Record.set(group.functions, name, fn);
   return {
     [GroupTypeId]: {
-      _name: (() => group.name) as Types.Covariant<Name>,
-      _functions: (() => newFunctions) as Types.Covariant<Functions & Record<Key, Fn>>,
+      _name: () => group.name,
+      _functions: () => newFunctions,
     },
     name: group.name,
     functions: newFunctions,
-  } satisfies ConfectApiGroup<Name, Functions & Record<Key, Fn>>;
-};
-
-/**
- * Remove a function from a group.
- *
- * Returns a new group without the specified function. Does not mutate the original.
- *
- * @param group - Group to remove function from
- * @param name - Function name to remove
- * @returns New group without the function
- *
- * @category Utilities
- * @since 1.0.0
- *
- * @example
- * const userGroup = Group.group("users").functions({
- *   getUser: ...,
- *   createUser: ...
- * })
- * const withoutCreate = Group.removeFunction(userGroup, "createUser")
- * // withoutCreate has only getUser
- */
-export const removeFunction = <
-  Name extends string,
-  Functions extends Record<string, Function.ConfectApiFunction>,
-  Key extends keyof Functions,
->(
-  group: ConfectApiGroup<Name, Functions>,
-  name: Key,
-): ConfectApiGroup<Name, Omit<Functions, Key>> => {
-  const newFunctions = { ...group.functions };
-  delete newFunctions[name];
-
-  return {
-    [GroupTypeId]: {
-      _name: (() => group.name) as Types.Covariant<Name>,
-      _functions: (() => newFunctions) as Types.Covariant<Omit<Functions, Key>>,
-    },
-    name: group.name,
-    functions: newFunctions as Omit<Functions, Key>,
-  } satisfies ConfectApiGroup<Name, Omit<Functions, Key>>;
+  } satisfies ConfectApiGroup<Name, Record<string, Function.ConfectApiFunction>>;
 };
 
 /**
