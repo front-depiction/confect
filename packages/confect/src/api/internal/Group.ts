@@ -8,20 +8,21 @@
  *
  * ## Design Principles
  *
- * 1. **Effect Variance Pattern** - Namespace + Variance interface
- * 2. **Phantom Types** - Stored under symbol to avoid namespace pollution
- * 3. **Variance Annotations** - Using Effect's Types module for correct variance
- * 4. **Literal Preservation** - Using `satisfies` to keep literal types
- * 5. **Brand Pattern** - Prevents mixing with plain objects
+ * 1. **Pipeable API** - All operations are pipeable transformations
+ * 2. **Effect Variance Pattern** - Namespace + Variance interface
+ * 3. **Phantom Types** - Stored under symbol to avoid namespace pollution
+ * 4. **Variance Annotations** - Using Effect's Types module for correct variance
+ * 5. **Literal Preservation** - Literal types preserved through pipeline
+ * 6. **Brand Pattern** - Prevents mixing with plain objects
  *
  * @example
  * import * as Group from "./internal/Group"
  * import * as Function from "./internal/Function"
  *
- * const userFunctions = Group.group("users").functions({
- *   getUser: Function.query("getUser").args(...).returns(...),
- *   createUser: Function.mutation("createUser").args(...).returns(...)
- * })
+ * const userGroup = Group.group("users").pipe(
+ *   Group.add("getUser", Function.query("getUser").args(...).returns(...)),
+ *   Group.add("createUser", Function.mutation("createUser").args(...).returns(...))
+ * )
  *
  * if (Group.isGroup(value)) {
  *   // value is ConfectApiGroup
@@ -39,6 +40,7 @@ import type {
 import { equals } from "effect/Equal";
 import { SK } from "effect/Function";
 import * as Order from "effect/Order";
+import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import * as Predicate from "effect/Predicate";
 import * as Record from "effect/Record";
 import * as String from "effect/String";
@@ -74,9 +76,11 @@ export declare namespace ConfectApiGroup {
    * @category Models
    * @since 1.0.0
    */
-  export interface Variance<Name, Functions> {
+  export interface Variance<Name, Functions, E, R> {
     readonly _name: Types.Covariant<Name>;
     readonly _functions: Types.Covariant<Functions>;
+    readonly _e: Types.Invariant<E>;
+    readonly _r: Types.Covariant<R>;
   }
 }
 
@@ -92,8 +96,10 @@ export declare namespace ConfectApiGroup {
 export interface ConfectApiGroup<
   out Name extends string,
   out Functions extends Record<string, Function.ConfectApiFunction>,
-> {
-  readonly [GroupTypeId]: ConfectApiGroup.Variance<Name, Functions>;
+  in out E = never,
+  out R = never,
+> extends Pipeable {
+  readonly [GroupTypeId]: ConfectApiGroup.Variance<Name, Functions, E, R>;
   readonly name: Name;
   readonly functions: Functions;
 }
@@ -103,13 +109,25 @@ export interface ConfectApiGroup<
 // =============================================================================
 
 /**
- * Create a group using a fluent builder pattern.
+ * Variance marker object for runtime representation (zero runtime cost).
  *
- * The builder preserves literal types using the `satisfies` pattern,
- * ensuring that group names and function names are not widened to `string`.
+ * @internal
+ */
+const groupVariance: any = {
+  _name: (_: never) => _,
+  _functions: (_: never) => _,
+  _e: (_: never) => _,
+  _r: (_: never) => _,
+};
+
+/**
+ * Create an empty group with the given name.
+ *
+ * Groups organize API functions into logical namespaces.
+ * Use `.pipe()` with `Group.add()` to add functions.
  *
  * @param name - Group name (preserved as literal type)
- * @returns Builder for specifying functions
+ * @returns Empty group ready for piping
  *
  * @category Constructors
  * @since 1.0.0
@@ -119,15 +137,15 @@ export interface ConfectApiGroup<
  * import * as Function from "./internal/Function"
  * import * as Schema from "effect/Schema"
  *
- * const userGroup = Group.group("users").functions({
- *   getUser: Function.query("getUser")
+ * const userGroup = Group.group("users").pipe(
+ *   Group.add("getUser", Function.query("getUser")
  *     .args(Schema.Struct({ id: Schema.String }))
  *     .returns(Schema.Struct({
  *       id: Schema.String,
  *       name: Schema.String,
  *       email: Schema.String
- *     })),
- *   createUser: Function.mutation("createUser")
+ *     }))),
+ *   Group.add("createUser", Function.mutation("createUser")
  *     .args(Schema.Struct({
  *       name: Schema.String,
  *       email: Schema.String
@@ -136,24 +154,22 @@ export interface ConfectApiGroup<
  *       id: Schema.String,
  *       name: Schema.String,
  *       email: Schema.String
- *     }))
- * })
+ *     })))
+ * )
  *
  * // ✅ Literal types preserved!
  * const groupName: "users" = userGroup.name
  * const functionNames: ("getUser" | "createUser")[] = Object.keys(userGroup.functions)
  */
-export const group = <Name extends string>(name: Name) => ({
-  functions: <Functions extends Record<string, Function.ConfectApiFunction>>(
-    functions: Functions,
-  ) => ({
-    [GroupTypeId]: {
-      _name: () => name,
-      _functions: () => functions,
-    },
-    name,
-    functions,
-  } satisfies ConfectApiGroup<Name, Functions>)
+export const group = <Name extends string>(
+  name: Name,
+): ConfectApiGroup<Name, {}, never, never> => ({
+  [GroupTypeId]: groupVariance,
+  name,
+  functions: {},
+  pipe(this: ConfectApiGroup<Name, {}, never, never>) {
+    return pipeArguments(this, arguments);
+  },
 });
 
 // =============================================================================
@@ -180,7 +196,7 @@ export const group = <Name extends string>(name: Name) => ({
  */
 export const isGroup = (
   u: unknown,
-): u is ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>> =>
+): u is ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, never> =>
   Predicate.hasProperty(u, GroupTypeId);
 
 // =============================================================================
@@ -197,7 +213,7 @@ export const isGroup = (
  * const userGroup = Group.group("users").functions({ ... })
  * type Name = Group.GetName<typeof userGroup>  // "users"
  */
-export type GetName<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>> =
+export type GetName<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, never>> =
   G["name"];
 
 /**
@@ -210,7 +226,7 @@ export type GetName<G extends ConfectApiGroup<string, Record<string, Function.Co
  * const userGroup = Group.group("users").functions(fns)
  * type Fns = Group.GetFunctions<typeof userGroup>  // typeof fns
  */
-export type GetFunctions<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>> =
+export type GetFunctions<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, never>> =
   G["functions"];
 
 /**
@@ -227,130 +243,188 @@ export type GetFunctions<G extends ConfectApiGroup<string, Record<string, Functi
  * type Names = Group.GetFunctionNames<typeof userGroup>
  * // "getUser" | "createUser"
  */
-export type GetFunctionNames<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>> =
+export type GetFunctionNames<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, never>> =
   keyof GetFunctions<G>;
 
+/**
+ * Extract the error type from a group.
+ *
+ * @category Type Utilities
+ * @since 1.0.0
+ *
+ * @example
+ * const userGroup = Group.group("users").functions({ ... })
+ * type Errors = Group.GetError<typeof userGroup>  // never (by default)
+ */
+export type GetError<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, any, never>> =
+  G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, infer E, never> ? E : never;
+
+/**
+ * Extract the context requirements from a group.
+ *
+ * @category Type Utilities
+ * @since 1.0.0
+ *
+ * @example
+ * const userGroup = Group.group("users").functions({ ... })
+ * type Context = Group.GetContext<typeof userGroup>  // never (by default)
+ */
+export type GetContext<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, any>> =
+  G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, infer R> ? R : never;
+
 // =============================================================================
-// Functional Utilities
+// Pipeable Utilities
 // =============================================================================
 
 /**
- * Add a function to a group.
+ * Add a function to a group (pipeable).
  *
- * Returns a new group with the function added. Does not mutate the original.
+ * Returns a transformer function that adds the function to the group.
+ * Does not mutate the original group.
  *
- * @param group - Group to add function to
- * @param name - Function name (key)
+ * @param key - Function name (key)
  * @param fn - Function to add
- * @returns New group with function added
+ * @returns Transformer function that adds the function to a group
  *
  * @category Utilities
  * @since 1.0.0
  *
  * @example
- * const userGroup = Group.group("users").functions({ getUser: ... })
- * const withCreate = Group.addFunction(userGroup, "createUser", createUserFn)
- * // withCreate has both getUser and createUser
+ * import * as Group from "./internal/Group"
+ * import * as Function from "./internal/Function"
+ *
+ * const userGroup = Group.group("users").pipe(
+ *   Group.add("getUser", getUserFn),
+ *   Group.add("createUser", createUserFn)
+ * )
  */
-export const addFunction = <
-  Name extends string,
-  Functions extends Record<string, Function.ConfectApiFunction>,
-  Key extends string,
+export const add = <
+  K extends string,
   Fn extends Function.ConfectApiFunction,
 >(
-  group: ConfectApiGroup<Name, Functions>,
-  name: Key,
+  key: K,
   fn: Fn,
-) => {
-  const newFunctions = Record.set(group.functions, name, fn);
-  return {
-    [GroupTypeId]: {
-      _name: () => group.name,
-      _functions: () => newFunctions,
-    },
-    name: group.name,
-    functions: newFunctions,
-  } satisfies ConfectApiGroup<Name, Record<string, Function.ConfectApiFunction>>;
-};
-
-/**
- * Rename a function in a group.
- *
- * Returns a new group with the function renamed. Does not mutate the original.
- *
- * @param group - Group containing the function
- * @param oldName - Current function name
- * @param newName - New function name
- * @returns New group with function renamed
- *
- * @category Utilities
- * @since 1.0.0
- *
- * @example
- * const userGroup = Group.group("users").functions({ getUser: ... })
- * const renamed = Group.renameFunction(userGroup, "getUser", "fetchUser")
- * // renamed has fetchUser instead of getUser
- */
-export const renameFunction = <
+) =>
+<
   Name extends string,
-  Key extends string,
-  Functions extends Record<Key, Function.ConfectApiFunction>,
-  OldKey extends string,
-  NewKey extends string,
+  Functions extends Record<string, Function.ConfectApiFunction>,
+  E,
+  R,
 >(
-  group: ConfectApiGroup<Name, Functions>,
-  oldName: OldKey,
-  newName: NewKey,
-) => {
-  const newFunctions = Record.mapKeys(group.functions, (key) => equals(key, oldName) ? newName : key);
+  group: ConfectApiGroup<Name, Functions, E, R>,
+): ConfectApiGroup<Name, Functions & Record<K, Fn>, E, R> => {
+  const newFunctions = Record.set(group.functions, key, fn);
   return {
-    [GroupTypeId]: {
-      _name: () => group.name,
-      _functions: () => newFunctions
-    },
+    [GroupTypeId]: groupVariance,
     name: group.name,
-    functions: newFunctions,
-  } satisfies ConfectApiGroup<Name, Record<string, Function.ConfectApiFunction>>;
+    functions: newFunctions as Functions & Record<K, Fn>,
+    pipe(this: ConfectApiGroup<Name, Functions & Record<K, Fn>, E, R>) {
+      return pipeArguments(this, arguments);
+    },
+  };
 };
 
 /**
- * Merge two groups.
+ * Rename a function in a group (pipeable).
  *
- * Returns a new group with functions from both groups.
- * If there are duplicate function names, functions from the second group take precedence.
+ * Returns a transformer function that renames a function in the group.
+ * Does not mutate the original group.
  *
- * @param group1 - First group
- * @param group2 - Second group
- * @returns New group with merged functions
+ * @param oldKey - Current function name
+ * @param newKey - New function name
+ * @returns Transformer function that renames the function
  *
  * @category Utilities
  * @since 1.0.0
  *
  * @example
- * const group1 = Group.group("api").functions({ getUser: ... })
- * const group2 = Group.group("api").functions({ createUser: ... })
- * const merged = Group.mergeFunctions(group1, group2)
+ * import * as Group from "./internal/Group"
+ *
+ * const userGroup = Group.group("users").pipe(
+ *   Group.add("getUser", getUserFn),
+ *   Group.rename("getUser", "fetchUser")
+ * )
+ * // userGroup has fetchUser instead of getUser
+ */
+export const rename = <OldKey extends string, NewKey extends string>(
+  oldKey: OldKey,
+  newKey: NewKey,
+) =>
+<
+  Name extends string,
+  Functions extends Record<string, Function.ConfectApiFunction>,
+  E,
+  R,
+>(
+  group: ConfectApiGroup<Name, Functions, E, R>,
+): ConfectApiGroup<Name, Record<string, Function.ConfectApiFunction>, E, R> => {
+  const newFunctions = Record.mapKeys(group.functions, (key) =>
+    equals(key, oldKey) ? newKey : key,
+  );
+  return {
+    [GroupTypeId]: groupVariance,
+    name: group.name,
+    functions: newFunctions,
+    pipe(this: ConfectApiGroup<Name, Record<string, Function.ConfectApiFunction>, E, R>) {
+      return pipeArguments(this, arguments);
+    },
+  };
+};
+
+/**
+ * Merge another group's functions into this group (pipeable).
+ *
+ * Returns a transformer function that merges functions from another group.
+ * If there are duplicate function names, functions from the other group take precedence.
+ * The error and context types are unioned.
+ * Does not mutate either group.
+ *
+ * @param other - Group whose functions to merge
+ * @returns Transformer function that merges the groups
+ *
+ * @category Utilities
+ * @since 1.0.0
+ *
+ * @example
+ * import * as Group from "./internal/Group"
+ *
+ * const group1 = Group.group("api").pipe(Group.add("getUser", getUserFn))
+ * const group2 = Group.group("api").pipe(Group.add("createUser", createUserFn))
+ * const merged = group1.pipe(Group.merge(group2))
  * // merged has both getUser and createUser
  */
-export const mergeFunctions = <
-  Name extends string,
-  K1 extends string,
-  K2 extends string,
-  Functions1 extends Record<K1, Function.ConfectApiFunction>,
-  Functions2 extends Record<K2, Function.ConfectApiFunction>,
+export const merge = <
+  Name2 extends string,
+  Functions2 extends Record<string, Function.ConfectApiFunction>,
+  E2,
+  R2,
 >(
-  group1: ConfectApiGroup<Name, Functions1>,
-  group2: ConfectApiGroup<Name, Functions2>,
-) => {
-  const newFunctions = Record.union(group1.functions, group2.functions, SK)
+  other: ConfectApiGroup<Name2, Functions2, E2, R2>,
+) =>
+<
+  Name extends string,
+  Functions extends Record<string, Function.ConfectApiFunction>,
+  E,
+  R,
+>(
+  group: ConfectApiGroup<Name, Functions, E, R>,
+): ConfectApiGroup<
+  Name,
+  Functions & Functions2,
+  E | E2,
+  R | R2
+> => {
+  const newFunctions = Record.union(group.functions, other.functions, SK);
   return {
-    [GroupTypeId]: {
-      _name: () => group1.name,
-      _functions: () => newFunctions
+    [GroupTypeId]: groupVariance,
+    name: group.name,
+    functions: newFunctions as Functions & Functions2,
+    pipe(
+      this: ConfectApiGroup<Name, Functions & Functions2, E | E2, R | R2>,
+    ) {
+      return pipeArguments(this, arguments);
     },
-    name: group1.name,
-    functions: newFunctions,
-  } satisfies ConfectApiGroup<Name, Record<string, Function.ConfectApiFunction>>;
+  };
 };
 
 // =============================================================================
@@ -371,8 +445,8 @@ export const mergeFunctions = <
  * // [adminGroup, publicGroup, userGroup]
  */
 export const byName: Order.Order<
-  ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-> = Order.mapInput(String.Order, (group: ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>) => group.name);
+  ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, never>
+> = Order.mapInput(String.Order, (group: ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, never>) => group.name);
 
 // =============================================================================
 // Convex Integration
@@ -412,7 +486,7 @@ export const byName: Order.Order<
  * // }
  */
 export const toConvexGroup = <
-  G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>,
+  G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, never>,
   Args extends DefaultFunctionArgs,
   Returns
 >(

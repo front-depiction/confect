@@ -33,6 +33,7 @@ import type {
   RegisteredMutation,
   RegisteredQuery,
 } from "convex/server";
+import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Types from "effect/Types";
@@ -96,10 +97,12 @@ export declare namespace ConfectApiQueryFunction {
    * @category Models
    * @since 1.0.0
    */
-  export interface Variance<Name, Args, Returns> {
+  export interface Variance<Name, Args, Returns, E, R> {
     readonly _name: Types.Covariant<Name>;
     readonly _args: Types.Invariant<Args>;
     readonly _returns: Types.Covariant<Returns>;
+    readonly _e: Types.Invariant<E>;
+    readonly _r: Types.Covariant<R>;
   }
 }
 
@@ -114,13 +117,17 @@ export declare namespace ConfectApiQueryFunction {
  */
 export interface ConfectApiQueryFunction<
   out Name extends string,
-  Args extends Schema.Schema.AnyNoContext,
+  out Args extends Schema.Schema.AnyNoContext,
   out Returns extends Schema.Schema.AnyNoContext,
-> {
+  out E = never,
+  out R = never,
+> extends Pipeable {
   readonly [QueryFunctionTypeId]: ConfectApiQueryFunction.Variance<
     Name,
     Args,
-    Returns
+    Returns,
+    E,
+    R
   >;
 
   readonly functionType: "Query";
@@ -138,10 +145,12 @@ export declare namespace ConfectApiMutationFunction {
    * @category Models
    * @since 1.0.0
    */
-  export interface Variance<Name, Args, Returns> {
+  export interface Variance<Name, Args, Returns, E, R> {
     readonly _name: Types.Covariant<Name>;
     readonly _args: Types.Invariant<Args>;
     readonly _returns: Types.Covariant<Returns>;
+    readonly _e: Types.Invariant<E>;
+    readonly _r: Types.Covariant<R>;
   }
 }
 
@@ -156,13 +165,17 @@ export declare namespace ConfectApiMutationFunction {
  */
 export interface ConfectApiMutationFunction<
   out Name extends string,
-  Args extends Schema.Schema.AnyNoContext,
+  out Args extends Schema.Schema.AnyNoContext,
   out Returns extends Schema.Schema.AnyNoContext,
-> {
+  out E = never,
+  out R = never,
+> extends Pipeable {
   readonly [MutationFunctionTypeId]: ConfectApiMutationFunction.Variance<
     Name,
     Args,
-    Returns
+    Returns,
+    E,
+    R
   >;
 
   readonly functionType: "Mutation";
@@ -180,10 +193,12 @@ export declare namespace ConfectApiActionFunction {
    * @category Models
    * @since 1.0.0
    */
-  export interface Variance<Name, Args, Returns> {
+  export interface Variance<Name, Args, Returns, E, R> {
     readonly _name: Types.Covariant<Name>;
     readonly _args: Types.Invariant<Args>;
     readonly _returns: Types.Covariant<Returns>;
+    readonly _e: Types.Invariant<E>;
+    readonly _r: Types.Covariant<R>;
   }
 }
 
@@ -199,13 +214,17 @@ export declare namespace ConfectApiActionFunction {
  */
 export interface ConfectApiActionFunction<
   out Name extends string,
-  Args extends Schema.Schema.AnyNoContext,
+  out Args extends Schema.Schema.AnyNoContext,
   out Returns extends Schema.Schema.AnyNoContext,
-> {
+  out E = never,
+  out R = never,
+> extends Pipeable {
   readonly [ActionFunctionTypeId]: ConfectApiActionFunction.Variance<
     Name,
     Args,
-    Returns
+    Returns,
+    E,
+    R
   >;
 
   readonly functionType: "Action";
@@ -218,26 +237,52 @@ export interface ConfectApiActionFunction<
  * Union of all Confect API function types.
  *
  * This is a discriminated union with `functionType` as the discriminator.
+ * Uses `any` for invariant parameters to allow assignment of specific types.
  *
  * @category Types
  * @since 1.0.0
  */
 export type ConfectApiFunction =
-  | ConfectApiQueryFunction<
-      string,
-      Schema.Schema.AnyNoContext,
-      Schema.Schema.AnyNoContext
-    >
-  | ConfectApiMutationFunction<
-      string,
-      Schema.Schema.AnyNoContext,
-      Schema.Schema.AnyNoContext
-    >
-  | ConfectApiActionFunction<
-      string,
-      Schema.Schema.AnyNoContext,
-      Schema.Schema.AnyNoContext
-    >;
+  | ConfectApiQueryFunction<string, any, any, any, any>
+  | ConfectApiMutationFunction<string, any, any, any, any>
+  | ConfectApiActionFunction<string, any, any, any, any>;
+
+// =============================================================================
+// Variance Markers (shared objects for zero runtime cost)
+// =============================================================================
+
+/**
+ * @internal
+ */
+const queryVariance: any = {
+  _name: (_: never) => _,
+  _args: (_: never) => _,
+  _returns: (_: never) => _,
+  _e: (_: never) => _,
+  _r: (_: never) => _,
+};
+
+/**
+ * @internal
+ */
+const mutationVariance: any = {
+  _name: (_: never) => _,
+  _args: (_: never) => _,
+  _returns: (_: never) => _,
+  _e: (_: never) => _,
+  _r: (_: never) => _,
+};
+
+/**
+ * @internal
+ */
+const actionVariance: any = {
+  _name: (_: never) => _,
+  _args: (_: never) => _,
+  _returns: (_: never) => _,
+  _e: (_: never) => _,
+  _r: (_: never) => _,
+};
 
 // =============================================================================
 // Constructors (using satisfies pattern)
@@ -274,19 +319,16 @@ export const query = <Name extends string>(name: Name) => ({
   args: <Args extends Schema.Schema.AnyNoContext>(args: Args) => ({
     returns: <Returns extends Schema.Schema.AnyNoContext>(
       returns: Returns,
-    ): ConfectApiQueryFunction<Name, Args, Returns> => {
-      return {
-        [QueryFunctionTypeId]: {
-          _name: () => name,
-          _args: (_arg: Args) => _arg,
-          _returns: () => returns,
-        },
-        functionType: "Query" as const,
-        name,
-        args,
-        returns,
-      } satisfies ConfectApiQueryFunction<Name, Args, Returns>;
-    },
+    ): ConfectApiQueryFunction<Name, Args, Returns, never, never> => ({
+      [QueryFunctionTypeId]: queryVariance,
+      functionType: "Query",
+      name,
+      args,
+      returns,
+      pipe(this: ConfectApiQueryFunction<Name, Args, Returns, never, never>) {
+        return pipeArguments(this, arguments);
+      },
+    }),
   }),
 });
 
@@ -324,18 +366,17 @@ export const mutation = <Name extends string>(name: Name) => ({
   args: <Args extends Schema.Schema.AnyNoContext>(args: Args) => ({
     returns: <Returns extends Schema.Schema.AnyNoContext>(
       returns: Returns,
-    ): ConfectApiMutationFunction<Name, Args, Returns> => {
+    ): ConfectApiMutationFunction<Name, Args, Returns, never, never> => {
       return {
-        [MutationFunctionTypeId]: {
-          _name: () => name,
-          _args: (_arg: Args) => _arg,
-          _returns: () => returns,
-        },
-        functionType: "Mutation" as const,
+        [MutationFunctionTypeId]: mutationVariance,
+        functionType: "Mutation",
         name,
         args,
         returns,
-      } satisfies ConfectApiMutationFunction<Name, Args, Returns>;
+        pipe(this: ConfectApiMutationFunction<Name, Args, Returns, never, never>) {
+          return pipeArguments(this, arguments);
+        },
+      };
     },
   }),
 });
@@ -371,18 +412,17 @@ export const action = <Name extends string>(name: Name) => ({
   args: <Args extends Schema.Schema.AnyNoContext>(args: Args) => ({
     returns: <Returns extends Schema.Schema.AnyNoContext>(
       returns: Returns,
-    ): ConfectApiActionFunction<Name, Args, Returns> => {
+    ): ConfectApiActionFunction<Name, Args, Returns, never, never> => {
       return {
-        [ActionFunctionTypeId]: {
-          _name: (_ => name),
-          _args: ((_arg: Args) => _arg),
-          _returns: (_ => returns) 
-        },
-        functionType: "Action" as const,
+        [ActionFunctionTypeId]: actionVariance,
+        functionType: "Action",
         name,
         args,
         returns,
-      } satisfies ConfectApiActionFunction<Name, Args, Returns>;
+        pipe(this: ConfectApiActionFunction<Name, Args, Returns, never, never>) {
+          return pipeArguments(this, arguments);
+        },
+      };
     },
   }),
 });
@@ -431,11 +471,8 @@ export const isFunction = (u: unknown): u is ConfectApiFunction =>
  */
 export const isQuery = (
   fn: ConfectApiFunction,
-): fn is ConfectApiQueryFunction<
-  string,
-  Schema.Schema.AnyNoContext,
-  Schema.Schema.AnyNoContext
-> => Predicate.hasProperty(fn, QueryFunctionTypeId);
+): fn is ConfectApiQueryFunction<string, any, any, any, any> =>
+  Predicate.hasProperty(fn, QueryFunctionTypeId);
 
 /**
  * Check if a function is a mutation.
@@ -455,11 +492,8 @@ export const isQuery = (
  */
 export const isMutation = (
   fn: ConfectApiFunction,
-): fn is ConfectApiMutationFunction<
-  string,
-  Schema.Schema.AnyNoContext,
-  Schema.Schema.AnyNoContext
-> => Predicate.hasProperty(fn, MutationFunctionTypeId);
+): fn is ConfectApiMutationFunction<string, any, any, any, any> =>
+  Predicate.hasProperty(fn, MutationFunctionTypeId);
 
 /**
  * Check if a function is an action.
@@ -479,11 +513,8 @@ export const isMutation = (
  */
 export const isAction = (
   fn: ConfectApiFunction,
-): fn is ConfectApiActionFunction<
-  string,
-  Schema.Schema.AnyNoContext,
-  Schema.Schema.AnyNoContext
-> => Predicate.hasProperty(fn, ActionFunctionTypeId);
+): fn is ConfectApiActionFunction<string, any, any, any, any> =>
+  Predicate.hasProperty(fn, ActionFunctionTypeId);
 
 // =============================================================================
 // Refinements (for Record.filter)
@@ -506,11 +537,7 @@ export const isAction = (
  */
 export const QueryRefinement: Predicate.Refinement<
   ConfectApiFunction,
-  ConfectApiQueryFunction<
-    string,
-    Schema.Schema.AnyNoContext,
-    Schema.Schema.AnyNoContext
-  >
+  ConfectApiQueryFunction<string, any, any, any, any>
 > = isQuery;
 
 /**
@@ -530,11 +557,7 @@ export const QueryRefinement: Predicate.Refinement<
  */
 export const MutationRefinement: Predicate.Refinement<
   ConfectApiFunction,
-  ConfectApiMutationFunction<
-    string,
-    Schema.Schema.AnyNoContext,
-    Schema.Schema.AnyNoContext
-  >
+  ConfectApiMutationFunction<string, any, any, any, any>
 > = isMutation;
 
 /**
@@ -554,11 +577,7 @@ export const MutationRefinement: Predicate.Refinement<
  */
 export const ActionRefinement: Predicate.Refinement<
   ConfectApiFunction,
-  ConfectApiActionFunction<
-    string,
-    Schema.Schema.AnyNoContext,
-    Schema.Schema.AnyNoContext
-  >
+  ConfectApiActionFunction<string, any, any, any, any>
 > = isAction;
 
 // =============================================================================
@@ -680,6 +699,42 @@ export type GetReturnsEncoded<Fn extends ConfectApiFunction> =
  */
 export type GetFunctionType<Fn extends ConfectApiFunction> =
   Fn["functionType"];
+
+/**
+ * Extract the error type from a function.
+ *
+ * @category Type Utilities
+ * @since 1.0.0
+ *
+ * @example
+ * type Err = Function.GetError<typeof getUser>  // never (by default)
+ */
+export type GetError<Fn extends ConfectApiFunction> =
+  Fn extends ConfectApiQueryFunction<string, any, any, infer E, any>
+    ? E
+    : Fn extends ConfectApiMutationFunction<string, any, any, infer E, any>
+      ? E
+      : Fn extends ConfectApiActionFunction<string, any, any, infer E, any>
+        ? E
+        : never;
+
+/**
+ * Extract the context requirements from a function.
+ *
+ * @category Type Utilities
+ * @since 1.0.0
+ *
+ * @example
+ * type Ctx = Function.GetContext<typeof getUser>  // never (by default)
+ */
+export type GetContext<Fn extends ConfectApiFunction> =
+  Fn extends ConfectApiQueryFunction<string, any, any, any, infer R>
+    ? R
+    : Fn extends ConfectApiMutationFunction<string, any, any, any, infer R>
+      ? R
+      : Fn extends ConfectApiActionFunction<string, any, any, any, infer R>
+        ? R
+        : never;
 
 // =============================================================================
 // Convex Conversion
