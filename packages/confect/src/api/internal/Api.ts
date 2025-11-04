@@ -38,19 +38,14 @@
  * @since 1.0.0
  */
 
-import type {
-  RegisteredAction,
-  RegisteredMutation,
-  RegisteredQuery,
-} from "convex/server";
 import * as Order from "effect/Order";
 import * as Predicate from "effect/Predicate";
 import * as Record from "effect/Record";
-import * as Schema from "effect/Schema";
 import * as String from "effect/String";
 import * as Types from "effect/Types";
 import * as Function from "./Function";
 import * as Group from "./Group";
+import { SK } from "effect/Function";
 
 // =============================================================================
 // Symbols and Type IDs
@@ -162,28 +157,20 @@ export interface ConfectApi<
  *   })
  * })
  *
- * // ✅ Literal types preserved!
  * const apiName: "myApp" = myApi.name
  * const groupNames: ("users" | "posts")[] = Object.keys(myApi.groups)
  */
 export const api = <Name extends string>(name: Name) => ({
-  groups: <
-    Groups extends Record<
-      string,
-      Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-    >,
-  >(
-    groups: Groups,
-  ): ConfectApi<Name, Groups> => {
-    return {
-      [ApiTypeId]: {
-        _name: (() => name) as Types.Covariant<Name>,
-        _groups: (() => groups) as Types.Covariant<Groups>,
-      },
-      name,
-      groups,
-    } satisfies ConfectApi<Name, Groups>;
-  },
+  groups: <Key extends string, Groups extends
+    Record<string, Group.ConfectApiGroup<Name, Record<Key, Function.ConfectApiFunction>>>,
+  >(groups: Groups) => ({
+    [ApiTypeId]: {
+      _name: () => name,
+      _groups: () => groups,
+    },
+    name,
+    groups,
+  } satisfies ConfectApi<Name, Groups>)
 });
 
 // =============================================================================
@@ -216,33 +203,7 @@ export const isApi = (
     string,
     Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
   >
-> => Predicate.hasProperty(u, ApiTypeId as symbol);
-
-/**
- * Refinement for filtering to APIs.
- *
- * Use with `Record.filter` or `Array.filter` to narrow types.
- *
- * @category Refinements
- * @since 1.0.0
- *
- * @example
- * import * as Record from "effect/Record"
- *
- * const items: Record<string, unknown> = { ... }
- * const apis = Record.filter(items, Api.ApiRefinement)
- * // apis has type Record<string, ConfectApi>
- */
-export const ApiRefinement: Predicate.Refinement<
-  unknown,
-  ConfectApi<
-    string,
-    Record<
-      string,
-      Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-    >
-  >
-> = isApi;
+> => Predicate.hasProperty(u, ApiTypeId);
 
 // =============================================================================
 // Type Extraction Utilities
@@ -367,20 +328,15 @@ export type GetAllFunctions<
  */
 export const addGroup = <
   Name extends string,
-  Groups extends Record<
-    string,
-    Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-  >,
+  Groups extends Record<string, Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>>,
   Key extends string,
-  G extends Group.ConfectApiGroup<
-    string,
-    Record<string, Function.ConfectApiFunction>
+  G extends Group.ConfectApiGroup<Name, Record<string, Function.ConfectApiFunction>
   >,
 >(
   api: ConfectApi<Name, Groups>,
   name: Key,
   group: G,
-): ConfectApi<Name, Groups & Record<Key, G>> => {
+) => {
   const newGroups = { ...api.groups, [name]: group } as Groups & Record<Key, G>;
 
   return {
@@ -423,194 +379,18 @@ export const removeGroup = <
 >(
   api: ConfectApi<Name, Groups>,
   name: Key,
-): ConfectApi<Name, Omit<Groups, Key>> => {
+) => {
   const newGroups = { ...api.groups };
   delete newGroups[name];
 
   return {
     [ApiTypeId]: {
-      _name: (() => api.name) as Types.Covariant<Name>,
-      _groups: (() => newGroups) as Types.Covariant<Omit<Groups, Key>>,
+      _name: () => api.name,
+      _groups: () => newGroups,
     },
     name: api.name,
-    groups: newGroups as Omit<Groups, Key>,
+    groups: newGroups,
   } satisfies ConfectApi<Name, Omit<Groups, Key>>;
-};
-
-/**
- * Rename a group in an API.
- *
- * Returns a new API with the group renamed. Does not mutate the original.
- *
- * @param api - API containing the group
- * @param oldName - Current group name
- * @param newName - New group name
- * @returns New API with group renamed
- *
- * @category Utilities
- * @since 1.0.0
- *
- * @example
- * const myApi = Api.api("myApp").groups({ users: userGroup })
- * const renamed = Api.renameGroup(myApi, "users", "accounts")
- * // renamed has accounts instead of users
- */
-export const renameGroup = <
-  Name extends string,
-  Groups extends Record<
-    string,
-    Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-  >,
-  OldKey extends keyof Groups,
-  NewKey extends string,
->(
-  api: ConfectApi<Name, Groups>,
-  oldName: OldKey,
-  newName: NewKey,
-): ConfectApi<Name, Omit<Groups, OldKey> & Record<NewKey, Groups[OldKey]>> => {
-  type ResultGroups = Omit<Groups, OldKey> & Record<NewKey, Groups[OldKey]>;
-
-  const group = api.groups[oldName];
-  const copied = { ...api.groups };
-  delete copied[oldName];
-  const newGroups = { ...copied, [newName]: group } as unknown as ResultGroups;
-
-  return {
-    [ApiTypeId]: {
-      _name: (() => api.name) as Types.Covariant<Name>,
-      _groups: (() => newGroups) as Types.Covariant<ResultGroups>,
-    },
-    name: api.name,
-    groups: newGroups,
-  } satisfies ConfectApi<Name, ResultGroups>;
-};
-
-/**
- * Transform all groups in an API.
- *
- * Returns a new API with all groups transformed by the mapper function.
- *
- * @param api - API to transform
- * @param f - Mapper function
- * @returns New API with transformed groups
- *
- * @category Utilities
- * @since 1.0.0
- *
- * @example
- * import * as Record from "effect/Record"
- *
- * const myApi = Api.api("myApp").groups({ ... })
- * const logged = Api.mapGroups(myApi, (name, group) => {
- *   console.log(`Group: ${name}`)
- *   return group
- * })
- */
-export const mapGroups = <
-  Name extends string,
-  Groups extends Record<
-    string,
-    Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-  >,
-  NewGroups extends Record<
-    string,
-    Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-  >,
->(
-  api: ConfectApi<Name, Groups>,
-  f: (
-    group: Group.ConfectApiGroup<
-      string,
-      Record<string, Function.ConfectApiFunction>
-    >,
-    key: string,
-  ) => Group.ConfectApiGroup<
-    string,
-    Record<string, Function.ConfectApiFunction>
-  >,
-): ConfectApi<Name, NewGroups> => {
-  const newGroups = Record.map(
-    api.groups as Record<
-      string,
-      Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-    >,
-    f,
-  ) as NewGroups;
-
-  return {
-    [ApiTypeId]: {
-      _name: (() => api.name) as Types.Covariant<Name>,
-      _groups: (() => newGroups) as Types.Covariant<NewGroups>,
-    },
-    name: api.name,
-    groups: newGroups,
-  } satisfies ConfectApi<Name, NewGroups>;
-};
-
-/**
- * Filter groups in an API.
- *
- * Returns a new API containing only groups that match the predicate.
- *
- * @param api - API to filter
- * @param predicate - Filter predicate
- * @returns New API with filtered groups
- *
- * @category Utilities
- * @since 1.0.0
- *
- * @example
- * const myApi = Api.api("myApp").groups({
- *   users: userGroup,
- *   posts: postsGroup
- * })
- * const filtered = Api.filterGroups(myApi, (_, group) =>
- *   Object.keys(group.functions).length > 5
- * )
- * // filtered has only groups with more than 5 functions
- */
-export const filterGroups = <
-  Name extends string,
-  Groups extends Record<
-    string,
-    Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-  >,
->(
-  api: ConfectApi<Name, Groups>,
-  predicate: Predicate.Predicate<
-    Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-  >,
-): ConfectApi<
-  Name,
-  Record<
-    string,
-    Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-  >
-> => {
-  const newGroups = Record.filter(api.groups, predicate);
-
-  return {
-    [ApiTypeId]: {
-      _name: (() => api.name) as Types.Covariant<Name>,
-      _groups: (() => newGroups) as Types.Covariant<
-        Record<
-          string,
-          Group.ConfectApiGroup<
-            string,
-            Record<string, Function.ConfectApiFunction>
-          >
-        >
-      >,
-    },
-    name: api.name,
-    groups: newGroups,
-  } satisfies ConfectApi<
-    Name,
-    Record<
-      string,
-      Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-    >
-  >;
 };
 
 /**
@@ -634,76 +414,31 @@ export const filterGroups = <
  */
 export const mergeApis = <
   Name extends string,
+  K1 extends string,
+  Name1 extends string,
   Groups1 extends Record<
-    string,
-    Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
+    K1,
+    Group.ConfectApiGroup<Name1, Record<string, Function.ConfectApiFunction>>
   >,
+  K2 extends string,
+  Name2 extends string,
   Groups2 extends Record<
-    string,
-    Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
+    K2,
+    Group.ConfectApiGroup<Name2, Record<string, Function.ConfectApiFunction>>
   >,
 >(
   api1: ConfectApi<Name, Groups1>,
   api2: ConfectApi<Name, Groups2>,
-): ConfectApi<Name, Groups1 & Groups2> => {
-  const newGroups = { ...api1.groups, ...api2.groups } as Groups1 & Groups2;
-
+) => {
+  const newGroups = Record.union(api1.groups, api2.groups, SK);
   return {
     [ApiTypeId]: {
-      _name: (() => api1.name) as Types.Covariant<Name>,
-      _groups: (() => newGroups) as Types.Covariant<Groups1 & Groups2>,
+      _name: () => api1.name,
+      _groups: () => newGroups,
     },
     name: api1.name,
     groups: newGroups,
-  } satisfies ConfectApi<Name, Groups1 & Groups2>;
-};
-
-/**
- * Flatten all functions from all groups into a single record.
- *
- * Returns a record of all functions with keys in the format "groupName.functionName".
- *
- * @param api - API to flatten
- * @returns Record of all functions with prefixed keys
- *
- * @category Utilities
- * @since 1.0.0
- *
- * @example
- * const myApi = Api.api("myApp").groups({
- *   users: Group.group("users").functions({
- *     getUser: ...,
- *     createUser: ...
- *   }),
- *   posts: Group.group("posts").functions({
- *     getPost: ...
- *   })
- * })
- * const flat = Api.flattenFunctions(myApi)
- * // {
- * //   "users.getUser": ...,
- * //   "users.createUser": ...,
- * //   "posts.getPost": ...
- * // }
- */
-export const flattenFunctions = <
-  Name extends string,
-  Groups extends Record<
-    string,
-    Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-  >,
->(
-  api: ConfectApi<Name, Groups>,
-): Record<string, Function.ConfectApiFunction> => {
-  const result: Record<string, Function.ConfectApiFunction> = {};
-
-  for (const [groupName, group] of Object.entries(api.groups)) {
-    for (const [funcName, func] of Object.entries(group.functions)) {
-      result[`${groupName}.${funcName}`] = func;
-    }
-  }
-
-  return result;
+  } satisfies ConfectApi<Name, Record<string, Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>>>;
 };
 
 // =============================================================================
@@ -899,89 +634,3 @@ export const getFunction = <
 // Convex Integration
 // =============================================================================
 
-/**
- * Convert a Confect API to Convex registered functions.
- *
- * This is the bridge between our type system and Convex's runtime.
- * The function compiles all schemas to Convex validators and returns
- * a nested record of RegisteredQuery, RegisteredMutation, or RegisteredAction.
- *
- * The output structure matches Convex's expected API format:
- * ```
- * {
- *   groupName: {
- *     functionName: RegisteredFunction,
- *     ...
- *   },
- *   ...
- * }
- * ```
- *
- * @param api - Confect API to convert
- * @param compileSchema - Schema compiler function (from schema_to_validator)
- * @returns Nested record of Convex registered functions
- *
- * @category Convex Integration
- * @since 1.0.0
- *
- * @example
- * import { compileSchema } from "../schema_to_validator"
- * import * as Api from "./internal/Api"
- * import * as Group from "./internal/Group"
- * import * as Function from "./internal/Function"
- *
- * const myApi = Api.api("myApp").groups({
- *   users: Group.group("users").functions({
- *     getUser: Function.query("getUser")
- *       .args(Schema.Struct({ id: Schema.String }))
- *       .returns(UserSchema),
- *     createUser: Function.mutation("createUser")
- *       .args(Schema.Struct({ name: Schema.String, email: Schema.String }))
- *       .returns(UserSchema)
- *   })
- * })
- *
- * const convexApi = Api.toConvexApi(myApi, compileSchema)
- * // {
- * //   users: {
- * //     getUser: RegisteredQuery<...>,
- * //     createUser: RegisteredMutation<...>
- * //   }
- * // }
- */
-export const toConvexApi = <
-  A extends ConfectApi<
-    string,
-    Record<
-      string,
-      Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-    >
-  >,
->(
-  api: A,
-  compileSchema: <S extends Schema.Schema.AnyNoContext>(schema: S) => any,
-): Record<
-  string,
-  Record<
-    string,
-    | RegisteredQuery<"public", any, any>
-    | RegisteredMutation<"public", any, any>
-    | RegisteredAction<"public", any, any>
-  >
-> => {
-  return Record.map(
-    api.groups as Record<
-      string,
-      Group.ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-    >,
-    (group) => Group.toConvexGroup(group, compileSchema),
-  ) as Record<
-    string,
-    Record<
-      string,
-      | RegisteredQuery<"public", any, any>
-      | RegisteredMutation<"public", any, any>
-      | RegisteredAction<"public", any, any>
-    >
-  >;
-};

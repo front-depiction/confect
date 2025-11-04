@@ -41,7 +41,6 @@ import { SK } from "effect/Function";
 import * as Order from "effect/Order";
 import * as Predicate from "effect/Predicate";
 import * as Record from "effect/Record";
-import * as Schema from "effect/Schema";
 import * as String from "effect/String";
 import * as Types from "effect/Types";
 import type * as Function from "./Function";
@@ -483,7 +482,6 @@ export const toConvexGroup = <
   Returns
 >(
   group: G,
-  compileSchema: <S extends Schema.Schema.AnyNoContext>(schema: S) => Args,
 ): Record<
   string,
   | RegisteredQuery<"public", Args, Returns>
@@ -492,7 +490,7 @@ export const toConvexGroup = <
 > => {
   return Record.map(
     group.functions as Record<string, Function.ConfectApiFunction>,
-    (fn) => {
+    () => {
       // TODO: Switch to real convex function conversion
       return {} as never;
     },
