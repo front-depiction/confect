@@ -43,7 +43,6 @@
  * @since 1.0.0
  */
 
-import { equals } from "effect/Equal";
 import { SK } from "effect/Function";
 import * as Order from "effect/Order";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
@@ -75,40 +74,36 @@ export type ApiTypeId = typeof ApiTypeId;
 // =============================================================================
 
 /**
- * Type alias for any ConfectApiGroup with flexible error and context requirements.
+ * Type alias for any ConfectApiGroup.
  *
  * @category Type Aliases
  * @since 1.0.0
  */
 export type AnyConfectApiGroup = Group.ConfectApiGroup<
   string,
-  Record<string, Function.ConfectApiFunction>,
-  never,
-  never
+  Record<string, Function.ConfectApiFunction>
 >;
 
 /**
- * @category Models
- * @since 1.0.0
+ * Helper type to merge group records.
+ * TypeScript cannot prove that MergeRight<A, B> extends Record<string, T>
+ * even when A and B both extend Record<string, T>, so we use this helper.
+ *
+ * @internal
  */
-export declare namespace ConfectApi {
-  /**
-   * @category Models
-   * @since 1.0.0
-   */
-  export interface Variance<Name, Groups, E, R> {
-    readonly _name: Types.Covariant<Name>;
-    readonly _groups: Types.Covariant<Groups>;
-    readonly _e: Types.Covariant<E>;
-    readonly _r: Types.Covariant<R>;
-  }
-}
+type MergedGroups<
+  A extends Record<string, AnyConfectApiGroup>,
+  B extends Record<string, AnyConfectApiGroup>,
+> = Types.MergeRight<A, B> extends Record<string, AnyConfectApiGroup>
+  ? Types.MergeRight<A, B>
+  : never;
 
 /**
  * API - top-level collection of groups.
  *
  * APIs organize groups into a complete application API surface.
  * They provide a way to structure large applications and generate complete Convex exports.
+ * Context requirements (R) are tracked and unioned across groups.
  *
  * @category Types
  * @since 1.0.0
@@ -116,10 +111,9 @@ export declare namespace ConfectApi {
 export interface ConfectApi<
   out Name extends string,
   out Groups extends Record<string, AnyConfectApiGroup>,
-  out E = never,
   out R = never,
 > extends Pipeable {
-  readonly [ApiTypeId]: ConfectApi.Variance<Name, Groups, E, R>;
+  readonly [ApiTypeId]: ApiTypeId;
 
   readonly name: Name;
   readonly groups: Groups;
@@ -128,18 +122,6 @@ export interface ConfectApi<
 // =============================================================================
 // Constructors (using satisfies pattern)
 // =============================================================================
-
-/**
- * Variance marker object for runtime representation (zero runtime cost).
- *
- * @internal
- */
-const apiVariance = {
-  _name: (_: never) => _,
-  _groups: (_: never) => _,
-  _e: (_: never) => _,
-  _r: (_: never) => _,
-};
 
 /**
  * Create an empty API with the given name.
@@ -200,11 +182,11 @@ const apiVariance = {
  */
 export const api = <Name extends string>(
   name: Name,
-): ConfectApi<Name, {}, never, never> => ({
-  [ApiTypeId]: apiVariance,
+): ConfectApi<Name, {}, never> => ({
+  [ApiTypeId]: ApiTypeId,
   name,
   groups: {},
-  pipe(this: ConfectApi<Name, {}, never, never>) {
+  pipe() {
     return pipeArguments(this, arguments);
   },
 });
@@ -233,7 +215,7 @@ export const api = <Name extends string>(
  */
 export const isApi = (
   u: unknown,
-): u is ConfectApi<string, Record<string, AnyConfectApiGroup>> =>
+): u is ConfectApi<string, Record<string, AnyConfectApiGroup>, never> =>
   Predicate.hasProperty(u, ApiTypeId);
 
 // =============================================================================
@@ -250,7 +232,7 @@ export const isApi = (
  * const myApi = Api.api("myApp").groups({ ... })
  * type Name = Api.GetName<typeof myApi>  // "myApp"
  */
-export type GetName<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>>> =
+export type GetName<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> =
   A["name"];
 
 /**
@@ -263,7 +245,7 @@ export type GetName<A extends ConfectApi<string, Record<string, AnyConfectApiGro
  * const myApi = Api.api("myApp").groups(grps)
  * type Groups = Api.GetGroups<typeof myApi>  // typeof grps
  */
-export type GetGroups<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>>> =
+export type GetGroups<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> =
   A["groups"];
 
 /**
@@ -280,7 +262,7 @@ export type GetGroups<A extends ConfectApi<string, Record<string, AnyConfectApiG
  * type Names = Api.GetGroupNames<typeof myApi>
  * // "users" | "posts"
  */
-export type GetGroupNames<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>>> =
+export type GetGroupNames<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> =
   keyof GetGroups<A>;
 
 /**
@@ -304,22 +286,9 @@ export type GetGroupNames<A extends ConfectApi<string, Record<string, AnyConfect
  * type AllFunctions = Api.GetAllFunctions<typeof myApi>
  * // Record<string, ConfectApiFunction>
  */
-export type GetAllFunctions<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>>> = {
+export type GetAllFunctions<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> = {
   [K in keyof GetGroups<A>]: Group.GetFunctions<GetGroups<A>[K]>;
 }[keyof GetGroups<A>];
-
-/**
- * Extract the error type from an API.
- *
- * @category Type Utilities
- * @since 1.0.0
- *
- * @example
- * const myApi = Api.api("myApp").groups({ ... })
- * type E = Api.GetError<typeof myApi>  // never (default)
- */
-export type GetError<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>, any, any>> =
-  A extends ConfectApi<any, any, infer E, any> ? E : never;
 
 /**
  * Extract the context requirements from an API.
@@ -331,8 +300,8 @@ export type GetError<A extends ConfectApi<string, Record<string, AnyConfectApiGr
  * const myApi = Api.api("myApp").groups({ ... })
  * type R = Api.GetContext<typeof myApi>  // never (default)
  */
-export type GetContext<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>, any, any>> =
-  A extends ConfectApi<any, any, any, infer R> ? R : never;
+export type GetContext<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> =
+  A extends ConfectApi<any, any, infer R> ? R : never;
 
 // =============================================================================
 // Pipeable Utilities
@@ -343,6 +312,7 @@ export type GetContext<A extends ConfectApi<string, Record<string, AnyConfectApi
  *
  * Returns a transformer function that adds the group to the API.
  * The group's name is extracted from the group itself.
+ * Context requirements (R) are unioned.
  * Does not mutate the original API.
  *
  * @param group - Group to add (group.name becomes the key)
@@ -368,77 +338,22 @@ export type GetContext<A extends ConfectApi<string, Record<string, AnyConfectApi
  * )
  * // myApi has both users and posts groups
  */
-export const add = <
+export const add: <
   GroupName extends string,
   GroupFunctions extends Record<string, Function.ConfectApiFunction>,
-  GE,
   GR,
 >(
-  group: Group.ConfectApiGroup<GroupName, GroupFunctions, GE, GR>,
-) =>
-  <
-    Name extends string,
-    Groups extends Record<string, AnyConfectApiGroup>,
-    E,
-    R,
-  >(
-    api: ConfectApi<Name, Groups, E, R>,
-  ): ConfectApi<Name, Groups & Record<GroupName, typeof group>, E | GE, R | GR> => {
-    const newGroups = { ...api.groups, [group.name]: group } as Groups & Record<GroupName, typeof group>;
-
+  group: Group.ConfectApiGroup<GroupName, GroupFunctions>,
+) => <Name extends string, Groups extends Record<string, AnyConfectApiGroup>, R>(
+  api: ConfectApi<Name, Groups, R>,
+) => ConfectApi<Name, MergedGroups<Groups, Record<GroupName, typeof group>>, R | GR> =
+  (group) => (api) => {
+    const newGroups = Record.set(api.groups, group.name, group)
     return {
-      [ApiTypeId]: apiVariance,
+      [ApiTypeId]: ApiTypeId,
       name: api.name,
-      groups: newGroups,
-      pipe(this: ConfectApi<Name, Groups & Record<GroupName, typeof group>, E | GE, R | GR>) {
-        return pipeArguments(this, arguments);
-      },
-    };
-  };
-
-/**
- * Remove a group from an API (pipeable).
- *
- * Returns a transformer function that removes the group from the API.
- * Does not mutate the original API.
- *
- * @param groupName - Group name to remove
- * @returns Transformer function that removes the group from an API
- *
- * @category Utilities
- * @since 1.0.0
- *
- * @example
- * import * as Api from "./internal/Api"
- *
- * const myApi = Api.api("myApp").pipe(
- *   Api.add(usersGroup),
- *   Api.add(postsGroup)
- * )
- * const withoutPosts = myApi.pipe(Api.remove("posts"))
- * // withoutPosts has only users group
- */
-export const remove = <K extends string>(
-  groupName: K,
-) =>
-  <
-    Name extends string,
-    Groups extends Record<string, AnyConfectApiGroup>,
-    E,
-    R,
-  >(
-    api: ConfectApi<Name, Groups, E, R>,
-  ): ConfectApi<Name, Omit<Groups, K>, E, R> => {
-    const newGroups = Record.filter(
-      api.groups,
-      (_, key) => !equals(key, groupName),
-    );
-
-    return {
-      [ApiTypeId]: apiVariance,
-      name: api.name,
-      groups: newGroups as Omit<Groups, K>,
-      pipe(this: ConfectApi<Name, Omit<Groups, K>, E, R>) {
+      groups: newGroups as any,
+      pipe() {
         return pipeArguments(this, arguments);
       },
     };
@@ -473,25 +388,23 @@ export const remove = <K extends string>(
 export const merge = <
   Name2 extends string,
   Groups2 extends Record<string, AnyConfectApiGroup>,
-  E2,
   R2,
 >(
-  other: ConfectApi<Name2, Groups2, E2, R2>,
+  other: ConfectApi<Name2, Groups2, R2>,
 ) =>
   <
     Name extends string,
     Groups extends Record<string, AnyConfectApiGroup>,
-    E,
     R,
   >(
-    api: ConfectApi<Name, Groups, E, R>,
-  ): ConfectApi<Name, Groups & Groups2, E | E2, R | R2> => {
+    api: ConfectApi<Name, Groups, R>,
+  ): ConfectApi<Name, MergedGroups<Groups, Groups2>, R | R2> => {
     const newGroups = Record.union(api.groups, other.groups, SK);
     return {
-      [ApiTypeId]: apiVariance,
+      [ApiTypeId]: ApiTypeId,
       name: api.name,
-      groups: newGroups as Groups & Groups2,
-      pipe(this: ConfectApi<Name, Groups & Groups2, E | E2, R | R2>) {
+      groups: newGroups as any,
+      pipe() {
         return pipeArguments(this, arguments);
       },
     };
@@ -513,10 +426,10 @@ export const merge = <
  * const apis = [api1, api2, api3]
  * const sorted = Array.sort(apis, Api.byName)
  */
-export const byName: Order.Order<ConfectApi<string, Record<string, AnyConfectApiGroup>>> =
+export const byName: Order.Order<ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> =
   Order.mapInput(
     String.Order,
-    (api: ConfectApi<string, Record<string, AnyConfectApiGroup>>) => api.name,
+    (api: ConfectApi<string, Record<string, AnyConfectApiGroup>, any>) => api.name,
   );
 
 /**
@@ -532,10 +445,10 @@ export const byName: Order.Order<ConfectApi<string, Record<string, AnyConfectApi
  * const sorted = Array.sort(apis, Api.byGroupCount)
  * // APIs with fewer groups come first
  */
-export const byGroupCount: Order.Order<ConfectApi<string, Record<string, AnyConfectApiGroup>>> =
+export const byGroupCount: Order.Order<ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> =
   Order.mapInput(
     Order.number,
-    (api: ConfectApi<string, Record<string, AnyConfectApiGroup>>) =>
+    (api: ConfectApi<string, Record<string, AnyConfectApiGroup>, any>) =>
       Object.keys(api.groups).length,
   );
 
@@ -552,10 +465,10 @@ export const byGroupCount: Order.Order<ConfectApi<string, Record<string, AnyConf
  * const sorted = Array.sort(apis, Api.byFunctionCount)
  * // APIs with fewer functions come first
  */
-export const byFunctionCount: Order.Order<ConfectApi<string, Record<string, AnyConfectApiGroup>>> =
+export const byFunctionCount: Order.Order<ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> =
   Order.mapInput(
     Order.number,
-    (api: ConfectApi<string, Record<string, AnyConfectApiGroup>>) => {
+    (api: ConfectApi<string, Record<string, AnyConfectApiGroup>, any>) => {
       let count = 0;
       for (const group of Object.values(api.groups)) {
         count += Object.keys(group.functions).length;
@@ -586,11 +499,10 @@ export const byFunctionCount: Order.Order<ConfectApi<string, Record<string, AnyC
 export const getGroup = <
   Name extends string,
   Groups extends Record<string, AnyConfectApiGroup>,
-  E,
   R,
   Key extends keyof Groups,
 >(
-  api: ConfectApi<Name, Groups, E, R>,
+  api: ConfectApi<Name, Groups, R>,
   name: Key,
 ): Groups[Key] | undefined => {
   return api.groups[name];
@@ -620,12 +532,11 @@ export const getGroup = <
 export const getFunction = <
   Name extends string,
   Groups extends Record<string, AnyConfectApiGroup>,
-  E,
   R,
   GroupKey extends keyof Groups,
   FunctionKey extends string,
 >(
-  api: ConfectApi<Name, Groups, E, R>,
+  api: ConfectApi<Name, Groups, R>,
   groupName: GroupKey,
   functionName: FunctionKey,
 ): Function.ConfectApiFunction | undefined => {

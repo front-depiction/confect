@@ -339,9 +339,8 @@ const makeActionProto = <
 }): ConfectApiActionFunction<Name, Args, Returns> => {
   return Object.assign(Object.create(ActionProto), {
     [ActionFunctionTypeId]: ActionFunctionTypeId,
-    functionType: "Action" as const,
-    ...options,
-  });
+    functionType: "Action"
+  }, options);
 };
 
 // =============================================================================
@@ -493,7 +492,7 @@ export const isFunction = (u: unknown): u is ConfectApiFunction =>
  * @param fn - Function to check
  * @returns Type guard narrowing to ConfectApiQueryFunction
  *
- * @category Predicates
+ * @category Refinements
  * @since 1.0.0
  *
  * @example
@@ -514,7 +513,7 @@ export const isQuery = (
  * @param fn - Function to check
  * @returns Type guard narrowing to ConfectApiMutationFunction
  *
- * @category Predicates
+ * @category Refinements
  * @since 1.0.0
  *
  * @example
@@ -522,9 +521,7 @@ export const isQuery = (
  * const mutations = functions.filter(Function.isMutation)
  * // mutations has type ConfectApiMutationFunction[]
  */
-export const isMutation = (
-  fn: ConfectApiFunction,
-): fn is ConfectApiMutationFunction =>
+export const isMutation = (fn: ConfectApiFunction,): fn is ConfectApiMutationFunction =>
   Predicate.hasProperty(fn, MutationFunctionTypeId);
 
 /**
@@ -535,7 +532,7 @@ export const isMutation = (
  * @param fn - Function to check
  * @returns Type guard narrowing to ConfectApiActionFunction
  *
- * @category Predicates
+ * @category Refinements
  * @since 1.0.0
  *
  * @example
@@ -543,74 +540,8 @@ export const isMutation = (
  * const actions = functions.filter(Function.isAction)
  * // actions has type ConfectApiActionFunction[]
  */
-export const isAction = (
-  fn: ConfectApiFunction,
-): fn is ConfectApiActionFunction =>
+export const isAction = (fn: ConfectApiFunction,): fn is ConfectApiActionFunction =>
   Predicate.hasProperty(fn, ActionFunctionTypeId);
-
-// =============================================================================
-// Refinements (for Record.filter)
-// =============================================================================
-
-/**
- * Refinement for filtering to query functions.
- *
- * Use with `Record.filter` or `Array.filter` to narrow types.
- *
- * @category Refinements
- * @since 1.0.0
- *
- * @example
- * import * as Record from "effect/Record"
- *
- * const functions: Record<string, ConfectApiFunction> = { ... }
- * const queries = Record.filter(functions, Function.QueryRefinement)
- * // queries has type Record<string, ConfectApiQueryFunction>
- */
-export const QueryRefinement: Predicate.Refinement<
-  ConfectApiFunction,
-  ConfectApiQueryFunction
-> = isQuery;
-
-/**
- * Refinement for filtering to mutation functions.
- *
- * Use with `Record.filter` or `Array.filter` to narrow types.
- *
- * @category Refinements
- * @since 1.0.0
- *
- * @example
- * import * as Record from "effect/Record"
- *
- * const functions: Record<string, ConfectApiFunction> = { ... }
- * const mutations = Record.filter(functions, Function.MutationRefinement)
- * // mutations has type Record<string, ConfectApiMutationFunction>
- */
-export const MutationRefinement: Predicate.Refinement<
-  ConfectApiFunction,
-  ConfectApiMutationFunction
-> = isMutation;
-
-/**
- * Refinement for filtering to action functions.
- *
- * Use with `Record.filter` or `Array.filter` to narrow types.
- *
- * @category Refinements
- * @since 1.0.0
- *
- * @example
- * import * as Record from "effect/Record"
- *
- * const functions: Record<string, ConfectApiFunction> = { ... }
- * const actions = Record.filter(functions, Function.ActionRefinement)
- * // actions has type Record<string, ConfectApiActionFunction>
- */
-export const ActionRefinement: Predicate.Refinement<
-  ConfectApiFunction,
-  ConfectApiActionFunction
-> = isAction;
 
 // =============================================================================
 // Type Extraction Utilities

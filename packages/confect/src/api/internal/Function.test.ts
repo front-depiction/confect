@@ -13,6 +13,7 @@
 import * as Schema from "effect/Schema";
 import { describe, expect, expectTypeOf, test } from "vitest";
 import * as Function from "./Function";
+import type { TypesAreEquivalent } from "./test-helpers";
 
 // =============================================================================
 // Test Schemas
@@ -27,19 +28,6 @@ const TestReturnsSchema = Schema.Struct({
   result: Schema.String,
   timestamp: Schema.Number,
 });
-
-// =============================================================================
-// Type Testing Utility
-// =============================================================================
-
-/**
- * Bidirectional type equivalence check.
- * Verifies that A extends B and B extends A.
- */
-type TypesAreEquivalent<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-    ? true
-    : false;
 
 // =============================================================================
 // Constructor Tests

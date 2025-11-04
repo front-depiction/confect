@@ -13,6 +13,7 @@ import * as Schema from "effect/Schema";
 import { describe, expect, expectTypeOf, test } from "vitest";
 import * as Function from "./Function";
 import * as Group from "./Group";
+import type { TypesAreEquivalent } from "./test-helpers";
 
 // =============================================================================
 // Test Data
@@ -37,20 +38,6 @@ const createUserFn = Function.mutation("createUser")
 const sendEmailFn = Function.action("sendEmail")
   .args(TestArgsSchema)
   .returns(TestReturnsSchema);
-
-const testGroup = Group.group("users").pipe(
-  Group.add("getUser", getUserFn),
-  Group.add("createUser", createUserFn),
-)
-void testGroup.functions
-// =============================================================================
-// Type Testing Utility
-// =============================================================================
-
-type TypesAreEquivalent<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-  ? true
-  : false;
 
 // =============================================================================
 // Constructor Tests
@@ -159,6 +146,7 @@ describe("Type Extraction Utilities", () => {
     Group.add("getUser", getUserFn),
     Group.add("createUser", createUserFn),
   );
+  void testGroup
 
   describe("GetName", () => {
     test("extracts name as literal type", () => {
@@ -270,7 +258,7 @@ describe("Pipeable Utilities", () => {
         Group.add("createUser", createUserFn),
       );
 
-      const updated = original.pipe(v => Group.rename("getUsers", "fetchUser")(v));
+      const updated = original.pipe(Group.rename("getUser", "fetchUser"));
 
       expect(updated.functions).toHaveProperty("fetchUser");
       expect(updated.functions).not.toHaveProperty("getUser");

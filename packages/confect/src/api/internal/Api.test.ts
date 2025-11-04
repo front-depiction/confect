@@ -14,6 +14,7 @@ import { describe, expect, expectTypeOf, test } from "vitest";
 import * as Api from "./Api";
 import * as Function from "./Function";
 import * as Group from "./Group";
+import type { TypesAreEquivalent } from "./test-helpers";
 
 // =============================================================================
 // Test Data
@@ -54,15 +55,6 @@ const postsGroup = Group.group("posts").pipe(
 );
 
 const emptyGroup = Group.group("empty");
-
-// =============================================================================
-// Type Testing Utility
-// =============================================================================
-
-type TypesAreEquivalent<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-    ? true
-    : false;
 
 // =============================================================================
 // Constructor Tests
@@ -278,44 +270,6 @@ describe("Pipeable Utilities", () => {
       expect(api.groups.users).toBe(usersGroup);
       expect(api.groups.posts).toBe(postsGroup);
       expect(api.groups.empty).toBe(emptyGroup);
-    });
-  });
-
-  describe("remove()", () => {
-    test("removes a group from an API", () => {
-      const original = Api.api("myApp").pipe(
-        Api.add(usersGroup),
-        Api.add(postsGroup),
-      );
-
-      const updated = original.pipe(Api.remove("posts"));
-
-      expect(updated.name).toBe("myApp");
-      expect(updated.groups.users).toBe(usersGroup);
-      expect(updated.groups).not.toHaveProperty("posts");
-      expect(Object.keys(updated.groups)).toHaveLength(1);
-    });
-
-    test("does not mutate original API", () => {
-      const original = Api.api("myApp").pipe(
-        Api.add(usersGroup),
-        Api.add(postsGroup),
-      );
-
-      original.pipe(Api.remove("posts"));
-
-      expect(Object.keys(original.groups)).toHaveLength(2);
-      expect(original.groups).toHaveProperty("posts");
-    });
-
-    test("handles removing the last group", () => {
-      const original = Api.api("myApp").pipe(
-        Api.add(usersGroup),
-      );
-
-      const updated = original.pipe(Api.remove("users"));
-
-      expect(Object.keys(updated.groups)).toHaveLength(0);
     });
   });
 

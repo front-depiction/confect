@@ -161,7 +161,7 @@ export const group = <Name extends string>(
   [GroupTypeId]: GroupTypeId,
   name,
   functions: {},
-  pipe(this: ConfectApiGroup<Name, {}>) {
+  pipe() {
     return pipeArguments(this, arguments);
   },
 });
@@ -307,13 +307,13 @@ export const add: <K extends string, Fn extends Function.ConfectApiFunction>(
  * )
  * // userGroup has fetchUser instead of getUser
  */
-export const rename = <K1 extends string, OldKey extends K1, NewKey extends string>(
+export const rename = <Functions extends Record<string, Function.ConfectApiFunction>, OldKey extends keyof Functions, NewKey extends string>(
   oldKey: OldKey,
   newKey: NewKey,
 ) =>
-  <Name extends string, Functions extends Record<K1, Function.ConfectApiFunction>>(
+  <Name extends string>(
     group: ConfectApiGroup<Name, Functions>,
-  ): ConfectApiGroup<Name, RenameKey<Functions, OldKey, NewKey>> => {
+  ): ConfectApiGroup<Name, RenameKey<Functions, Extract<OldKey, keyof Functions>, NewKey>> => {
     const newFunctions = Record.mapKeys(group.functions, (key) =>
       equals(key, oldKey) ? newKey : key,
     );
