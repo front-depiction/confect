@@ -1,3 +1,4 @@
+/* eslint-disable prefer-rest-params */
 /**
  * @module internal/Api
  *
@@ -375,25 +376,25 @@ export const add = <
 >(
   group: Group.ConfectApiGroup<GroupName, GroupFunctions, GE, GR>,
 ) =>
-<
-  Name extends string,
-  Groups extends Record<string, AnyConfectApiGroup>,
-  E,
-  R,
->(
-  api: ConfectApi<Name, Groups, E, R>,
-): ConfectApi<Name, Groups & Record<GroupName, typeof group>, E | GE, R | GR> => {
-  const newGroups = { ...api.groups, [group.name]: group } as Groups & Record<GroupName, typeof group>;
+  <
+    Name extends string,
+    Groups extends Record<string, AnyConfectApiGroup>,
+    E,
+    R,
+  >(
+    api: ConfectApi<Name, Groups, E, R>,
+  ): ConfectApi<Name, Groups & Record<GroupName, typeof group>, E | GE, R | GR> => {
+    const newGroups = { ...api.groups, [group.name]: group } as Groups & Record<GroupName, typeof group>;
 
-  return {
-    [ApiTypeId]: apiVariance,
-    name: api.name,
-    groups: newGroups,
-    pipe(this: ConfectApi<Name, Groups & Record<GroupName, typeof group>, E | GE, R | GR>) {
-      return pipeArguments(this, arguments);
-    },
+    return {
+      [ApiTypeId]: apiVariance,
+      name: api.name,
+      groups: newGroups,
+      pipe(this: ConfectApi<Name, Groups & Record<GroupName, typeof group>, E | GE, R | GR>) {
+        return pipeArguments(this, arguments);
+      },
+    };
   };
-};
 
 /**
  * Remove a group from an API (pipeable).
@@ -420,28 +421,28 @@ export const add = <
 export const remove = <K extends string>(
   groupName: K,
 ) =>
-<
-  Name extends string,
-  Groups extends Record<string, AnyConfectApiGroup>,
-  E,
-  R,
->(
-  api: ConfectApi<Name, Groups, E, R>,
-): ConfectApi<Name, Omit<Groups, K>, E, R> => {
-  const newGroups = Record.filter(
-    api.groups,
-    (_, key) => !equals(key, groupName),
-  );
+  <
+    Name extends string,
+    Groups extends Record<string, AnyConfectApiGroup>,
+    E,
+    R,
+  >(
+    api: ConfectApi<Name, Groups, E, R>,
+  ): ConfectApi<Name, Omit<Groups, K>, E, R> => {
+    const newGroups = Record.filter(
+      api.groups,
+      (_, key) => !equals(key, groupName),
+    );
 
-  return {
-    [ApiTypeId]: apiVariance,
-    name: api.name,
-    groups: newGroups as Omit<Groups, K>,
-    pipe(this: ConfectApi<Name, Omit<Groups, K>, E, R>) {
-      return pipeArguments(this, arguments);
-    },
+    return {
+      [ApiTypeId]: apiVariance,
+      name: api.name,
+      groups: newGroups as Omit<Groups, K>,
+      pipe(this: ConfectApi<Name, Omit<Groups, K>, E, R>) {
+        return pipeArguments(this, arguments);
+      },
+    };
   };
-};
 
 /**
  * Merge another API's groups into this API (pipeable).
@@ -477,24 +478,24 @@ export const merge = <
 >(
   other: ConfectApi<Name2, Groups2, E2, R2>,
 ) =>
-<
-  Name extends string,
-  Groups extends Record<string, AnyConfectApiGroup>,
-  E,
-  R,
->(
-  api: ConfectApi<Name, Groups, E, R>,
-): ConfectApi<Name, Groups & Groups2, E | E2, R | R2> => {
-  const newGroups = Record.union(api.groups, other.groups, SK);
-  return {
-    [ApiTypeId]: apiVariance,
-    name: api.name,
-    groups: newGroups as Groups & Groups2,
-    pipe(this: ConfectApi<Name, Groups & Groups2, E | E2, R | R2>) {
-      return pipeArguments(this, arguments);
-    },
+  <
+    Name extends string,
+    Groups extends Record<string, AnyConfectApiGroup>,
+    E,
+    R,
+  >(
+    api: ConfectApi<Name, Groups, E, R>,
+  ): ConfectApi<Name, Groups & Groups2, E | E2, R | R2> => {
+    const newGroups = Record.union(api.groups, other.groups, SK);
+    return {
+      [ApiTypeId]: apiVariance,
+      name: api.name,
+      groups: newGroups as Groups & Groups2,
+      pipe(this: ConfectApi<Name, Groups & Groups2, E | E2, R | R2>) {
+        return pipeArguments(this, arguments);
+      },
+    };
   };
-};
 
 // =============================================================================
 // Order Utilities

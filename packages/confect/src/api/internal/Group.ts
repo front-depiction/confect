@@ -1,3 +1,4 @@
+/* eslint-disable prefer-rest-params */
 /**
  * @module internal/Group
  *
@@ -68,27 +69,34 @@ export type GroupTypeId = typeof GroupTypeId;
 // =============================================================================
 
 /**
- * @category Models
- * @since 1.0.0
+ * Helper type to ensure MergeRight result satisfies Record constraint.
+ * TypeScript cannot prove that MergeRight<A, B> extends Record<string, T>
+ * even when A and B both extend Record<string, T>, so we use this helper.
+ *
+ * @internal
  */
-export declare namespace ConfectApiGroup {
-  /**
-   * @category Models
-   * @since 1.0.0
-   */
-  export interface Variance<Name, Functions, E, R> {
-    readonly _name: Types.Covariant<Name>;
-    readonly _functions: Types.Covariant<Functions>;
-    readonly _e: Types.Invariant<E>;
-    readonly _r: Types.Covariant<R>;
-  }
-}
+type MergedFunctions<
+  A extends Record<string, Function.ConfectApiFunction>,
+  B extends Record<string, Function.ConfectApiFunction>,
+> = Types.MergeRight<A, B> extends Record<string, Function.ConfectApiFunction> ? Types.MergeRight<A, B> : never;
+
+/**
+ * Helper type to rename a key of a Function record.
+ * @internal
+ */
+type RenameKey<
+  A extends Record<string, Function.ConfectApiFunction>,
+  K1 extends keyof A,
+  K2 extends string,
+> = MergedFunctions<Omit<A, K1>, Record<K2, A[K1]>>
+
+
 
 /**
  * API Group - collection of related functions.
  *
- * Groups organize API functions into logical namespaces.
- * They provide a way to structure large APIs and generate organized Convex exports.
+ * Groups are simple namespaced containers for functions.
+ * They don't propagate E/R - that's handled at the function level.
  *
  * @category Types
  * @since 1.0.0
@@ -96,34 +104,20 @@ export declare namespace ConfectApiGroup {
 export interface ConfectApiGroup<
   out Name extends string,
   out Functions extends Record<string, Function.ConfectApiFunction>,
-  in out E = never,
-  out R = never,
 > extends Pipeable {
-  readonly [GroupTypeId]: ConfectApiGroup.Variance<Name, Functions, E, R>;
+  readonly [GroupTypeId]: GroupTypeId;
   readonly name: Name;
   readonly functions: Functions;
 }
 
 // =============================================================================
-// Constructors (using satisfies pattern)
+// Constructors
 // =============================================================================
-
-/**
- * Variance marker object for runtime representation (zero runtime cost).
- *
- * @internal
- */
-const groupVariance: any = {
-  _name: (_: never) => _,
-  _functions: (_: never) => _,
-  _e: (_: never) => _,
-  _r: (_: never) => _,
-};
 
 /**
  * Create an empty group with the given name.
  *
- * Groups organize API functions into logical namespaces.
+ * Groups are simple namespaced containers for functions.
  * Use `.pipe()` with `Group.add()` to add functions.
  *
  * @param name - Group name (preserved as literal type)
@@ -163,11 +157,11 @@ const groupVariance: any = {
  */
 export const group = <Name extends string>(
   name: Name,
-): ConfectApiGroup<Name, {}, never, never> => ({
-  [GroupTypeId]: groupVariance,
+): ConfectApiGroup<Name, {}> => ({
+  [GroupTypeId]: GroupTypeId,
   name,
   functions: {},
-  pipe(this: ConfectApiGroup<Name, {}, never, never>) {
+  pipe(this: ConfectApiGroup<Name, {}>) {
     return pipeArguments(this, arguments);
   },
 });
@@ -194,9 +188,7 @@ export const group = <Name extends string>(
  *   console.log(Object.keys(value.functions))
  * }
  */
-export const isGroup = (
-  u: unknown,
-): u is ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, never> =>
+export const isGroup = (u: unknown): u is ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>> =>
   Predicate.hasProperty(u, GroupTypeId);
 
 // =============================================================================
@@ -213,7 +205,7 @@ export const isGroup = (
  * const userGroup = Group.group("users").functions({ ... })
  * type Name = Group.GetName<typeof userGroup>  // "users"
  */
-export type GetName<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, never>> =
+export type GetName<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>> =
   G["name"];
 
 /**
@@ -226,7 +218,7 @@ export type GetName<G extends ConfectApiGroup<string, Record<string, Function.Co
  * const userGroup = Group.group("users").functions(fns)
  * type Fns = Group.GetFunctions<typeof userGroup>  // typeof fns
  */
-export type GetFunctions<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, never>> =
+export type GetFunctions<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>> =
   G["functions"];
 
 /**
@@ -243,35 +235,8 @@ export type GetFunctions<G extends ConfectApiGroup<string, Record<string, Functi
  * type Names = Group.GetFunctionNames<typeof userGroup>
  * // "getUser" | "createUser"
  */
-export type GetFunctionNames<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, never>> =
+export type GetFunctionNames<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>> =
   keyof GetFunctions<G>;
-
-/**
- * Extract the error type from a group.
- *
- * @category Type Utilities
- * @since 1.0.0
- *
- * @example
- * const userGroup = Group.group("users").functions({ ... })
- * type Errors = Group.GetError<typeof userGroup>  // never (by default)
- */
-export type GetError<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, any, never>> =
-  G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, infer E, never> ? E : never;
-
-/**
- * Extract the context requirements from a group.
- *
- * @category Type Utilities
- * @since 1.0.0
- *
- * @example
- * const userGroup = Group.group("users").functions({ ... })
- * type Context = Group.GetContext<typeof userGroup>  // never (by default)
- */
-export type GetContext<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, any>> =
-  G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, infer R> ? R : never;
-
 // =============================================================================
 // Pipeable Utilities
 // =============================================================================
@@ -298,31 +263,27 @@ export type GetContext<G extends ConfectApiGroup<string, Record<string, Function
  *   Group.add("createUser", createUserFn)
  * )
  */
-export const add = <
-  K extends string,
-  Fn extends Function.ConfectApiFunction,
->(
+export const add: <K extends string, Fn extends Function.ConfectApiFunction>(
   key: K,
   fn: Fn,
-) =>
-<
-  Name extends string,
-  Functions extends Record<string, Function.ConfectApiFunction>,
-  E,
-  R,
->(
-  group: ConfectApiGroup<Name, Functions, E, R>,
-): ConfectApiGroup<Name, Functions & Record<K, Fn>, E, R> => {
-  const newFunctions = Record.set(group.functions, key, fn);
-  return {
-    [GroupTypeId]: groupVariance,
-    name: group.name,
-    functions: newFunctions as Functions & Record<K, Fn>,
-    pipe(this: ConfectApiGroup<Name, Functions & Record<K, Fn>, E, R>) {
-      return pipeArguments(this, arguments);
-    },
-  };
-};
+) => <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>>(
+  group: ConfectApiGroup<Name, Functions>,
+) => ConfectApiGroup<Name, MergedFunctions<Functions, Record<K, Fn>>> =
+  (key, fn) =>
+    (group) => {
+      const newFunctions = Record.set(group.functions, key, fn);
+      return {
+        [GroupTypeId]: GroupTypeId,
+        name: group.name,
+        functions: newFunctions as MergedFunctions<
+          typeof group.functions,
+          Record<typeof key, typeof fn>
+        >,
+        pipe() {
+          return pipeArguments(this, arguments);
+        },
+      } as any;
+    };
 
 /**
  * Rename a function in a group (pipeable).
@@ -346,30 +307,25 @@ export const add = <
  * )
  * // userGroup has fetchUser instead of getUser
  */
-export const rename = <OldKey extends string, NewKey extends string>(
+export const rename = <K1 extends string, OldKey extends K1, NewKey extends string>(
   oldKey: OldKey,
   newKey: NewKey,
 ) =>
-<
-  Name extends string,
-  Functions extends Record<string, Function.ConfectApiFunction>,
-  E,
-  R,
->(
-  group: ConfectApiGroup<Name, Functions, E, R>,
-): ConfectApiGroup<Name, Record<string, Function.ConfectApiFunction>, E, R> => {
-  const newFunctions = Record.mapKeys(group.functions, (key) =>
-    equals(key, oldKey) ? newKey : key,
-  );
-  return {
-    [GroupTypeId]: groupVariance,
-    name: group.name,
-    functions: newFunctions,
-    pipe(this: ConfectApiGroup<Name, Record<string, Function.ConfectApiFunction>, E, R>) {
-      return pipeArguments(this, arguments);
-    },
+  <Name extends string, Functions extends Record<K1, Function.ConfectApiFunction>>(
+    group: ConfectApiGroup<Name, Functions>,
+  ): ConfectApiGroup<Name, RenameKey<Functions, OldKey, NewKey>> => {
+    const newFunctions = Record.mapKeys(group.functions, (key) =>
+      equals(key, oldKey) ? newKey : key,
+    );
+    return {
+      [GroupTypeId]: GroupTypeId,
+      name: group.name,
+      functions: newFunctions as never,
+      pipe() {
+        return pipeArguments(this, arguments);
+      },
+    };
   };
-};
 
 /**
  * Merge another group's functions into this group (pipeable).
@@ -393,39 +349,29 @@ export const rename = <OldKey extends string, NewKey extends string>(
  * const merged = group1.pipe(Group.merge(group2))
  * // merged has both getUser and createUser
  */
-export const merge = <
+export const merge: <
   Name2 extends string,
   Functions2 extends Record<string, Function.ConfectApiFunction>,
-  E2,
-  R2,
 >(
-  other: ConfectApiGroup<Name2, Functions2, E2, R2>,
-) =>
-<
-  Name extends string,
-  Functions extends Record<string, Function.ConfectApiFunction>,
-  E,
-  R,
->(
-  group: ConfectApiGroup<Name, Functions, E, R>,
-): ConfectApiGroup<
-  Name,
-  Functions & Functions2,
-  E | E2,
-  R | R2
-> => {
-  const newFunctions = Record.union(group.functions, other.functions, SK);
-  return {
-    [GroupTypeId]: groupVariance,
-    name: group.name,
-    functions: newFunctions as Functions & Functions2,
-    pipe(
-      this: ConfectApiGroup<Name, Functions & Functions2, E | E2, R | R2>,
-    ) {
-      return pipeArguments(this, arguments);
-    },
-  };
-};
+  other: ConfectApiGroup<Name2, Functions2>,
+) => <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>>(
+  group: ConfectApiGroup<Name, Functions>,
+) => ConfectApiGroup<Name, MergedFunctions<Functions, Functions2>> =
+  (other) =>
+    (group) => {
+      const newFunctions = Record.union(group.functions, other.functions, SK);
+      return {
+        [GroupTypeId]: GroupTypeId,
+        name: group.name,
+        functions: newFunctions as MergedFunctions<
+          typeof group.functions,
+          typeof other.functions
+        >,
+        pipe() {
+          return pipeArguments(this, arguments);
+        },
+      } as any;
+    };
 
 // =============================================================================
 // Order Utilities
@@ -445,8 +391,8 @@ export const merge = <
  * // [adminGroup, publicGroup, userGroup]
  */
 export const byName: Order.Order<
-  ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, never>
-> = Order.mapInput(String.Order, (group: ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, never>) => group.name);
+  ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
+> = Order.mapInput(String.Order, (group: ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>) => group.name);
 
 // =============================================================================
 // Convex Integration
@@ -486,7 +432,7 @@ export const byName: Order.Order<
  * // }
  */
 export const toConvexGroup = <
-  G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>, never, never>,
+  G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>,
   Args extends DefaultFunctionArgs,
   Returns
 >(
