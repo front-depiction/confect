@@ -299,9 +299,8 @@ const makeQueryProto = <
 }): ConfectApiQueryFunction<Name, Args, Returns> => {
   return Object.assign(Object.create(QueryProto), {
     [QueryFunctionTypeId]: QueryFunctionTypeId,
-    functionType: "Query" as const,
-    ...options,
-  });
+    functionType: "Query"
+  }, options);
 };
 
 /**
@@ -319,9 +318,8 @@ const makeMutationProto = <
 }): ConfectApiMutationFunction<Name, Args, Returns> => {
   return Object.assign(Object.create(MutationProto), {
     [MutationFunctionTypeId]: MutationFunctionTypeId,
-    functionType: "Mutation" as const,
-    ...options,
-  });
+    functionType: "Mutation"
+  }, options);
 };
 
 /**
@@ -378,8 +376,7 @@ export const query = <Name extends string>(name: Name) => ({
   args: <Args extends Schema.Schema.AnyNoContext>(args: Args) => ({
     returns: <Returns extends Schema.Schema.AnyNoContext>(
       returns: Returns,
-    ): ConfectApiQueryFunction<Name, Args, Returns> =>
-      makeQueryProto({ name, args, returns }),
+    ): ConfectApiQueryFunction<Name, Args, Returns> => makeQueryProto({ name, args, returns }),
   }),
 });
 
@@ -417,8 +414,7 @@ export const mutation = <Name extends string>(name: Name) => ({
   args: <Args extends Schema.Schema.AnyNoContext>(args: Args) => ({
     returns: <Returns extends Schema.Schema.AnyNoContext>(
       returns: Returns,
-    ): ConfectApiMutationFunction<Name, Args, Returns> =>
-      makeMutationProto({ name, args, returns }),
+    ): ConfectApiMutationFunction<Name, Args, Returns> => makeMutationProto({ name, args, returns }),
   }),
 });
 
@@ -453,8 +449,7 @@ export const action = <Name extends string>(name: Name) => ({
   args: <Args extends Schema.Schema.AnyNoContext>(args: Args) => ({
     returns: <Returns extends Schema.Schema.AnyNoContext>(
       returns: Returns,
-    ): ConfectApiActionFunction<Name, Args, Returns> =>
-      makeActionProto({ name, args, returns }),
+    ): ConfectApiActionFunction<Name, Args, Returns> => makeActionProto({ name, args, returns }),
   }),
 });
 
@@ -697,9 +692,9 @@ export const toConvexFunction = <Fn extends ConfectApiFunction, Validator>(
     schema: S,
   ) => Validator, // Convex Validator type
 ):
-  | RegisteredQuery<"public", any, any>
-  | RegisteredMutation<"public", any, any>
-  | RegisteredAction<"public", any, any> => {
+  | RegisteredQuery<"public", {}, {}>
+  | RegisteredMutation<"public", {}, {}>
+  | RegisteredAction<"public", {}, {}> => {
   // Convex registered functions have this structure
   // Using 'any' for args/returns as this is an API boundary between our types and Convex's
   return {

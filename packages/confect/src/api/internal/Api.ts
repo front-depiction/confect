@@ -43,7 +43,10 @@
  * @since 1.0.0
  */
 
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
 import { SK } from "effect/Function";
+import * as Layer from "effect/Layer";
 import * as Order from "effect/Order";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import * as Predicate from "effect/Predicate";
@@ -544,6 +547,73 @@ export const getFunction = <
   if (!group) return undefined;
   return group.functions[functionName];
 };
+
+// =============================================================================
+// Layer Building (Dependency Management)
+// =============================================================================
+
+/**
+ * Service tag for an API.
+ *
+ * Follows Effect HTTP pattern: captures API definition + runtime context.
+ * The service value contains the API definition and runtime context.
+ *
+ * @category Layer Building
+ * @since 1.0.0
+ */
+export class ApiService extends Context.Tag("@confect/ApiService")<
+  ApiService,
+  {
+    readonly api: ConfectApi<string, Record<string, AnyConfectApiGroup>, any>
+    readonly context: Context.Context<never>
+  }
+>() {}
+
+/**
+ * Type helper: Extract union of all GroupService tags from API groups.
+ *
+ * @internal
+ */
+type UnionOfGroupServices<Groups extends Record<string, AnyConfectApiGroup>> = {
+  [K in keyof Groups]: Group.GroupService<Group.GetName<Groups[K]>>
+}[keyof Groups];
+
+/**
+ * Create a top-level Api Layer.
+ *
+ * Follows Effect HTTP's HttpApiBuilder.api() pattern.
+ * Returns Layer that requires all GroupServices and provides ApiService.
+ *
+ * @param api - API definition
+ * @returns Layer that requires all group services
+ *
+ * @category Layer Building
+ * @since 1.0.0
+ *
+ * @example
+ * const MyApiLive = Api.build(myApi).pipe(
+ *   Layer.provide(UsersLive),  // Provides GroupService<"users">
+ *   Layer.provide(FilesLive)   // Provides GroupService<"files">
+ * );
+ */
+export const build = <
+  Name extends string,
+  Groups extends Record<string, AnyConfectApiGroup>,
+  R
+>(
+  api: ConfectApi<Name, Groups, R>
+): Layer.Layer<
+  ApiService,
+  never,
+  UnionOfGroupServices<Groups>
+> =>
+  Layer.effect(
+    ApiService,
+    Effect.map(Effect.context<UnionOfGroupServices<Groups>>(), (context) => ({
+      api: api as any,
+      context: context as Context.Context<never>
+    }))
+  );
 
 // =============================================================================
 // Convex Integration

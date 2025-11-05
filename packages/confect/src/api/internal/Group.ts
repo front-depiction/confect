@@ -38,12 +38,16 @@ import type {
   RegisteredMutation,
   RegisteredQuery,
 } from "convex/server";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
 import { equals } from "effect/Equal";
-import { SK } from "effect/Function";
+import { SK, dual } from "effect/Function";
+import * as Layer from "effect/Layer";
 import * as Order from "effect/Order";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import * as Predicate from "effect/Predicate";
 import * as Record from "effect/Record";
+import type * as Scope from "effect/Scope";
 import * as String from "effect/String";
 import * as Types from "effect/Types";
 import type * as Function from "./Function";
@@ -196,7 +200,7 @@ export const isGroup = (u: unknown): u is ConfectApiGroup<string, Record<string,
 // =============================================================================
 
 /**
- * Extract the group name as a literal type.
+ * Extract group name
  *
  * @category Type Utilities
  * @since 1.0.0
@@ -205,11 +209,11 @@ export const isGroup = (u: unknown): u is ConfectApiGroup<string, Record<string,
  * const userGroup = Group.group("users").functions({ ... })
  * type Name = Group.GetName<typeof userGroup>  // "users"
  */
-export type GetName<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>> =
-  G["name"];
+export type GetName<G extends ConfectApiGroup<any, any>> =
+  G extends ConfectApiGroup<infer Name, any> ? Name : never;
 
 /**
- * Extract the functions record.
+ * Extract functions record
  *
  * @category Type Utilities
  * @since 1.0.0
@@ -218,11 +222,11 @@ export type GetName<G extends ConfectApiGroup<string, Record<string, Function.Co
  * const userGroup = Group.group("users").functions(fns)
  * type Fns = Group.GetFunctions<typeof userGroup>  // typeof fns
  */
-export type GetFunctions<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>> =
-  G["functions"];
+export type GetFunctions<G extends ConfectApiGroup<any, any>> =
+  G extends ConfectApiGroup<any, infer Functions> ? Functions : never;
 
 /**
- * Extract function names as a union of literal types.
+ * Extract function names (keys)
  *
  * @category Type Utilities
  * @since 1.0.0
@@ -235,8 +239,24 @@ export type GetFunctions<G extends ConfectApiGroup<string, Record<string, Functi
  * type Names = Group.GetFunctionNames<typeof userGroup>
  * // "getUser" | "createUser"
  */
-export type GetFunctionNames<G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>> =
+export type GetFunctionNames<G extends ConfectApiGroup<any, any>> =
   keyof GetFunctions<G>;
+
+/**
+ * Type helper: Extract handlers interface from group
+ *
+ * @category Type Utilities
+ * @since 1.0.0
+ */
+export type HandlersFor<G extends ConfectApiGroup<any, any>> = {
+  [K in GetFunctionNames<G>]: (
+    args: Function.GetArgsType<GetFunctions<G>[K]>
+  ) => Effect.Effect<
+    Function.GetReturnsType<GetFunctions<G>[K]>,
+    any,   // E is open
+    never  // R must be never (handlers close over deps)
+  >
+}
 // =============================================================================
 // Pipeable Utilities
 // =============================================================================
@@ -275,10 +295,7 @@ export const add: <K extends string, Fn extends Function.ConfectApiFunction>(
       return {
         [GroupTypeId]: GroupTypeId,
         name: group.name,
-        functions: newFunctions as MergedFunctions<
-          typeof group.functions,
-          Record<typeof key, typeof fn>
-        >,
+        functions: newFunctions,
         pipe() {
           return pipeArguments(this, arguments);
         },
@@ -363,10 +380,7 @@ export const merge: <
       return {
         [GroupTypeId]: GroupTypeId,
         name: group.name,
-        functions: newFunctions as MergedFunctions<
-          typeof group.functions,
-          typeof other.functions
-        >,
+        functions: newFunctions,
         pipe() {
           return pipeArguments(this, arguments);
         },
@@ -393,6 +407,97 @@ export const merge: <
 export const byName: Order.Order<
   ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
 > = Order.mapInput(String.Order, (group: ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>) => group.name);
+
+// =============================================================================
+// Layer Building (Dependency Management)
+// =============================================================================
+
+/**
+ * Service tag for a group's handler implementations.
+ * The service value is the handlers object.
+ *
+ * Each group gets its own unique tag based on the group name.
+ *
+ * @category Layer Building
+ * @since 1.0.0
+ */
+export interface GroupService<Name extends string> extends Context.Tag<GroupService<Name>, HandlersFor<ConfectApiGroup<Name, any>>> { }
+
+/**
+ * Create a GroupService tag for a specific group name.
+ *
+ * @internal
+ */
+const makeGroupServiceTag = <Name extends string>(name: Name): GroupService<Name> =>
+  Context.GenericTag<GroupService<Name>, HandlersFor<ConfectApiGroup<Name, any>>>(`@confect/GroupService/${name}`);
+
+/**
+ * Build a Layer from an Effect that returns handlers.
+ *
+ * Thin wrapper around Layer.effect(GroupService(group), effect).
+ * The handler Effect can have requirements (R), which become the Layer's requirements.
+ * Handler functions themselves must have R = never (they close over dependencies).
+ *
+ * @category Layer Building
+ * @since 1.0.0
+ */
+export const build: {
+  <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>>(
+    group: ConfectApiGroup<Name, Functions>
+  ): <E, R>(
+    effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
+  ) => Layer.Layer<GroupService<Name>, E, R>
+
+  <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>, E, R>(
+    group: ConfectApiGroup<Name, Functions>,
+    effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
+  ): Layer.Layer<GroupService<Name>, E, R>
+} = dual(2, (group: any, effect: any) => Layer.effect(makeGroupServiceTag(group.name), effect));
+
+/**
+ * Build a Layer from a scoped Effect.
+ *
+ * Thin wrapper around Layer.scoped(GroupService(group), effect).
+ * Use this when handlers need resources that require cleanup.
+ *
+ * @category Layer Building
+ * @since 1.0.0
+ */
+export const buildScoped: {
+  <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>>(
+    group: ConfectApiGroup<Name, Functions>
+  ): <E, R>(
+    effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
+  ) => Layer.Layer<GroupService<Name>, E, Exclude<R, Scope.Scope>>
+
+  <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>, E, R>(
+    group: ConfectApiGroup<Name, Functions>,
+    effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
+  ): Layer.Layer<GroupService<Name>, E, Exclude<R, Scope.Scope>>
+} = dual(2, (group, effect) => Layer.scoped(makeGroupServiceTag(group.name), effect))
+
+
+/**
+ * Create a mock Layer with partial implementation.
+ *
+ * Thin wrapper around Layer.mock(GroupService(group), handlers).
+ * Unimplemented handlers throw UnimplementedError when called.
+ *
+ * @category Layer Building
+ * @since 1.0.0
+ */
+export const buildMock: {
+  <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>>(
+    group: ConfectApiGroup<Name, Functions>
+  ): (
+    handlers: Partial<HandlersFor<ConfectApiGroup<Name, Functions>>>
+  ) => Layer.Layer<GroupService<Name>>
+
+  <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>>(
+    group: ConfectApiGroup<Name, Functions>,
+    handlers: Partial<HandlersFor<ConfectApiGroup<Name, Functions>>>
+  ): Layer.Layer<GroupService<Name>>
+} = dual(2, (group: any, handlers: any) => Layer.mock(makeGroupServiceTag(group.name), handlers));
 
 // =============================================================================
 // Convex Integration

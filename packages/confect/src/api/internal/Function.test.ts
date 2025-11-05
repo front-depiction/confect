@@ -325,7 +325,7 @@ describe("Function Refinements", () => {
   const functions: Function.ConfectApiFunction[] = [queryFn, mutationFn, actionFn];
 
   test("QueryRefinement filters to queries", () => {
-    const queries = functions.filter(Function.QueryRefinement);
+    const queries = functions.filter(Function.isQuery);
     expect(queries).toHaveLength(1);
     expect(queries[0]).toBe(queryFn);
 
@@ -339,7 +339,7 @@ describe("Function Refinements", () => {
   });
 
   test("MutationRefinement filters to mutations", () => {
-    const mutations = functions.filter(Function.MutationRefinement);
+    const mutations = functions.filter(Function.isMutation);
     expect(mutations).toHaveLength(1);
     expect(mutations[0]).toBe(mutationFn);
 
@@ -353,7 +353,7 @@ describe("Function Refinements", () => {
   });
 
   test("ActionRefinement filters to actions", () => {
-    const actions = functions.filter(Function.ActionRefinement);
+    const actions = functions.filter(Function.isAction);
     expect(actions).toHaveLength(1);
     expect(actions[0]).toBe(actionFn);
 
@@ -409,17 +409,15 @@ describe("Type Extraction Utilities", () => {
   describe("GetArgsType", () => {
     test("extracts decoded args type", () => {
       type ArgsType = Function.GetArgsType<typeof testFn>;
-      expectTypeOf<ArgsType>().toEqualTypeOf<{
-        id: string;
-        count: number;
-      }>();
+      expectTypeOf<ArgsType["id"]>().toEqualTypeOf<string>()
+      expectTypeOf<ArgsType["count"]>().toEqualTypeOf<number>()
       expectTypeOf<
         TypesAreEquivalent<ArgsType, { id: string; count: number }>
       >().toEqualTypeOf<true>();
     });
   });
 
-  describe("GetArgsEncoded", () => {
+  describe("", () => {
     test("extracts encoded args type", () => {
       type ArgsEncoded = Function.GetArgsEncoded<typeof testFn>;
       expectTypeOf<ArgsEncoded>().toEqualTypeOf<{
@@ -432,10 +430,8 @@ describe("Type Extraction Utilities", () => {
   describe("GetReturnsType", () => {
     test("extracts decoded returns type", () => {
       type ReturnsType = Function.GetReturnsType<typeof testFn>;
-      expectTypeOf<ReturnsType>().toEqualTypeOf<{
-        result: string;
-        timestamp: number;
-      }>();
+      expectTypeOf<ReturnsType["result"]>().toEqualTypeOf<string>()
+      expectTypeOf<ReturnsType["timestamp"]>().toEqualTypeOf<number>()
       expectTypeOf<
         TypesAreEquivalent<
           ReturnsType,
@@ -566,7 +562,7 @@ describe("Variance Behavior", () => {
     const fn = Function.query("test")
       .args(TestArgsSchema)
       .returns(TestReturnsSchema);
-
+    void fn
     // Args should be the exact schema, not just structurally similar
     expectTypeOf<typeof fn.args>().toEqualTypeOf<typeof TestArgsSchema>();
   });
