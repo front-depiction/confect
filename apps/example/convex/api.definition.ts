@@ -5,10 +5,10 @@
  * Following Effect HTTP's pattern: definitions are pure, handlers come later.
  */
 
-import * as Schema from "effect/Schema";
 import * as Api from "@rjdellecese/confect/api/internal/Api";
 import * as Function from "@rjdellecese/confect/api/internal/Function";
 import * as Group from "@rjdellecese/confect/api/internal/Group";
+import * as Schema from "effect/Schema";
 import { Id } from "./confect";
 import { confectSchema } from "./schema";
 
@@ -48,6 +48,7 @@ const listNotesQuery = Function.query("listNotes")
   .args(ListNotesArgs)
   .returns(ListNotesResult);
 
+
 const insertNoteMutation = Function.mutation("insertNote")
   .args(InsertNoteArgs)
   .returns(InsertNoteResult);
@@ -75,6 +76,7 @@ export const notesGroup = Group.group("notes").pipe(
   Group.add("getFirst", getFirstQuery),
   Group.add("getRandom", getRandomAction),
 );
+type foo = Function.GetArgs<typeof notesGroup.functions.insertNote>
 
 // =============================================================================
 // API Definition (Pure, R = never)

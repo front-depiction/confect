@@ -588,28 +588,7 @@ export const getFunction = <
 // Convex Runtime Services
 // =============================================================================
 
-/**
- * Union of all Convex-provided runtime services.
- * These services are automatically provided by Api.serve() and should not
- * be required as Layer dependencies.
- *
- * @internal
- */
-type ConvexRuntimeServices =
-  | ConfectQueryCtx
-  | ConfectMutationCtx
-  | ConfectActionCtx
-  | QueryDB
-  | MutationDB
-  | ConfectQueryRunner
-  | ConfectMutationRunner
-  | ConfectActionRunner
-  | ConfectAuth
-  | ConfectScheduler
-  | ConfectStorageReader
-  | ConfectStorageWriter
-  | ConfectStorageActionWriter
-  | ConfectVectorSearch;
+
 
 // =============================================================================
 // Layer Building (Dependency Management)
@@ -959,6 +938,11 @@ const makeActionFunction = <S extends GenericConfectSchema>(
     },
   });
 
+type ConfectBuildTimeServices = 
+    | QueryLayers
+    | MutationLayers
+    | ActionLayers
+
 /**
  * Convert a Layer-based API to Convex registered functions.
  *
@@ -1003,66 +987,44 @@ export const serve = <
   S extends GenericConfectSchema,
   Name extends string,
   Groups extends Record<string, AnyConfectApiGroup>,
-  R extends ConvexRuntimeServices = never
 >(
   schemaDefinition: ConfectSchemaDefinition<S>,
   api: ConfectApi<Name, Groups, any>,
-  apiLayer: Layer.Layer<ApiService, never, R>
-): ConvexApiServer<Groups> => {
-
-  // Build Convex functions for each group
-  const result: any = {};
-
-  for (const [groupName, group] of Object.entries(api.groups)) {
-    // Get GroupService tag for this group
-    const groupServiceTag = Group.getServiceTag(group);
-
-    // Build Convex functions for each function in the group
-    const groupFunctions: any = {};
-
-    for (const [functionName, func] of Object.entries(group.functions)) {
-      // Determine function type and wrap with appropriate Convex wrapper
-      // Pass apiLayer so handler extraction happens at runtime with Convex ctx
-      const registeredFunction = Match.value(func.functionType).pipe(
-        Match.when("Query", () =>
-          makeQueryFunction(
-            schemaDefinition,
-            func.args,
-            func.returns,
-            apiLayer as Layer.Layer<ApiService, never, QueryLayers>,
-            groupServiceTag,
-            functionName
-          )
-        ),
-        Match.when("Mutation", () =>
-          makeMutationFunction(
-            schemaDefinition,
-            func.args,
-            func.returns,
-            apiLayer as Layer.Layer<ApiService, never, MutationLayers>,
-            groupServiceTag,
-            functionName
-          )
-        ),
-        Match.when("Action", () =>
-          makeActionFunction(
-            schemaDefinition,
-            func.args,
-            func.returns,
-            apiLayer as Layer.Layer<ApiService, never, ActionLayers>,
-            groupServiceTag,
-            functionName
-          )
-        ),
-        Match.exhaustive
-      );
-
-      groupFunctions[functionName] = registeredFunction;
-    }
-
-    result[groupName] = groupFunctions;
-  }
-
-  return result as ConvexApiServer<Groups>;
-};
+  apiLayer: Layer.Layer<ApiService, never, ConfectBuildTimeServices>
+): ConvexApiServer<Groups> =>  Record.map(api.groups, (group) => 
+  Record.map(group.functions, (func, functionName) => 
+    Match.value(func.functionType).pipe(
+    Match.when("Query", () =>
+      makeQueryFunction(
+        schemaDefinition,
+        func.args,
+        func.returns,
+        apiLayer as never,
+        group,
+        functionName
+      )
+    ),
+    Match.when("Mutation", () =>
+      makeMutationFunction(
+        schemaDefinition,
+        func.args,
+        func.returns,
+        apiLayer as never,
+        group,
+        functionName
+      )     
+    ),
+    Match.when("Action", () =>
+      makeActionFunction(
+        schemaDefinition,
+        func.args,
+        func.returns,
+        apiLayer as never,
+        group,
+        functionName
+      )
+    ),
+    Match.exhaustive
+  ))
+) as never
 

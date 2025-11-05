@@ -34,6 +34,7 @@ import type {
   RegisteredMutation,
   RegisteredQuery,
 } from "convex/server";
+import * as Effect from "effect/Effect";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
@@ -657,6 +658,10 @@ export type GetReturnsEncoded<Fn extends ConfectApiFunction> =
  */
 export type GetFunctionType<Fn extends ConfectApiFunction> =
   Fn["functionType"];
+
+
+export type GetHandler<Fn extends ConfectApiFunction> = (args: GetArgsType<Fn>) => Effect.Effect<GetReturnsType<Fn>, any, never>
+
 
 // =============================================================================
 // Convex Conversion
