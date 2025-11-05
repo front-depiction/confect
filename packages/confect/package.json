@@ -19,26 +19,12 @@
     "LICENSE"
   ],
   "exports": {
-    "./server": {
-      "import": {
-        "types": "./dist/server/index.d.ts",
-        "import": "./dist/server/index.js"
-      },
-      "require": {
-        "types": "./dist/server/index.d.cts",
-        "require": "./dist/server/index.cjs"
-      }
-    },
-    "./react": {
-      "import": {
-        "types": "./dist/react/index.d.ts",
-        "import": "./dist/react/index.js"
-      },
-      "require": {
-        "types": "./dist/react/index.d.cts",
-        "require": "./dist/react/index.cjs"
-      }
-    }
+    "./package.json": "./package.json",
+    "./server": "./src/server/index.ts",
+    "./react": "./src/react/index.ts",
+    "./api/internal/Api": "./src/api/internal/Api.ts",
+    "./api/internal/Function": "./src/api/internal/Function.ts",
+    "./api/internal/Group": "./src/api/internal/Group.ts"
   },
   "scripts": {
     "build": "tsdown",

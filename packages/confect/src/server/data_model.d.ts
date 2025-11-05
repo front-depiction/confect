@@ -7,6 +7,7 @@ import type {
 } from "convex/server";
 import type { Schema } from "effect";
 import type { ReadonlyRecord } from "effect/Record";
+import { ConfectDataModelFromConfectSchemaDefinition, ConfectSchemaDefinition } from "./schema";
 import type { ReadonlyValue } from "./schema_to_validator";
 import type { WithSystemFields } from "./schemas/SystemFields";
 
@@ -39,7 +40,7 @@ export type DataModelFromConfectDataModel<
 
 export type TableNamesInConfectDataModel<
   ConfectDataModel extends GenericConfectDataModel,
-> = keyof ConfectDataModel & string;
+> = keyof ConfectDataModel;
 
 export type TableInfoFromConfectTableInfo<
   ConfectTableInfo extends GenericConfectTableInfo,

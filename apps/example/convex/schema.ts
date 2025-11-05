@@ -3,7 +3,7 @@ import {
   defineConfectTable,
   GenericId,
 } from "@rjdellecese/confect/server";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 type Tag = {
   readonly name: string;
@@ -28,7 +28,7 @@ export const confectSchema = defineConfectSchema({
         }),
       ),
       embedding: Schema.optional(Schema.Array(Schema.Number)),
-    }),
+    })
   )
     .index("by_text", ["text"])
     .index("by_role", ["author.role"])

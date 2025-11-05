@@ -729,3 +729,163 @@ describe("Documentation Examples", () => {
     >();
   });
 });
+
+// =============================================================================
+// Api.serve() - Convex Integration
+// =============================================================================
+
+describe("Api.serve() - Convert Layer-based API to Convex", () => {
+  test("serve converts API to Convex registered functions", () => {
+    // Define API
+    const MyApi = Api.api("TestApi").pipe(
+      Api.add(
+        Group.group("greetings").pipe(
+          Group.add(
+            "hello",
+            Function.query("hello")
+              .args(Schema.Struct({ name: Schema.String }))
+              .returns(Schema.String),
+          ),
+        ),
+      ),
+    );
+
+    // Implement handlers
+    const GreetingsLive = Group.build(
+      MyApi.groups.greetings,
+      Effect.succeed({
+        hello: (args) => Effect.succeed(`Hello, ${args.name}!`),
+      }),
+    );
+
+    // Build API Layer
+    const MyApiLive = Api.build(MyApi).pipe(Layer.provide(GreetingsLive));
+
+    // Mock schema definition for testing
+    const mockSchemaDefinition = {} as any;
+
+    // Convert to Convex functions
+    const convexApi = Api.serve(mockSchemaDefinition, MyApi, MyApiLive);
+
+    // Verify structure
+    expect(convexApi).toHaveProperty("greetings");
+    expect(convexApi.greetings).toHaveProperty("hello");
+
+    // The returned object should have the RegisteredQuery structure
+    // (we can't easily test the actual function without a Convex runtime)
+    expectTypeOf(convexApi).toMatchTypeOf<{
+      greetings: Record<string, any>;
+    }>();
+  });
+
+  test("serve handles multiple groups", () => {
+    // Define API with multiple groups
+    const MyApi = Api.api("MultiGroupApi").pipe(
+      Api.add(
+        Group.group("users").pipe(
+          Group.add(
+            "getUser",
+            Function.query("getUser")
+              .args(Schema.Struct({ id: Schema.String }))
+              .returns(Schema.Struct({ id: Schema.String, name: Schema.String })),
+          ),
+        ),
+      ),
+      Api.add(
+        Group.group("posts").pipe(
+          Group.add(
+            "getPost",
+            Function.query("getPost")
+              .args(Schema.Struct({ id: Schema.String }))
+              .returns(Schema.Struct({ id: Schema.String, title: Schema.String })),
+          ),
+        ),
+      ),
+    );
+
+    // Implement handlers
+    const UsersLive = Group.build(
+      MyApi.groups.users,
+      Effect.succeed({
+        getUser: (args) => Effect.succeed({ id: args.id, name: "Test User" }),
+      }),
+    );
+
+    const PostsLive = Group.build(
+      MyApi.groups.posts,
+      Effect.succeed({
+        getPost: (args) => Effect.succeed({ id: args.id, title: "Test Post" }),
+      }),
+    );
+
+    // Build API Layer
+    const MyApiLive = Api.build(MyApi).pipe(
+      Layer.provide(UsersLive),
+      Layer.provide(PostsLive),
+    );
+
+    // Mock schema definition
+    const mockSchemaDefinition = {} as any;
+
+    // Convert to Convex functions
+    const convexApi = Api.serve(mockSchemaDefinition, MyApi, MyApiLive);
+
+    // Verify both groups are present
+    expect(convexApi).toHaveProperty("users");
+    expect(convexApi).toHaveProperty("posts");
+    expect(convexApi.users).toHaveProperty("getUser");
+    expect(convexApi.posts).toHaveProperty("getPost");
+  });
+
+  test("serve handles different function types", () => {
+    // Define API with query, mutation, and action
+    const MyApi = Api.api("MixedApi").pipe(
+      Api.add(
+        Group.group("mixed").pipe(
+          Group.add(
+            "getItem",
+            Function.query("getItem")
+              .args(Schema.Struct({ id: Schema.String }))
+              .returns(Schema.String),
+          ),
+          Group.add(
+            "createItem",
+            Function.mutation("createItem")
+              .args(Schema.Struct({ name: Schema.String }))
+              .returns(Schema.String),
+          ),
+          Group.add(
+            "sendEmail",
+            Function.action("sendEmail")
+              .args(Schema.Struct({ to: Schema.String }))
+              .returns(Schema.Struct({})),
+          ),
+        ),
+      ),
+    );
+
+    // Implement handlers
+    const MixedLive = Group.build(
+      MyApi.groups.mixed,
+      Effect.succeed({
+        getItem: (args) => Effect.succeed(args.id),
+        createItem: (args) => Effect.succeed(args.name),
+        sendEmail: () => Effect.succeed({}),
+      }),
+    );
+
+    // Build API Layer
+    const MyApiLive = Api.build(MyApi).pipe(Layer.provide(MixedLive));
+
+    // Mock schema definition
+    const mockSchemaDefinition = {} as any;
+
+    // Convert to Convex functions
+    const convexApi = Api.serve(mockSchemaDefinition, MyApi, MyApiLive);
+
+    // Verify all function types are present
+    expect(convexApi.mixed).toHaveProperty("getItem");
+    expect(convexApi.mixed).toHaveProperty("createItem");
+    expect(convexApi.mixed).toHaveProperty("sendEmail");
+  });
+});

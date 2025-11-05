@@ -43,16 +43,52 @@
  * @since 1.0.0
  */
 
+import type {
+  DefaultFunctionArgs,
+  GenericActionCtx,
+  GenericMutationCtx,
+  GenericQueryCtx,
+  RegisteredAction,
+  RegisteredMutation,
+  RegisteredQuery,
+} from "convex/server";
+import { actionGeneric, mutationGeneric, queryGeneric } from "convex/server";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import { SK } from "effect/Function";
+import { pipe, SK } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import * as Predicate from "effect/Predicate";
 import * as Record from "effect/Record";
+import * as Schema from "effect/Schema";
 import * as String from "effect/String";
 import * as Types from "effect/Types";
+import { ConfectAuth } from "../../server/auth";
+import { layerActionCtx, layerMutationCtx, layerQueryCtx } from "../../server/convex_ctx";
+import { ConfectActionCtx, ConfectMutationCtx, ConfectQueryCtx } from "../../server/ctx";
+import { MutationDB, QueryDB } from "../../server/database";
+import {
+  ConfectActionRunner,
+  ConfectMutationRunner,
+  ConfectQueryRunner,
+} from "../../server/runners";
+import { ConfectScheduler } from "../../server/scheduler";
+import {
+  layerConfectSchemaDefinition,
+  type ConfectSchemaDefinition,
+  type DataModelFromConfectSchema,
+  type GenericConfectSchema,
+} from "../../server/schema";
+import { compileArgsSchema, compileReturnsSchema } from "../../server/schema_to_validator";
+import {
+  ConfectStorageActionWriter,
+  ConfectStorageReader,
+  ConfectStorageWriter,
+} from "../../server/storage";
+import { ConfectVectorSearch } from "../../server/vector_search";
 import * as Function from "./Function";
 import * as Group from "./Group";
 
@@ -106,7 +142,7 @@ type MergedGroups<
  *
  * APIs organize groups into a complete application API surface.
  * They provide a way to structure large applications and generate complete Convex exports.
- * Context requirements (R) are tracked and unioned across groups.
+ * Context requirements (R) are tracked at the Layer level, not in the API definition.
  *
  * @category Types
  * @since 1.0.0
@@ -114,7 +150,7 @@ type MergedGroups<
 export interface ConfectApi<
   out Name extends string,
   out Groups extends Record<string, AnyConfectApiGroup>,
-  out R = never,
+  out _R = never,
 > extends Pipeable {
   readonly [ApiTypeId]: ApiTypeId;
 
@@ -549,6 +585,33 @@ export const getFunction = <
 };
 
 // =============================================================================
+// Convex Runtime Services
+// =============================================================================
+
+/**
+ * Union of all Convex-provided runtime services.
+ * These services are automatically provided by Api.serve() and should not
+ * be required as Layer dependencies.
+ *
+ * @internal
+ */
+type ConvexRuntimeServices =
+  | ConfectQueryCtx
+  | ConfectMutationCtx
+  | ConfectActionCtx
+  | QueryDB
+  | MutationDB
+  | ConfectQueryRunner
+  | ConfectMutationRunner
+  | ConfectActionRunner
+  | ConfectAuth
+  | ConfectScheduler
+  | ConfectStorageReader
+  | ConfectStorageWriter
+  | ConfectStorageActionWriter
+  | ConfectVectorSearch;
+
+// =============================================================================
 // Layer Building (Dependency Management)
 // =============================================================================
 
@@ -567,7 +630,7 @@ export class ApiService extends Context.Tag("@confect/ApiService")<
     readonly api: ConfectApi<string, Record<string, AnyConfectApiGroup>, any>
     readonly context: Context.Context<never>
   }
->() {}
+>() { }
 
 /**
  * Type helper: Extract union of all GroupService tags from API groups.
@@ -577,6 +640,7 @@ export class ApiService extends Context.Tag("@confect/ApiService")<
 type UnionOfGroupServices<Groups extends Record<string, AnyConfectApiGroup>> = {
   [K in keyof Groups]: Group.GroupService<Group.GetName<Groups[K]>>
 }[keyof Groups];
+
 
 /**
  * Create a top-level Api Layer.
@@ -609,13 +673,396 @@ export const build = <
 > =>
   Layer.effect(
     ApiService,
-    Effect.map(Effect.context<UnionOfGroupServices<Groups>>(), (context) => ({
-      api: api as any,
-      context: context as Context.Context<never>
+    Effect.map(Effect.context(), (context) => ({
+      api: api,
+      context: context
     }))
-  );
+  )
 
 // =============================================================================
 // Convex Integration
 // =============================================================================
+
+/**
+ * Type helper: Extract ConvexApiServer type from API groups.
+ *
+ * Represents the nested object structure returned by Api.serve():
+ * { [groupName]: { [functionName]: RegisteredQuery | RegisteredMutation | RegisteredAction } }
+ *
+ * @internal
+ */
+type ConvexApiServer<Groups extends Record<string, AnyConfectApiGroup>> = {
+  [K in keyof Groups]: Record<
+    string,
+    | RegisteredQuery<"public", DefaultFunctionArgs, any>
+    | RegisteredMutation<"public", DefaultFunctionArgs, any>
+    | RegisteredAction<"public", DefaultFunctionArgs, any>
+  >
+};
+
+
+
+// =============================================================================
+// Runtime Layer Helpers
+// =============================================================================
+
+/**
+ * Type alias for query runtime services.
+ * @internal
+ */
+type QueryLayers =
+| ConfectQueryCtx
+| QueryDB
+| ConfectQueryRunner
+| ConfectAuth
+| ConfectStorageReader
+
+/**
+ * Helper to create merged layer for query runtime services.
+ * @internal
+ */
+const QueryLayers = <S extends GenericConfectSchema>() => Layer.mergeAll(
+  ConfectQueryCtx.TypedDefault<S>(),
+  QueryDB.TypedDefault<S>(),
+  ConfectQueryRunner.Default,
+  ConfectAuth.Default,
+  ConfectStorageReader.Default,
+)
+
+/**
+ * Create runtime layer for query functions (ctx-specific).
+ * @internal
+ */
+const makeQueryRuntimeLayer = <S extends GenericConfectSchema>(
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
+  ctx: GenericQueryCtx<DataModelFromConfectSchema<S>>
+) => Layer.merge(layerQueryCtx(ctx), layerConfectSchemaDefinition(confectSchemaDefinition))
+
+/**
+ * Type alias for mutation runtime services.
+ * @internal
+ */
+type MutationLayers =
+  | ConfectQueryCtx
+  | ConfectMutationCtx
+  | QueryDB
+  | MutationDB
+  | ConfectQueryRunner
+  | ConfectMutationRunner
+  | ConfectAuth
+  | ConfectScheduler
+  | ConfectStorageReader
+  | ConfectStorageWriter
+
+/**
+ * Helper to create merged layer for mutation runtime services.
+ * @internal
+ */
+const MutationLayers = <S extends GenericConfectSchema>() => Layer.mergeAll(
+  ConfectQueryCtx.TypedDefault<S>(),
+  ConfectMutationCtx.TypedDefault<S>(),
+  QueryDB.TypedDefault<S>(),
+  MutationDB.TypedDefault<S>(),
+  ConfectQueryRunner.TypedDefault<S>(),
+  ConfectMutationRunner.Default,
+  ConfectAuth.Default,
+  ConfectScheduler.Default,
+  ConfectStorageReader.Default,
+  ConfectStorageWriter.Default,
+)
+
+/**
+ * Create runtime layer for mutation functions (ctx-specific).
+ * @internal
+ */
+const makeMutationRuntimeLayer = <S extends GenericConfectSchema>(
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
+  ctx: GenericMutationCtx<DataModelFromConfectSchema<S>>
+) => Layer.merge(layerMutationCtx(ctx), layerConfectSchemaDefinition(confectSchemaDefinition))
+
+/**
+ * Type alias for action runtime services.
+ * @internal
+ */
+type ActionLayers =
+  | ConfectActionCtx
+  | ConfectQueryRunner
+  | ConfectMutationRunner
+  | ConfectActionRunner
+  | ConfectAuth
+  | ConfectScheduler
+  | ConfectStorageReader
+  | ConfectStorageWriter
+  | ConfectStorageActionWriter
+  | ConfectVectorSearch
+
+/**
+ * Helper to create merged layer for action runtime services.
+ * @internal
+ */
+const ActionLayers = <S extends GenericConfectSchema>() => Layer.mergeAll(
+  ConfectActionCtx.TypedDefault<S>(),
+  ConfectQueryRunner.TypedDefault<S>(),
+  ConfectMutationRunner.Default,
+  ConfectActionRunner.Default,
+  ConfectAuth.Default,
+  ConfectScheduler.Default,
+  ConfectStorageReader.Default,
+  ConfectStorageWriter.Default,
+  ConfectStorageActionWriter.Default,
+  ConfectVectorSearch.Default,
+)
+
+/**
+ * Create runtime layer for action functions (ctx-specific).
+ * @internal
+ */
+const makeActionRuntimeLayer = <S extends GenericConfectSchema>(
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
+  ctx: GenericActionCtx<DataModelFromConfectSchema<S>>
+) => Layer.merge(layerActionCtx(ctx), layerConfectSchemaDefinition(confectSchemaDefinition))
+
+/**
+ * Wrap a handler Effect with Convex query function wrapper.
+ * @internal
+ */
+const makeQueryFunction = <S extends GenericConfectSchema>(
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
+  args: Schema.Schema.AnyNoContext,
+  returns: Schema.Schema.AnyNoContext,
+  apiLayer: Layer.Layer<ApiService, never, QueryLayers>,
+  groupServiceTag: Group.GroupService<string>,
+  functionName: string
+): RegisteredQuery<"public", any, any> =>
+  queryGeneric({
+    args: compileArgsSchema(args),
+    returns: compileReturnsSchema(returns),
+    handler: async (ctx: GenericQueryCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
+      
+      const apiService = await ApiService.pipe(
+        Effect.provide(apiLayer),
+        Effect.provide(QueryLayers<S>()),
+        Effect.provide(makeQueryRuntimeLayer(confectSchemaDefinition, ctx)),     
+        Effect.runPromise
+      )
+
+      // Extract handler from context at runtime
+      const handlers = pipe(
+        Context.getOption(apiService.context, groupServiceTag),
+        Option.getOrThrow
+      );
+      const handler = handlers[functionName];
+
+      if (!handler) {
+        throw new Error(`Handler not found: ${functionName}`);
+      }
+
+      return pipe(
+        Schema.decode(args)(actualArgs),
+        Effect.orDie,
+        Effect.flatMap(handler),
+        Effect.flatMap(Schema.encodeUnknown(returns)),
+        Effect.runPromise
+      );
+    },
+  });
+
+/**
+ * Wrap a handler Effect with Convex mutation function wrapper.
+ * @internal
+ */
+const makeMutationFunction = <S extends GenericConfectSchema>(
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
+  args: Schema.Schema.AnyNoContext,
+  returns: Schema.Schema.AnyNoContext,
+  apiLayer: Layer.Layer<ApiService, never, MutationLayers>,
+  groupServiceTag: Group.GroupService<string>,
+  functionName: string
+): RegisteredMutation<"public", any, any> =>
+  mutationGeneric({
+    args: compileArgsSchema(args),
+    returns: compileReturnsSchema(returns),
+    handler: async (ctx: GenericMutationCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
+
+      // Extract ApiService at runtime with Convex layers
+      const apiService = await ApiService.pipe(
+        Effect.provide(apiLayer),
+        Effect.provide(MutationLayers<S>()),
+        Effect.provide(makeMutationRuntimeLayer(confectSchemaDefinition, ctx)),
+        Effect.runPromise
+      )
+
+      // Extract handler from context
+      const handlers = pipe(
+        Context.getOption(apiService.context, groupServiceTag),
+        Option.getOrThrow
+      );
+      const handler = handlers[functionName];
+
+      if (!handler) {
+        throw new Error(`Handler not found: ${functionName}`);
+      }
+
+      return pipe(
+        Schema.decode(args)(actualArgs),
+        Effect.orDie,
+        Effect.flatMap(handler),
+        Effect.flatMap(Schema.encodeUnknown(returns)),
+        Effect.runPromise
+      );
+    },
+  });
+
+/**
+ * Wrap a handler Effect with Convex action function wrapper.
+ * @internal
+ */
+const makeActionFunction = <S extends GenericConfectSchema>(
+  confectSchemaDefinition: ConfectSchemaDefinition<S>,
+  args: Schema.Schema.AnyNoContext,
+  returns: Schema.Schema.AnyNoContext,
+  apiLayer: Layer.Layer<ApiService, never, ActionLayers>,
+  groupServiceTag: Group.GroupService<string>,
+  functionName: string
+): RegisteredAction<"public", any, any> =>
+  actionGeneric({
+    args: compileArgsSchema(args),
+    returns: compileReturnsSchema(returns),
+    handler: async (ctx: GenericActionCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
+
+      // Extract ApiService at runtime with Convex layers
+      const apiService = await ApiService.pipe(
+        Effect.provide(apiLayer),
+        Effect.provide(ActionLayers<S>()),
+        Effect.provide(makeActionRuntimeLayer(confectSchemaDefinition, ctx)),
+        Effect.runPromise
+      )
+
+      // Extract handler from context
+      const handlers = pipe(
+        Context.getOption(apiService.context, groupServiceTag),
+        Option.getOrThrow
+      );
+      const handler = handlers[functionName];
+
+      if (!handler) {
+        throw new Error(`Handler not found: ${functionName}`);
+      }
+
+      return pipe(
+        Schema.decode(args)(actualArgs),
+        Effect.orDie,
+        Effect.flatMap(handler),
+        Effect.flatMap(Schema.encodeUnknown(returns)),
+        Effect.runPromise
+      );
+    },
+  });
+
+/**
+ * Convert a Layer-based API to Convex registered functions.
+ *
+ * This is the final step that bridges the Effect Layer system to Convex's runtime.
+ * It takes:
+ * - Schema definition (for Convex validators and database layers)
+ * - API definition (pure data structure with groups and functions)
+ * - API Layer (provides ApiService which contains runtime context with all group handlers)
+ *
+ * Returns a nested object structure: { [groupName]: { [functionName]: RegisteredFunction } }
+ *
+ * The apiLayer can have requirements for Convex runtime services (QueryDB, MutationDB, etc.)
+ * which will be provided automatically at runtime by the Convex context.
+ *
+ * @param schemaDefinition - Confect schema definition for the database
+ * @param api - API definition (pure data)
+ * @param apiLayer - Layer that provides ApiService (may require Convex runtime services)
+ * @returns Nested object of Convex registered functions
+ *
+ * @category Convex Integration
+ * @since 1.0.0
+ *
+ * @example
+ * import * as Api from "./internal/Api"
+ * import * as Group from "./internal/Group"
+ * import * as Layer from "effect/Layer"
+ *
+ * const myApi = Api.api("myApp").pipe(
+ *   Api.add(usersGroup),
+ *   Api.add(postsGroup)
+ * );
+ *
+ * const MyApiLive = Api.build(myApi).pipe(
+ *   Layer.provide(UsersLive),
+ *   Layer.provide(PostsLive)
+ * );
+ *
+ * export default Api.serve(schemaDefinition, myApi, MyApiLive);
+ * // Convex export: { users: { getUser: RegisteredQuery, ... }, posts: { ... } }
+ */
+export const serve = <
+  S extends GenericConfectSchema,
+  Name extends string,
+  Groups extends Record<string, AnyConfectApiGroup>,
+  R extends ConvexRuntimeServices = never
+>(
+  schemaDefinition: ConfectSchemaDefinition<S>,
+  api: ConfectApi<Name, Groups, any>,
+  apiLayer: Layer.Layer<ApiService, never, R>
+): ConvexApiServer<Groups> => {
+
+  // Build Convex functions for each group
+  const result: any = {};
+
+  for (const [groupName, group] of Object.entries(api.groups)) {
+    // Get GroupService tag for this group
+    const groupServiceTag = Group.getServiceTag(group);
+
+    // Build Convex functions for each function in the group
+    const groupFunctions: any = {};
+
+    for (const [functionName, func] of Object.entries(group.functions)) {
+      // Determine function type and wrap with appropriate Convex wrapper
+      // Pass apiLayer so handler extraction happens at runtime with Convex ctx
+      const registeredFunction = Match.value(func.functionType).pipe(
+        Match.when("Query", () =>
+          makeQueryFunction(
+            schemaDefinition,
+            func.args,
+            func.returns,
+            apiLayer as Layer.Layer<ApiService, never, QueryLayers>,
+            groupServiceTag,
+            functionName
+          )
+        ),
+        Match.when("Mutation", () =>
+          makeMutationFunction(
+            schemaDefinition,
+            func.args,
+            func.returns,
+            apiLayer as Layer.Layer<ApiService, never, MutationLayers>,
+            groupServiceTag,
+            functionName
+          )
+        ),
+        Match.when("Action", () =>
+          makeActionFunction(
+            schemaDefinition,
+            func.args,
+            func.returns,
+            apiLayer as Layer.Layer<ApiService, never, ActionLayers>,
+            groupServiceTag,
+            functionName
+          )
+        ),
+        Match.exhaustive
+      );
+
+      groupFunctions[functionName] = registeredFunction;
+    }
+
+    result[groupName] = groupFunctions;
+  }
+
+  return result as ConvexApiServer<Groups>;
+};
 

@@ -215,8 +215,8 @@ export const makeQueryInitializer = <
   query: QueryInitializer<TableInfoFromSchema<S, TN>>,
   tableName: TN,
   tableSchema: DerivedTableSchema<S, TN, I> | undefined,
-): Effect.Effect<ConfectQueryInitializer<TableInfoFromSchema<S, TN>>> =>
-  Effect.succeed({
+): ConfectQueryInitializer<TableInfoFromSchema<S, TN>> =>
+  ({
     fullTableScan: () =>
       makeQuery(
         query.fullTableScan(),
@@ -237,11 +237,6 @@ export const makeQueryInitializer = <
         tableName,
         tableSchema
       ),
-
-    
-    count: () =>
-      // @ts-expect-error - QueryInitializer count is internal
-      Effect.promise(() => query.count() as Promise<number>),
   });
 
 // ===========================

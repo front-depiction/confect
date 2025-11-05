@@ -1,13 +1,11 @@
 import {
+  QueryDB as $QueryDB,
   type ConfectDataModelFromConfectSchemaDefinition,
-  ConvexActionCtx,
-  ConvexMutationCtx,
-  ConvexQueryCtx,
   type DataModelFromConfectDataModel,
   type GenericConfectDoc,
   GenericId,
   makeConfectFunctions,
-  type TableNamesInConfectDataModel,
+  type TableNamesInConfectDataModel
 } from "@rjdellecese/confect/server";
 
 import { confectSchema } from "./schema";
@@ -19,10 +17,8 @@ export const {
   confectInternalMutation,
   confectAction,
   confectInternalAction,
-  ConfectDatabaseReader,
-  ConfectDatabaseWriter,
 } = makeConfectFunctions(confectSchema);
-
+type ConfectSchema = typeof confectSchema.confectSchema
 type ConfectSchemaDefinition = typeof confectSchema;
 type ConfectDataModel =
   ConfectDataModelFromConfectSchemaDefinition<ConfectSchemaDefinition>;
@@ -38,8 +34,7 @@ export const Id = <TableName extends TableNames>(tableName: TableName) =>
   GenericId<TableName>(tableName);
 export type Id<TableName extends TableNames> = GenericId<TableName>;
 
-export type ConfectDatabaseReader = typeof ConfectDatabaseReader.Identifier;
-export type ConfectDatabaseWriter = typeof ConfectDatabaseWriter.Identifier;
+
 
 export {
   ConfectActionRunner,
@@ -50,14 +45,9 @@ export {
   ConfectStorageActionWriter,
   ConfectStorageReader,
   ConfectStorageWriter,
-  ConfectVectorSearch,
+  ConfectVectorSearch
 } from "@rjdellecese/confect/server";
 
 type DataModel = DataModelFromConfectDataModel<ConfectDataModel>;
 
-export const QueryCtx = ConvexQueryCtx<DataModel>();
-export type QueryCtx = typeof QueryCtx.Identifier;
-export const MutationCtx = ConvexMutationCtx<DataModel>();
-export type MutationCtx = typeof MutationCtx.Identifier;
-export const ActionCtx = ConvexActionCtx<DataModel>();
-export type ActionCtx = typeof ActionCtx.Identifier;
+export const QueryDB = $QueryDB.Typed<ConfectSchema>()

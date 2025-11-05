@@ -499,6 +499,19 @@ export const buildMock: {
   ): Layer.Layer<GroupService<Name>>
 } = dual(2, (group: any, handlers: any) => Layer.mock(makeGroupServiceTag(group.name), handlers));
 
+/**
+ * Get the GroupService tag for a group.
+ *
+ * Used internally by Api.serve() to extract handlers from Layer context.
+ * You typically don't need to call this directly.
+ *
+ * @category Layer Building
+ * @since 1.0.0
+ */
+export const getServiceTag = <Name extends string>(
+  group: ConfectApiGroup<Name, any>
+): GroupService<Name> => makeGroupServiceTag(group.name);
+
 // =============================================================================
 // Convex Integration
 // =============================================================================

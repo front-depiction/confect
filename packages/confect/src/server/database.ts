@@ -22,6 +22,7 @@ import type {
   WithoutSystemFields,
 } from "convex/server";
 import type { GenericId } from "convex/values";
+import { Context } from "effect";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -109,7 +110,7 @@ export interface IQueryDB<S extends GenericConfectSchema = GenericConfectSchema>
    */
   readonly query: <TN extends TableNamesFromSchema<S>>(
     tableName: TN,
-  ) => Effect.Effect<ConfectQueryInitializer<TableInfoFromSchema<S, TN>>>;
+  ) => ConfectQueryInitializer<TableInfoFromSchema<S, TN>>;
 
   /**
    * Returns the string ID format for the ID in a given table, or None if the ID
@@ -183,6 +184,8 @@ const makeQueryDB = <S extends GenericConfectSchema>(
   },
 });
 
+
+
 export class QueryDB extends Effect.Service<QueryDB>()("@rjdellecese/confect/QueryDB", {
   effect: Effect.gen(function* () {
     const ctx = yield* ConvexQueryCtx();
@@ -193,6 +196,7 @@ export class QueryDB extends Effect.Service<QueryDB>()("@rjdellecese/confect/Que
   static TypedDefault<S extends GenericConfectSchema>() {
     return this.Default as Layer.Layer<QueryDB, never, GenericQueryCtx<DataModelFromConfectSchema<S>> | ConfectSchemaDefinition<S>>
   }
+  static Typed = <S extends GenericConfectSchema>() =>  this as never as Context.Tag<QueryDB, IQueryDB<S>>
 }
 
 // ===========================

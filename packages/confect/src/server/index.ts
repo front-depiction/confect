@@ -1,27 +1,23 @@
 export { ConfectAuth } from "./auth";
 export {
-  ConfectQueryCtx,
-  ConfectMutationCtx,
-  ConfectActionCtx,
+  ConfectActionCtx, ConfectMutationCtx, ConfectQueryCtx
 } from "./ctx";
 export type {
   DataModelFromConfectDataModel,
-  GenericConfectDoc,
-  TableNamesInConfectDataModel,
+  GenericConfectDoc, TableNamesFromSchema, TableNamesInConfectDataModel
 } from "./data_model";
-export { QueryDB, MutationDB } from "./database";
+export { MutationDB, QueryDB, type IQueryDB } from "./database";
 export { makeConfectFunctions } from "./functions";
-export { type ConfectHttpApi, makeConvexHttpRouter } from "./http";
+export { makeConvexHttpRouter, type ConfectHttpApi } from "./http";
 export {
   ConfectActionRunner,
   ConfectMutationRunner,
-  ConfectQueryRunner,
+  ConfectQueryRunner
 } from "./runners";
 export { ConfectScheduler } from "./scheduler";
 export {
-  type ConfectDataModelFromConfectSchemaDefinition,
   defineConfectSchema,
-  defineConfectTable,
+  defineConfectTable, type ConfectDataModelFromConfectSchemaDefinition
 } from "./schema";
 export { compileSchema } from "./schema_to_validator";
 export { GenericId } from "./schemas/GenericId";
@@ -29,6 +25,7 @@ export { PaginationResult } from "./schemas/PaginationResult";
 export {
   ConfectStorageActionWriter,
   ConfectStorageReader,
-  ConfectStorageWriter,
+  ConfectStorageWriter
 } from "./storage";
 export { ConfectVectorSearch } from "./vector_search";
+

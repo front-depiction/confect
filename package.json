@@ -1,4 +1,8 @@
 {
+	"workspaces": [
+		"packages/*",
+		"apps/*"
+	],
 	"scripts": {
 		"build": "bun -r --filter='@rjdellecese/*' build",
 		"build:confect": "bun --filter @rjdellecese/confect build",
