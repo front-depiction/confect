@@ -9,8 +9,14 @@
  */
 
 import * as Array from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { describe, expect, expectTypeOf, test } from "vitest";
+import {
+  defineConfectSchema,
+  defineConfectTable,
+} from "../../server";
 import * as Api from "./Api";
 import * as Function from "./Function";
 import * as Group from "./Group";
@@ -118,6 +124,8 @@ describe("Api Predicates", () => {
   const validApi = Api.api("myApp").pipe(
     Api.add(usersGroup),
   );
+  
+
 
   describe("isApi()", () => {
     test("returns true for valid APIs", () => {
@@ -475,5 +483,308 @@ describe("Variance Behavior", () => {
 
     type GroupNames = keyof typeof specific.groups;
     expectTypeOf<GroupNames>().toEqualTypeOf<"users">();
+  });
+});
+
+// =============================================================================
+// Api.serve Tests
+// =============================================================================
+
+describe("Api.serve", () => {
+  // Define test schema
+  const testConfectSchema = defineConfectSchema({
+    users: defineConfectTable(
+      Schema.Struct({
+        name: Schema.String,
+        email: Schema.String,
+      })
+    ),
+    posts: defineConfectTable(
+      Schema.Struct({
+        title: Schema.String,
+        content: Schema.String,
+      })
+    ),
+  });
+
+  describe("Object Structure", () => {
+    test("returns nested object structure matching API groups", () => {
+      const testApi = Api.api("testApp").pipe(
+        Api.add(usersGroup),
+        Api.add(postsGroup),
+      );
+      class UsersGroup extends Group.Tag(usersGroup)<UsersGroup>(){}
+
+      // Create minimal handler implementations
+      const UsersLive = Layer.succeed(
+        UsersGroup,
+        {
+          getUser: () => Effect.succeed({ result: "user" }),
+          createUser: () => Effect.succeed({ result: "created" }),
+        }
+      );
+
+      class PostsLiveGroup extends Group.Tag(postsGroup)<PostsLiveGroup>(){}
+
+      const PostsLive = Layer.succeed(
+        PostsLiveGroup,
+        {
+          getPost: () => Effect.succeed({ result: "post" }),
+          createPost: () => Effect.succeed({ result: "created" }),
+        }
+      );
+
+      type foo = Api.UnionOfGroupServices<{ users: typeof usersGroup, penis: typeof postsGroup }>
+
+      const apiLayer = Api.toLayer(testApi).pipe(
+        Layer.provide(UsersLive),
+        Layer.provide(PostsLive),
+        
+      );
+      
+
+      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer);
+
+      console.log("Hi")
+      console.dir(convexApi.posts["getPost"], { })
+
+      // Check top-level structure has group names as keys
+      expect(convexApi).toHaveProperty("users");
+      expect(convexApi).toHaveProperty("posts");
+      expect(Object.keys(convexApi)).toHaveLength(2);
+    });
+
+    test("each group contains function names as keys", () => {
+      const testApi = Api.api("testApp").pipe(
+        Api.add(usersGroup),
+      );
+
+      const UsersLive = Layer.succeed(
+        Group.Tag(usersGroup)(),
+        {
+          getUser: () => Effect.succeed({ result: "user" }),
+          createUser: () => Effect.succeed({ result: "created" }),
+        }
+      );
+
+      const apiLayer = Api.toLayer(testApi).pipe(
+        Layer.provide(UsersLive),
+      );
+
+      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer);
+
+      // Check that users group has function keys
+      expect(convexApi.users).toHaveProperty("getUser");
+      expect(convexApi.users).toHaveProperty("createUser");
+      expect(Object.keys(convexApi.users)).toHaveLength(2);
+    });
+
+    test("works with empty groups", () => {
+      const testApi = Api.api("testApp").pipe(
+        Api.add(emptyGroup),
+      );
+
+      const EmptyLive = Layer.succeed(
+        Group.Tag(emptyGroup)(),
+        {}
+      );
+
+      const apiLayer = Api.toLayer(testApi).pipe(
+        Layer.provide(EmptyLive),
+      );
+
+      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer);
+
+      expect(convexApi).toHaveProperty("empty");
+      expect(Object.keys(convexApi.empty)).toHaveLength(0);
+    });
+
+    test("functions are Convex registered handlers", () => {
+      const testApi = Api.api("testApp").pipe(
+        Api.add(usersGroup),
+      );
+
+      const UsersLive = Layer.succeed(
+        Group.Tag(usersGroup)(),
+        {
+          getUser: () => Effect.succeed({ result: "user" }),
+          createUser: () => Effect.succeed({ result: "created" }),
+        }
+      );
+
+      const apiLayer = Api.toLayer(testApi).pipe(
+        Layer.provide(UsersLive),
+      );
+
+      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer);
+
+      // Registered functions should have specific structure
+      expect(convexApi.users.getUser).toHaveProperty("isRegisteredQuery");
+      expect(convexApi.users.createUser).toHaveProperty("isRegisteredMutation");
+    });
+  });
+
+  describe("Handler Execution", () => {
+    test("query handlers can be invoked", async () => {
+      const testApi = Api.api("testApp").pipe(
+        Api.add(usersGroup),
+      );
+
+      const UsersLive = Layer.succeed(
+        Group.Tag(usersGroup)(),
+        {
+          getUser: (args: { id: string }) =>
+            Effect.succeed({ result: `user-${args.id}` }),
+          createUser: () => Effect.succeed({ result: "created" }),
+        }
+      );
+
+      const apiLayer = Api.toLayer(testApi).pipe(
+        Layer.provide(UsersLive),
+      );
+
+      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer);
+
+      // Mock Convex query context
+      const mockQueryCtx = {
+        db: {},
+        auth: {},
+        storage: {},
+      } as any;
+
+      // Invoke the handler
+      const result = await convexApi.users.getUser.handler(
+        mockQueryCtx,
+        { id: "test-123" }
+      );
+
+      expect(result).toEqual({ result: "user-test-123" });
+    });
+
+    test("mutation handlers can be invoked", async () => {
+      const testApi = Api.api("testApp").pipe(
+        Api.add(usersGroup),
+      );
+
+      const UsersLive = Layer.succeed(
+        Group.Tag(usersGroup)(),
+        {
+          getUser: () => Effect.succeed({ result: "user" }),
+          createUser: (args: { id: string }) =>
+            Effect.succeed({ result: `created-${args.id}` }),
+        }
+      );
+
+      const apiLayer = Api.toLayer(testApi).pipe(
+        Layer.provide(UsersLive),
+      );
+
+      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer);
+
+      // Mock Convex mutation context
+      const mockMutationCtx = {
+        db: {},
+        auth: {},
+        storage: {},
+        scheduler: {},
+      } as any;
+
+      // Invoke the handler
+      const result = await convexApi.users.createUser.handler(
+        mockMutationCtx,
+        { id: "new-user" }
+      );
+
+      expect(result).toEqual({ result: "created-new-user" });
+    });
+
+    test("multiple groups with handlers work correctly", async () => {
+      const testApi = Api.api("testApp").pipe(
+        Api.add(usersGroup),
+        Api.add(postsGroup),
+      );
+
+      const UsersLive = Layer.succeed(
+        Group.Tag(usersGroup)(),
+        {
+          getUser: (args: { id: string }) =>
+            Effect.succeed({ result: `user-${args.id}` }),
+          createUser: () => Effect.succeed({ result: "created" }),
+        }
+      );
+
+      const PostsLive = Layer.succeed(
+        Group.Tag(postsGroup)(),
+        {
+          getPost: (args: { id: string }) =>
+            Effect.succeed({ result: `post-${args.id}` }),
+          createPost: () => Effect.succeed({ result: "post-created" }),
+        }
+      );
+
+      const apiLayer = Api.toLayer(testApi).pipe(
+        Layer.provide(UsersLive),
+        Layer.provide(PostsLive),
+      );
+
+      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer);
+
+      const mockQueryCtx = {
+        db: {},
+        auth: {},
+        storage: {},
+      } as any;
+
+      // Test both group handlers
+      const userResult = await convexApi.users.getUser.handler(
+        mockQueryCtx,
+        { id: "user-1" }
+      );
+      const postResult = await convexApi.posts.getPost.handler(
+        mockQueryCtx,
+        { id: "post-1" }
+      );
+
+      expect(userResult).toEqual({ result: "user-user-1" });
+      expect(postResult).toEqual({ result: "post-post-1" });
+    });
+
+    test("handlers receive correct argument types", async () => {
+      const testApi = Api.api("testApp").pipe(
+        Api.add(usersGroup),
+      );
+
+      let receivedArgs: any = null;
+
+      const UsersLive = Layer.succeed(
+        Group.Tag(usersGroup)(),
+        {
+          getUser: (args: { id: string }) => {
+            receivedArgs = args;
+            return Effect.succeed({ result: "ok" });
+          },
+          createUser: () => Effect.succeed({ result: "created" }),
+        }
+      );
+
+      const apiLayer = Api.toLayer(testApi).pipe(
+        Layer.provide(UsersLive),
+      );
+
+      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer);
+
+      const mockQueryCtx = {
+        db: {},
+        auth: {},
+        storage: {},
+      } as any;
+
+      await convexApi.users.getUser.handler(
+        mockQueryCtx,
+        { id: "test-id" }
+      );
+
+      expect(receivedArgs).toEqual({ id: "test-id" });
+    });
   });
 });

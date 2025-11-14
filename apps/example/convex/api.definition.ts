@@ -76,7 +76,7 @@ export const notesGroup = Group.group("notes").pipe(
   Group.add("getFirst", getFirstQuery),
   Group.add("getRandom", getRandomAction),
 );
-type foo = Function.GetArgs<typeof notesGroup.functions.insertNote>
+export class Notes extends Group.Tag(notesGroup)<Notes>(){}
 
 // =============================================================================
 // API Definition (Pure, R = never)
@@ -84,4 +84,5 @@ type foo = Function.GetArgs<typeof notesGroup.functions.insertNote>
 
 export const notesApi = Api.api("NotesApi").pipe(
   Api.add(notesGroup),
+
 );

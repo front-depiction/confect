@@ -14,7 +14,7 @@
   "dependencies": {
     "@effect/platform": "0.90.0",
     "@rjdellecese/confect": "workspace:*",
-    "convex": "1.25.4",
+    "convex": "^1.28.2",
     "effect": "3.17.6",
     "react": "19.1.1",
     "react-dom": "19.1.1",

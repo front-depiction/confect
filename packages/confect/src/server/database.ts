@@ -196,7 +196,7 @@ export class QueryDB extends Effect.Service<QueryDB>()("@rjdellecese/confect/Que
   static TypedDefault<S extends GenericConfectSchema>() {
     return this.Default as Layer.Layer<QueryDB, never, GenericQueryCtx<DataModelFromConfectSchema<S>> | ConfectSchemaDefinition<S>>
   }
-  static Typed = <S extends GenericConfectSchema>() =>  this as never as Context.Tag<QueryDB, IQueryDB<S>>
+  static Typed = <S extends GenericConfectSchema>() => this as never as Context.Tag<QueryDB, IQueryDB<S>>
 }
 
 // ===========================
@@ -340,6 +340,8 @@ export class MutationDB extends Effect.Service<MutationDB>()("@rjdellecese/confe
   static TypedDefault<S extends GenericConfectSchema>() {
     return this.Default as Layer.Layer<MutationDB, never, GenericMutationCtx<DataModelFromConfectSchema<S>> | ConfectSchemaDefinition<S>>
   }
+  static Typed = <S extends GenericConfectSchema>() => this as never as Context.Tag<MutationDB, IMutationDB<S>>
+
 }
 // ===========================
 // Encoding Helper

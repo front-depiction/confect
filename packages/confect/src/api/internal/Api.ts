@@ -378,14 +378,13 @@ export type GetContext<A extends ConfectApi<string, Record<string, AnyConfectApi
  * // myApi has both users and posts groups
  */
 export const add: <
-  GroupName extends string,
-  GroupFunctions extends Record<string, Function.ConfectApiFunction>,
+  Group extends AnyConfectApiGroup,
   GR,
 >(
-  group: Group.ConfectApiGroup<GroupName, GroupFunctions>,
+  group: Group,
 ) => <Name extends string, Groups extends Record<string, AnyConfectApiGroup>, R>(
   api: ConfectApi<Name, Groups, R>,
-) => ConfectApi<Name, MergedGroups<Groups, Record<GroupName, typeof group>>, R | GR> =
+) => ConfectApi<Name, MergedGroups<Groups, Record<Group.GetName<Group>, Group>>, R | GR> =
   (group) => (api) => {
     const newGroups = Record.set(api.groups, group.name, group)
     return {
@@ -616,8 +615,8 @@ export class ApiService extends Context.Tag("@confect/ApiService")<
  *
  * @internal
  */
-type UnionOfGroupServices<Groups extends Record<string, AnyConfectApiGroup>> = {
-  [K in keyof Groups]: Group.GroupService<Group.GetName<Groups[K]>>
+export type UnionOfGroupServices<Groups extends Record<string, AnyConfectApiGroup>> = {
+  [K in keyof Groups]: Group.Tag<Groups[K]>
 }[keyof Groups];
 
 
@@ -639,7 +638,7 @@ type UnionOfGroupServices<Groups extends Record<string, AnyConfectApiGroup>> = {
  *   Layer.provide(FilesLive)   // Provides GroupService<"files">
  * );
  */
-export const build = <
+export const toLayer = <
   Name extends string,
   Groups extends Record<string, AnyConfectApiGroup>,
   R
@@ -810,7 +809,7 @@ const makeQueryFunction = <S extends GenericConfectSchema>(
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
   apiLayer: Layer.Layer<ApiService, never, QueryLayers>,
-  groupServiceTag: Group.GroupService<string>,
+  groupServiceTag: Group.Tag<any>,
   functionName: string
 ): RegisteredQuery<"public", any, any> =>
   queryGeneric({
@@ -855,21 +854,26 @@ const makeMutationFunction = <S extends GenericConfectSchema>(
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
   apiLayer: Layer.Layer<ApiService, never, MutationLayers>,
-  groupServiceTag: Group.GroupService<string>,
+  groupServiceTag: Group.Tag<any>,
   functionName: string
-): RegisteredMutation<"public", any, any> =>
-  mutationGeneric({
+): RegisteredMutation<"public", any, any> => {
+  console.log("[confect] Constructing mutation function:", functionName);
+  return mutationGeneric({
     args: compileArgsSchema(args),
     returns: compileReturnsSchema(returns),
     handler: async (ctx: GenericMutationCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
+      console.log(`[confect] Executing mutation handler for ${functionName} with actualArgs:`, actualArgs);
 
       // Extract ApiService at runtime with Convex layers
       const apiService = await ApiService.pipe(
+
         Effect.provide(apiLayer),
         Effect.provide(MutationLayers<S>()),
         Effect.provide(makeMutationRuntimeLayer(confectSchemaDefinition, ctx)),
         Effect.runPromise
       )
+
+      console.log(`[confect] ApiService provided for mutation: ${functionName}`);
 
       // Extract handler from context
       const handlers = pipe(
@@ -879,8 +883,11 @@ const makeMutationFunction = <S extends GenericConfectSchema>(
       const handler = handlers[functionName];
 
       if (!handler) {
+        console.error(`[confect] Handler not found for mutation: ${functionName}`);
         throw new Error(`Handler not found: ${functionName}`);
       }
+
+      console.log(`[confect] Decoding and running handler for mutation: ${functionName}`);
 
       return pipe(
         Schema.decode(args)(actualArgs),
@@ -891,6 +898,7 @@ const makeMutationFunction = <S extends GenericConfectSchema>(
       );
     },
   });
+};
 
 /**
  * Wrap a handler Effect with Convex action function wrapper.
@@ -901,21 +909,30 @@ const makeActionFunction = <S extends GenericConfectSchema>(
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
   apiLayer: Layer.Layer<ApiService, never, ActionLayers>,
-  groupServiceTag: Group.GroupService<string>,
+  groupServiceTag: Group.Tag<any>,
   functionName: string
-): RegisteredAction<"public", any, any> =>
-  actionGeneric({
+): RegisteredAction<"public", any, any> => {
+  console.log("[confect] Constructing action function:", functionName);
+  return actionGeneric({
     args: compileArgsSchema(args),
     returns: compileReturnsSchema(returns),
     handler: async (ctx: GenericActionCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
+      console.log(`[confect] Executing action handler for ${functionName} with actualArgs:`, actualArgs);
 
       // Extract ApiService at runtime with Convex layers
       const apiService = await ApiService.pipe(
+        Effect.tap(Effect.logInfo("Interesting: ")),
         Effect.provide(apiLayer),
+        Effect.tap(Effect.logInfo("Interesting: ")),
         Effect.provide(ActionLayers<S>()),
+        Effect.tap(Effect.logInfo("Interesting: ")),
         Effect.provide(makeActionRuntimeLayer(confectSchemaDefinition, ctx)),
+        Effect.tap(Effect.logInfo("Interesting: ")),
+        Effect.tapError(Effect.logError),
         Effect.runPromise
       )
+
+      console.log(`[confect] ApiService provided for action: ${functionName}`);
 
       // Extract handler from context
       const handlers = pipe(
@@ -925,8 +942,11 @@ const makeActionFunction = <S extends GenericConfectSchema>(
       const handler = handlers[functionName];
 
       if (!handler) {
+        console.error(`[confect] Handler not found for action: ${functionName}`);
         throw new Error(`Handler not found: ${functionName}`);
       }
+
+      console.log(`[confect] Decoding and running handler for action: ${functionName}`);
 
       return pipe(
         Schema.decode(args)(actualArgs),
@@ -937,6 +957,7 @@ const makeActionFunction = <S extends GenericConfectSchema>(
       );
     },
   });
+};
 
 type ConfectBuildTimeServices = 
     | QueryLayers
@@ -991,40 +1012,50 @@ export const serve = <
   schemaDefinition: ConfectSchemaDefinition<S>,
   api: ConfectApi<Name, Groups, any>,
   apiLayer: Layer.Layer<ApiService, never, ConfectBuildTimeServices>
-): ConvexApiServer<Groups> =>  Record.map(api.groups, (group) => 
-  Record.map(group.functions, (func, functionName) => 
-    Match.value(func.functionType).pipe(
-    Match.when("Query", () =>
-      makeQueryFunction(
-        schemaDefinition,
-        func.args,
-        func.returns,
-        apiLayer as never,
-        group,
-        functionName
+): ConvexApiServer<Groups> => {
+  console.log("[confect] Building Convex API server...");
+  console.log("[confect] Groups to serve:", Object.keys(api.groups));
+  return Record.map(api.groups, (group, groupName) => {
+    console.log(`[confect] Processing group: ${groupName}`);
+    return Record.map(group.functions, (func, functionName) => {
+      console.log(`[confect] Registering function: [${groupName}].${functionName}. Type: ${func.functionType}`);
+      return Match.value(func.functionType).pipe(
+        Match.when("Query", () => {
+          console.log(`[confect] => Building RegisteredQuery for: ${groupName}.${functionName}`);
+          return makeQueryFunction(
+            schemaDefinition,
+            func.args,
+            func.returns,
+            apiLayer as never,
+            Group.Tag(group)(),
+            functionName
+          );
+        }),
+        Match.when("Mutation", () => {
+          console.log(`[confect] => Building RegisteredMutation for: ${groupName}.${functionName}`);
+          return makeMutationFunction(
+            schemaDefinition,
+            func.args,
+            func.returns,
+            apiLayer as never,
+            Group.Tag(group)(),
+            functionName
+          );
+        }),
+        Match.when("Action", () => {
+          console.log(`[confect] => Building RegisteredAction for: ${groupName}.${functionName}`);
+          return makeActionFunction(
+            schemaDefinition,
+            func.args,
+            func.returns,
+            apiLayer as never,
+            Group.Tag(group)(),
+            functionName
+          );
+        }),
+        Match.exhaustive
       )
-    ),
-    Match.when("Mutation", () =>
-      makeMutationFunction(
-        schemaDefinition,
-        func.args,
-        func.returns,
-        apiLayer as never,
-        group,
-        functionName
-      )     
-    ),
-    Match.when("Action", () =>
-      makeActionFunction(
-        schemaDefinition,
-        func.args,
-        func.returns,
-        apiLayer as never,
-        group,
-        functionName
-      )
-    ),
-    Match.exhaustive
-  ))
-) as never
+    })
+  }) as never;
+}
 

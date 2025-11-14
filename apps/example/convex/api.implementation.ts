@@ -32,7 +32,8 @@ export const NotesGroupLive = Group.build(
   Effect.gen(function* () {
     const queryDb = yield* QueryDB;
     const mutationDb = yield* MutationDB;
-
+    
+    
     return {
       listNotes: () =>
         Effect.gen(function* () {
@@ -84,7 +85,7 @@ export const NotesGroupLive = Group.build(
  * );
  * ```
  */
-export const NotesApiLayer = Api.build(notesApi).pipe(
+export const NotesApiLayer = Api.toLayer(notesApi).pipe(
   Layer.provide(NotesGroupLive)
 );
 

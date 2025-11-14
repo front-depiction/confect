@@ -32,12 +32,6 @@
  * @since 1.0.0
  */
 
-import type {
-  DefaultFunctionArgs,
-  RegisteredAction,
-  RegisteredMutation,
-  RegisteredQuery,
-} from "convex/server";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { equals } from "effect/Equal";
@@ -95,7 +89,7 @@ type RenameKey<
 > = MergedFunctions<Omit<A, K1>, Record<K2, A[K1]>>
 
 
-
+export type Tag<G extends ConfectApiGroup<string, {}>, Id = GetName<G>> = Context.Tag<Id, HandlersFor<G>>
 /**
  * Service tag for a group's handler implementations.
  * The service value is the handlers object.
@@ -105,8 +99,7 @@ type RenameKey<
  * @category Layer Building
  * @since 1.0.0
  */
-export interface GroupService<Name extends string> extends Context.Tag<GroupService<Name>, HandlersFromRecord<Record<string, Function.ConfectApiFunction>>> { }
-
+export const Tag = <G extends ConfectApiGroup<string, {}>>(group: G) => <Id = GetName<G>>() => Context.Tag(group.name)<Id, HandlersFor<G>>()
 /**
  * API Group - collection of related functions.
  *
@@ -119,7 +112,7 @@ export interface GroupService<Name extends string> extends Context.Tag<GroupServ
 export interface ConfectApiGroup<
   out Name extends string,
   Functions extends Record<string, Function.ConfectApiFunction>,
-> extends Pipeable, GroupService<Name> {
+> extends Pipeable {
   readonly [GroupTypeId]: GroupTypeId;
   readonly name: Name;
   readonly functions: Functions;
@@ -133,7 +126,7 @@ const makeConfectApiGroupProto = <Name extends string>(name: Name) => ({
     return pipeArguments(this, arguments);
   },
 })
-const makeConfectApiGroupTag = <Name extends string>(name: Name) => Context.GenericTag<GroupService<Name>, any>(`@confect/GroupService/${name}`)
+
 
 
 // =============================================================================
@@ -185,7 +178,6 @@ export const group = <Name extends string>(
   name: Name,
 ): ConfectApiGroup<Name, {}> =>
   Object.assign(
-    makeConfectApiGroupTag(name),
     makeConfectApiGroupProto(name),
     
   ) as any;
@@ -315,7 +307,6 @@ export const add: <K extends string, Fn extends Function.ConfectApiFunction>(
     (group) => {
       const functions = Record.set(group.functions, key, fn);
       return Object.assign(
-        makeConfectApiGroupTag(group.name),
         makeConfectApiGroupProto(group.name),
         { functions }
       ) as any;
@@ -354,7 +345,6 @@ export const rename = <Functions extends Record<string, Function.ConfectApiFunct
       equals(key, oldKey) ? newKey : key,
     );
     return Object.assign(
-      makeConfectApiGroupTag(group.name),
       makeConfectApiGroupProto(group.name),
       { functions },
     ) as any;
@@ -394,7 +384,6 @@ export const merge: <
     (group) => {
       const functions = Record.union(group.functions, other.functions, SK);
       return Object.assign(
-        makeConfectApiGroupTag(group.name),
         makeConfectApiGroupProto(group.name),
         { functions }
       ) as any;
@@ -441,12 +430,12 @@ export const build: {
     group: ConfectApiGroup<Name, Functions>
   ): <E, R>(
     effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
-  ) => Layer.Layer<GroupService<Name>, E, R>
+  ) => Layer.Layer<Tag<typeof group>, E, R>
 
   <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>, E, R>(
     group: ConfectApiGroup<Name, Functions>,
     effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
-  ): Layer.Layer<GroupService<Name>, E, R>
+  ): Layer.Layer<Tag<typeof group>, E, R>
 } = dual(2, (group: any, effect: any) => Layer.effect(group, effect));
 
 /**
@@ -463,12 +452,12 @@ export const buildScoped: {
     group: ConfectApiGroup<Name, Functions>
   ): <E, R>(
     effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
-  ) => Layer.Layer<GroupService<Name>, E, Exclude<R, Scope.Scope>>
+  ) => Layer.Layer<Tag<typeof group>, E, Exclude<R, Scope.Scope>>
 
   <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>, E, R>(
     group: ConfectApiGroup<Name, Functions>,
     effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
-  ): Layer.Layer<GroupService<Name>, E, Exclude<R, Scope.Scope>>
+  ): Layer.Layer<Tag<typeof group>, E, Exclude<R, Scope.Scope>>
 } = dual(2, (group, effect) => Layer.scoped(group, effect))
 
 
@@ -486,68 +475,11 @@ export const buildMock: {
     group: ConfectApiGroup<Name, Functions>
   ): (
     handlers: Partial<HandlersFor<ConfectApiGroup<Name, Functions>>>
-  ) => Layer.Layer<GroupService<Name>>
+  ) => Layer.Layer<Tag<typeof group>>
 
   <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>>(
     group: ConfectApiGroup<Name, Functions>,
     handlers: Partial<HandlersFor<ConfectApiGroup<Name, Functions>>>
-  ): Layer.Layer<GroupService<Name>>
+  ): Layer.Layer<Tag<typeof group>>
 } = dual(2, (group: any, handlers: any) => Layer.mock(group, handlers));
 
-// =============================================================================
-// Convex Integration
-// =============================================================================
-
-/**
- * Convert a Confect API group to Convex registered functions.
- *
- * This is the bridge between our type system and Convex's runtime.
- * The function compiles all function schemas to Convex validators and returns
- * a record of RegisteredQuery, RegisteredMutation, or RegisteredAction.
- *
- * @param group - Confect API group to convert
- * @param compileSchema - Schema compiler function (from schema_to_validator)
- * @returns Record of Convex registered functions
- *
- * @category Convex Integration
- * @since 1.0.0
- *
- * @example
- * import { compileSchema } from "../schema_to_validator"
- * import * as Function from "./internal/Function"
- *
- * const userGroup = Group.group("users").functions({
- *   getUser: Function.query("getUser")
- *     .args(Schema.Struct({ id: Schema.String }))
- *     .returns(UserSchema),
- *   createUser: Function.mutation("createUser")
- *     .args(Schema.Struct({ name: Schema.String, email: Schema.String }))
- *     .returns(UserSchema)
- * })
- *
- * const convexFunctions = Group.toConvexGroup(userGroup, compileSchema)
- * // {
- * //   getUser: RegisteredQuery<...>,
- * //   createUser: RegisteredMutation<...>
- * // }
- */
-export const toConvexGroup = <
-  G extends ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>,
-  Args extends DefaultFunctionArgs,
-  Returns
->(
-  group: G,
-): Record<
-  string,
-  | RegisteredQuery<"public", Args, Returns>
-  | RegisteredMutation<"public", Args, Returns>
-  | RegisteredAction<"public", Args, Returns>
-> => {
-  return Record.map(
-    group.functions as Record<string, Function.ConfectApiFunction>,
-    () => {
-      // TODO: Switch to real convex function conversion
-      return {} as never;
-    },
-  )
-};

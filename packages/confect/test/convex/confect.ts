@@ -3,11 +3,7 @@ import type {
   GenericMutationCtx,
   GenericQueryCtx,
 } from "convex/server";
-import {
-  ConvexActionCtx,
-  ConvexMutationCtx,
-  ConvexQueryCtx,
-} from "../../src/server/ctx";
+
 import type {
   GenericConfectDoc as ConfectDocType,
   DataModelFromConfectDataModel,
@@ -17,7 +13,6 @@ import { makeConfectFunctions } from "../../src/server/functions";
 import type { ConfectDataModelFromConfectSchemaDefinition } from "../../src/server/schema";
 import { GenericId } from "../../src/server/schemas/GenericId";
 import { confectSchema } from "../convex/schema";
-import type { QueryDB, MutationDB } from "../../src/server/database";
 
 const {
   confectQuery,
@@ -31,12 +26,9 @@ const {
 } = makeConfectFunctions(confectSchema);
 
 export {
-  confectQuery,
-  confectInternalQuery,
-  confectMutation,
-  confectInternalMutation,
   confectAction,
-  confectInternalAction,
+  confectInternalAction, confectInternalMutation, confectInternalQuery,
+  confectMutation, confectQuery
 };
 
 type ConfectSchema = typeof confectSchema;
@@ -55,23 +47,17 @@ export const Id = <TableName extends TableNames>(tableName: TableName) =>
   GenericId<TableName>(tableName);
 export type Id<TableName extends TableNames> = GenericId<TableName>;
 
-// Create tag instances for use in test handlers
-export const ConfectDatabaseReader = QueryDBFactory<ConfectSchema>();
-export type ConfectDatabaseReader = QueryDB<ConfectSchema>;
-export const ConfectDatabaseWriter = MutationDBFactory<ConfectSchema>();
-export type ConfectDatabaseWriter = MutationDB<ConfectSchema>;
-
 export { ConfectAuth } from "../../src/server/auth";
 export {
   ConfectActionRunner,
   ConfectMutationRunner,
-  ConfectQueryRunner,
+  ConfectQueryRunner
 } from "../../src/server/runners";
 export { ConfectScheduler } from "../../src/server/scheduler";
 export {
   ConfectStorageActionWriter,
   ConfectStorageReader,
-  ConfectStorageWriter,
+  ConfectStorageWriter
 } from "../../src/server/storage";
 export { ConfectVectorSearch } from "../../src/server/vector_search";
 

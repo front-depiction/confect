@@ -22,15 +22,14 @@
  * - Effect Layer: https://effect.website/docs/layers
  */
 
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Context from "effect/Context";
 import * as Schema from "effect/Schema";
 import { describe, expect, expectTypeOf, test } from "vitest";
+import * as Api from "./Api";
 import * as Function from "./Function";
 import * as Group from "./Group";
-import * as Api from "./Api";
-import type { TypesAreEquivalent } from "./test-helpers";
 
 // =============================================================================
 // Mock Services (representing Confect runtime services)
@@ -47,7 +46,7 @@ class Database extends Context.Tag("Database")<
     readonly insert: (table: string, doc: unknown) => Effect.Effect<string, Error>
     readonly update: (table: string, id: string, doc: unknown) => Effect.Effect<void, Error>
   }
->() {}
+>() { }
 
 /**
  * Mock auth service
@@ -58,7 +57,7 @@ class Auth extends Context.Tag("Auth")<
     readonly getUserId: () => Effect.Effect<string, Error>
     readonly hasPermission: (perm: string) => Effect.Effect<boolean, Error>
   }
->() {}
+>() { }
 
 /**
  * Mock storage service
@@ -69,7 +68,7 @@ class Storage extends Context.Tag("Storage")<
     readonly getUrl: (storageId: string) => Effect.Effect<string, Error>
     readonly store: (file: string) => Effect.Effect<string, Error>
   }
->() {}
+>() { }
 
 // Mock implementations for testing
 const DatabaseLive = Layer.succeed(Database, {
@@ -200,7 +199,7 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
 
     // Type check: Layer requires Database
     expectTypeOf(UsersLive).toMatchTypeOf<
-      Layer.Layer<Group.GroupService<"users">, any, Database>
+      Layer.Layer<Group.Tag<typeof usersGroup>, any, Database>
     >();
   });
 
@@ -346,7 +345,7 @@ describe("Group.buildScoped() - Scoped Resource Management", () => {
       {
         readonly query: (sql: string) => Effect.Effect<unknown[], Error>
       }
-    >() {}
+    >() { }
 
     const DbPoolLive = Layer.scoped(
       DbPool,
@@ -476,7 +475,7 @@ describe("Api.build() - API Layer Composition", () => {
       Api.add(filesGroup),
     );
 
-    const MyApiLive = Api.build(myApi);
+    const MyApiLive = Api.toLayer(myApi);
 
     // Type check: Requires both GroupServices
     expectTypeOf(MyApiLive).toMatchTypeOf<
@@ -531,7 +530,7 @@ describe("Api.build() - API Layer Composition", () => {
     );
 
     // Compose: Api requires GroupServices, provide them
-    const MyApiLive = Api.build(myApi).pipe(
+    const MyApiLive = Api.toLayer(myApi).pipe(
       Layer.provide(UsersLive),
       Layer.provide(FilesLive),
     );
@@ -612,7 +611,7 @@ describe("End-to-End Integration", () => {
     );
 
     // Step 3: Compose API Layer
-    const MyApiLive = Api.build(myApi).pipe(
+    const MyApiLive = Api.toLayer(myApi).pipe(
       Layer.provide(UsersLive),
       Layer.provide(FilesLive),
     );
@@ -678,7 +677,7 @@ describe("End-to-End Integration", () => {
     });
 
     // Compose with mix of real and mock
-    const MyApiTest = Api.build(myApi).pipe(
+    const MyApiTest = Api.toLayer(myApi).pipe(
       Layer.provide(UsersLive),
       Layer.provide(FilesMock),
       Layer.provide(DatabaseLive),
@@ -721,7 +720,7 @@ describe("Documentation Examples", () => {
     );
 
     // Provide implementation
-    const MyApiLive = Api.build(MyApi).pipe(Layer.provide(GreetingsLive));
+    const MyApiLive = Api.toLayer(MyApi).pipe(Layer.provide(GreetingsLive));
 
     // Type check: No requirements
     expectTypeOf(MyApiLive).toMatchTypeOf<
@@ -759,7 +758,7 @@ describe("Api.serve() - Convert Layer-based API to Convex", () => {
     );
 
     // Build API Layer
-    const MyApiLive = Api.build(MyApi).pipe(Layer.provide(GreetingsLive));
+    const MyApiLive = Api.toLayer(MyApi).pipe(Layer.provide(GreetingsLive));
 
     // Mock schema definition for testing
     const mockSchemaDefinition = {} as any;
@@ -819,7 +818,7 @@ describe("Api.serve() - Convert Layer-based API to Convex", () => {
     );
 
     // Build API Layer
-    const MyApiLive = Api.build(MyApi).pipe(
+    const MyApiLive = Api.toLayer(MyApi).pipe(
       Layer.provide(UsersLive),
       Layer.provide(PostsLive),
     );
@@ -875,7 +874,7 @@ describe("Api.serve() - Convert Layer-based API to Convex", () => {
     );
 
     // Build API Layer
-    const MyApiLive = Api.build(MyApi).pipe(Layer.provide(MixedLive));
+    const MyApiLive = Api.toLayer(MyApi).pipe(Layer.provide(MixedLive));
 
     // Mock schema definition
     const mockSchemaDefinition = {} as any;

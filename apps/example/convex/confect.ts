@@ -1,5 +1,6 @@
 import {
   QueryDB as $QueryDB,
+  MutationDB as $MutationDB,
   type ConfectDataModelFromConfectSchemaDefinition,
   type DataModelFromConfectDataModel,
   type GenericConfectDoc,
@@ -51,3 +52,4 @@ export {
 type DataModel = DataModelFromConfectDataModel<ConfectDataModel>;
 
 export const QueryDB = $QueryDB.Typed<ConfectSchema>()
+export const MutationDB = $MutationDB.Typed<ConfectSchema>()
