@@ -689,11 +689,11 @@ type ConvexApiServer<Groups extends Record<string, AnyConfectApiGroup>> = {
  * @internal
  */
 type QueryLayers =
-| ConfectQueryCtx
-| QueryDB
-| ConfectQueryRunner
-| ConfectAuth
-| ConfectStorageReader
+  | ConfectQueryCtx
+  | QueryDB
+  | ConfectQueryRunner
+  | ConfectAuth
+  | ConfectStorageReader
 
 /**
  * Helper to create merged layer for query runtime services.
@@ -816,11 +816,11 @@ const makeQueryFunction = <S extends GenericConfectSchema>(
     args: compileArgsSchema(args),
     returns: compileReturnsSchema(returns),
     handler: async (ctx: GenericQueryCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
-      
+
       const apiService = await ApiService.pipe(
         Effect.provide(apiLayer),
         Effect.provide(QueryLayers<S>()),
-        Effect.provide(makeQueryRuntimeLayer(confectSchemaDefinition, ctx)),     
+        Effect.provide(makeQueryRuntimeLayer(confectSchemaDefinition, ctx)),
         Effect.runPromise
       )
 
@@ -959,10 +959,10 @@ const makeActionFunction = <S extends GenericConfectSchema>(
   });
 };
 
-type ConfectBuildTimeServices = 
-    | QueryLayers
-    | MutationLayers
-    | ActionLayers
+type ConfectBuildTimeServices =
+  | QueryLayers
+  | MutationLayers
+  | ActionLayers
 
 /**
  * Convert a Layer-based API to Convex registered functions.
@@ -1048,7 +1048,7 @@ export const serve = <
             schemaDefinition,
             func.args,
             func.returns,
-            apiLayer as never,
+            apiLayer,
             Group.Tag(group)(),
             functionName
           );

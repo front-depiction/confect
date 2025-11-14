@@ -179,7 +179,6 @@ export const group = <Name extends string>(
 ): ConfectApiGroup<Name, {}> =>
   Object.assign(
     makeConfectApiGroupProto(name),
-    
   ) as any;
 
 // =============================================================================
@@ -430,13 +429,16 @@ export const build: {
     group: ConfectApiGroup<Name, Functions>
   ): <E, R>(
     effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
-  ) => Layer.Layer<Tag<typeof group>, E, R>
+  ) => Layer.Layer<ReturnType<ReturnType<typeof Tag<typeof group>>>, E, R>
 
   <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>, E, R>(
     group: ConfectApiGroup<Name, Functions>,
     effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
-  ): Layer.Layer<Tag<typeof group>, E, R>
-} = dual(2, (group: any, effect: any) => Layer.effect(group, effect));
+  ): Layer.Layer<ReturnType<ReturnType<typeof Tag<typeof group>>>, E, R>
+} = dual(2, (group: any, effect: any) => {
+  const tag = Tag(group)();
+  return Layer.effect(tag, effect);
+});
 
 /**
  * Build a Layer from a scoped Effect.
@@ -458,7 +460,10 @@ export const buildScoped: {
     group: ConfectApiGroup<Name, Functions>,
     effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
   ): Layer.Layer<Tag<typeof group>, E, Exclude<R, Scope.Scope>>
-} = dual(2, (group, effect) => Layer.scoped(group, effect))
+} = dual(2, (group: any, effect: any) => {
+  const tag = Tag(group)();
+  return Layer.scoped(tag, effect);
+});
 
 
 /**
@@ -481,5 +486,8 @@ export const buildMock: {
     group: ConfectApiGroup<Name, Functions>,
     handlers: Partial<HandlersFor<ConfectApiGroup<Name, Functions>>>
   ): Layer.Layer<Tag<typeof group>>
-} = dual(2, (group: any, handlers: any) => Layer.mock(group, handlers));
+} = dual(2, (group: any, handlers: any) => {
+  const tag = Tag(group)();
+  return Layer.mock(tag, handlers);
+});
 

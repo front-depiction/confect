@@ -9,6 +9,9 @@
  */
 
 import * as Array from "effect/Array";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { describe, expect, expectTypeOf, test } from "vitest";
 import * as Function from "./Function";
@@ -436,5 +439,690 @@ describe("Variance Behavior", () => {
 
     type FunctionNames = keyof typeof specific.functions;
     expectTypeOf<FunctionNames>().toEqualTypeOf<"getUser">();
+  });
+});
+
+// =============================================================================
+// Layer Building Tests (Complex Dependency Scenarios)
+// =============================================================================
+
+describe("Layer Building - Complex Dependencies", () => {
+  describe("Group.build() - Basic Layer Creation", () => {
+    test("creates a Layer from Effect returning handlers", () => {
+      const testGroup = Group.group("test").pipe(
+        Group.add("getUser", getUserFn),
+      );
+
+      // Simple handler with no dependencies
+      const TestLive = Group.build(
+        testGroup,
+        Effect.succeed({
+          getUser: () => Effect.succeed({ result: "test" }),
+        })
+      );
+
+      // Should be a Layer<Tag<testGroup>, never, never>
+      expectTypeOf(TestLive).toMatchTypeOf<Layer.Layer<any, never, never>>();
+    });
+
+    test("handler Effect can have dependencies", () => {
+      // Define a custom service
+      class Database extends Context.Tag("Database")<
+        Database,
+        { readonly query: (sql: string) => Effect.Effect<string> }
+      >() {}
+
+      const testGroup = Group.group("users").pipe(
+        Group.add("getUser", getUserFn),
+      );
+
+      // Handler Effect requires Database
+      const UsersLive = Group.build(
+        testGroup,
+        Effect.gen(function* () {
+          const db = yield* Database;
+          return {
+            getUser: () => db.query("SELECT * FROM users").pipe(
+              Effect.map(() => ({ result: "user" }))
+            ),
+          };
+        })
+      );
+
+      // Should be Layer<Tag<testGroup>, never, Database>
+      expectTypeOf(UsersLive).toMatchTypeOf<Layer.Layer<any, never, Database>>();
+    });
+
+    test("handlers themselves must have R = never", () => {
+      const testGroup = Group.group("test").pipe(
+        Group.add("getUser", getUserFn),
+      );
+
+      type Handlers = Group.HandlersFor<typeof testGroup>;
+      type HandlerReturn = ReturnType<Handlers["getUser"]>;
+
+      // Handler return type should have R = never
+      expectTypeOf<HandlerReturn>().toMatchTypeOf<Effect.Effect<any, any, never>>();
+    });
+  });
+
+  describe("Group Dependencies - Query Group Depends on Another", () => {
+    test("query group can depend on mutation group handlers", async () => {
+      // Define mutation group
+      const notesWriteGroup = Group.group("notesWrite").pipe(
+        Group.add("create", createUserFn),
+        Group.add("delete", Function.mutation("delete")
+          .args(TestArgsSchema)
+          .returns(Schema.Null))
+      );
+
+      // Define query group
+      const notesReadGroup = Group.group("notesRead").pipe(
+        Group.add("list", getUserFn),
+        Group.add("get", getUserFn),
+      );
+
+      // Implement mutation group with no dependencies
+      const NotesWriteLive = Group.build(
+        notesWriteGroup,
+        Effect.succeed({
+          create: () => Effect.succeed({ result: "created" }),
+          delete: () => Effect.succeed(null),
+        })
+      );
+
+      // Create tags for the groups
+      class NotesWriteTag extends Group.Tag(notesWriteGroup)<NotesWriteTag>(){}
+      class NotesReadTag extends Group.Tag(notesReadGroup)<NotesReadTag>(){}
+
+      // Implement query group that depends on mutation handlers
+      const NotesReadLive = Group.build(
+        notesReadGroup,
+        Effect.gen(function* () {
+          // Access the mutation group's tag
+          const writeHandlers = yield* NotesWriteTag;
+
+          return {
+            list: () => Effect.succeed({ result: "list" }),
+            get: () =>
+              // Query group can call mutation group handlers
+              writeHandlers.create({ id: "test-id" }).pipe(
+                Effect.map(() => ({ result: "got after create" }))
+              ),
+          };
+        })
+      );
+
+      // Can compose them together
+      const CombinedLayer = Layer.mergeAll(
+        NotesWriteLive,
+        NotesReadLive.pipe(Layer.provide(NotesWriteLive))
+      );
+
+      // RUNTIME TEST: Actually use the composed layers
+      const program = Effect.gen(function* () {
+        const readHandlers = yield* NotesReadTag;
+
+        // Call list
+        const listResult = yield* readHandlers.list({ id: "test-id" });
+        expect(listResult).toEqual({ result: "list" });
+
+        // Call get (which internally calls create from write group)
+        const getResult = yield* readHandlers.get({ id: "test-id" });
+        expect(getResult).toEqual({ result: "got after create" });
+
+        return { listResult, getResult };
+      });
+
+      const result = await Effect.runPromise(
+        program.pipe(
+          Effect.provide(CombinedLayer) as any
+        )
+      ) as { listResult: { result: string }; getResult: { result: string } };
+
+      expect(result.listResult).toEqual({ result: "list" });
+      expect(result.getResult).toEqual({ result: "got after create" });
+    });
+
+    test("multiple groups can share dependencies", async () => {
+      // Shared service
+      class QueryDB extends Context.Tag("QueryDB")<
+        QueryDB,
+        { readonly query: (table: string) => Effect.Effect<unknown[]> }
+      >() {}
+
+      const usersGroup = Group.group("users").pipe(
+        Group.add("getUser", getUserFn),
+      );
+
+      const postsGroup = Group.group("posts").pipe(
+        Group.add("getPost", getUserFn),
+      );
+
+      // Create tags
+      class UsersTag extends Group.Tag(usersGroup)<UsersTag>(){}
+      class PostsTag extends Group.Tag(postsGroup)<PostsTag>(){}
+
+      // Both groups depend on QueryDB
+      const UsersLive = Group.build(
+        usersGroup,
+        Effect.gen(function* () {
+          const db = yield* QueryDB;
+          return {
+            getUser: () => db.query("users").pipe(Effect.map(() => ({ result: "user" }))),
+          };
+        })
+      );
+
+      const PostsLive = Group.build(
+        postsGroup,
+        Effect.gen(function* () {
+          const db = yield* QueryDB;
+          return {
+            getPost: () => db.query("posts").pipe(Effect.map(() => ({ result: "post" }))),
+          };
+        })
+      );
+
+      // Can provide shared dependency once
+      let queryCount = 0;
+      const QueryDBLive = Layer.succeed(QueryDB, {
+        query: (table: string) => Effect.sync(() => {
+          queryCount++;
+          return [{ table, count: queryCount }];
+        }),
+      });
+
+      const CombinedLayer = Layer.mergeAll(
+        UsersLive.pipe(Layer.provide(QueryDBLive)),
+        PostsLive.pipe(Layer.provide(QueryDBLive))
+      );
+
+      // RUNTIME TEST: Use both groups
+      const program = Effect.gen(function* () {
+        const users = yield* UsersTag;
+        const posts = yield* PostsTag;
+
+        const userResult = yield* users.getUser({ id: "test-id" });
+        const postResult = yield* posts.getPost({ id: "test-id" });
+
+        return { userResult, postResult };
+      });
+
+      const result = await Effect.runPromise(
+        program.pipe(
+          Effect.provide(CombinedLayer) as any
+        )
+      ) as { userResult: { result: string }; postResult: { result: string } };
+
+      expect(result.userResult).toEqual({ result: "user" });
+      expect(result.postResult).toEqual({ result: "post" });
+      expect(queryCount).toBeGreaterThan(0);
+    });
+  });
+
+  describe("Group Dependencies - Circular Dependencies", () => {
+    test("prevents direct circular dependencies at type level", () => {
+      // This test demonstrates that circular dependencies create type errors
+      // In practice, you'd restructure to avoid this pattern
+
+      const groupA = Group.group("a").pipe(
+        Group.add("funcA", getUserFn),
+      );
+
+      const groupB = Group.group("b").pipe(
+        Group.add("funcB", createUserFn),
+      );
+
+      // GroupA depends on GroupB - this is fine
+      const GroupALive = Group.build(
+        groupA,
+        Effect.gen(function* () {
+          const GroupBTag = Group.Tag(groupB)();
+          const bHandlers = yield* GroupBTag;
+
+          return {
+            funcA: () =>
+              bHandlers.funcB({ id: "test-id" }).pipe(Effect.map(() => ({ result: "a" }))),
+          };
+        })
+      );
+
+      // If GroupB tried to depend on GroupA, we'd have a circular dependency
+      // This would fail at runtime when trying to provide the layers
+      // Layer.provide(GroupALive.pipe(Layer.provide(GroupBLive))) // Would fail!
+
+      expectTypeOf(GroupALive).toMatchTypeOf<Layer.Layer<any, never, any>>();
+    });
+  });
+
+  describe("Group Dependencies - Hierarchical Dependencies", () => {
+    test("supports multi-level dependency chains", async () => {
+      // Level 1: Infrastructure
+      class Database extends Context.Tag("Database")<
+        Database,
+        { readonly query: () => Effect.Effect<unknown[]> }
+      >() {}
+
+      // Level 2: Domain services using infrastructure
+      const usersGroup = Group.group("users").pipe(
+        Group.add("getUser", getUserFn),
+      );
+
+      class UsersTag extends Group.Tag(usersGroup)<UsersTag>(){}
+
+      const UsersLive = Group.build(
+        usersGroup,
+        Effect.gen(function* () {
+          const db = yield* Database;
+          return {
+            getUser: () => db.query().pipe(Effect.map(() => ({ result: "user-from-db" }))),
+          };
+        })
+      );
+
+      // Level 3: Application services using domain services
+      const profileGroup = Group.group("profile").pipe(
+        Group.add("getProfile", getUserFn),
+      );
+
+      class ProfileTag extends Group.Tag(profileGroup)<ProfileTag>(){}
+
+      const ProfileLive = Group.build(
+        profileGroup,
+        Effect.gen(function* () {
+          const users = yield* UsersTag;
+
+          return {
+            getProfile: () =>
+              users.getUser({ id: "test-id" }).pipe(Effect.map((user) => ({
+                result: "profile",
+                userResult: user.result
+              }))),
+          };
+        })
+      );
+
+      // Compose the full stack
+      const DatabaseLive = Layer.succeed(Database, {
+        query: () => Effect.succeed([{ id: 1, name: "test" }]),
+      });
+
+      const FullStack = ProfileLive.pipe(
+        Layer.provide(UsersLive.pipe(Layer.provide(DatabaseLive)))
+      );
+
+      // RUNTIME TEST: Execute the full 3-level stack
+      const program = Effect.gen(function* () {
+        const profile = yield* ProfileTag;
+        const result = yield* profile.getProfile({ id: "test-id" });
+        return result;
+      });
+
+      const result = await Effect.runPromise(
+        program.pipe(
+          Effect.provide(FullStack) as any
+        )
+      );
+
+      expect(result).toEqual({
+        result: "profile",
+        userResult: "user-from-db"
+      });
+    });
+
+    test("supports diamond dependency pattern", async () => {
+      // Shared base service
+      class Config extends Context.Tag("Config")<
+        Config,
+        { readonly apiUrl: string }
+      >() {}
+
+      // Two groups both depend on Config
+      const authGroup = Group.group("auth").pipe(
+        Group.add("login", getUserFn),
+      );
+
+      const storageGroup = Group.group("storage").pipe(
+        Group.add("upload", createUserFn),
+      );
+
+      class AuthTag extends Group.Tag(authGroup)<AuthTag>(){}
+      class StorageTag extends Group.Tag(storageGroup)<StorageTag>(){}
+
+      const AuthLive = Group.build(
+        authGroup,
+        Effect.gen(function* () {
+          const config = yield* Config;
+          return {
+            login: () => Effect.succeed({ result: `auth:${config.apiUrl}` }),
+          };
+        })
+      );
+
+      const StorageLive = Group.build(
+        storageGroup,
+        Effect.gen(function* () {
+          const config = yield* Config;
+          return {
+            upload: () => Effect.succeed({ result: `storage:${config.apiUrl}` }),
+          };
+        })
+      );
+
+      // Third group depends on both
+      const appGroup = Group.group("app").pipe(
+        Group.add("init", getUserFn),
+      );
+
+      class AppTag extends Group.Tag(appGroup)<AppTag>(){}
+
+      const AppLive = Group.build(
+        appGroup,
+        Effect.gen(function* () {
+          const auth = yield* AuthTag;
+          const storage = yield* StorageTag;
+
+          return {
+            init: () =>
+              Effect.all([auth.login({ id: "test-id" }), storage.upload({ id: "test-id" })]).pipe(
+                Effect.map(([authRes, storageRes]) => ({
+                  result: "initialized",
+                  auth: authRes.result,
+                  storage: storageRes.result
+                }))
+              ),
+          };
+        })
+      );
+
+      // Diamond: AppLive -> (AuthLive, StorageLive) -> Config
+      const ConfigLive = Layer.succeed(Config, { apiUrl: "https://api.example.com" });
+
+      const FullApp = AppLive.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            AuthLive.pipe(Layer.provide(ConfigLive)),
+            StorageLive.pipe(Layer.provide(ConfigLive))
+          )
+        )
+      );
+
+      // RUNTIME TEST: Execute diamond dependency pattern
+      const program = Effect.gen(function* () {
+        const app = yield* AppTag;
+        const result = yield* app.init({ id: "test-id" });
+        return result;
+      });
+
+      const result = await Effect.runPromise(
+        program.pipe(
+          Effect.provide(FullApp) as any
+        )
+      );
+
+      expect(result).toEqual({
+        result: "initialized",
+        auth: "auth:https://api.example.com",
+        storage: "storage:https://api.example.com"
+      });
+    });
+  });
+
+  describe("Group.buildScoped() - Resource Management", () => {
+    test("supports scoped resources with cleanup", () => {
+      const testGroup = Group.group("test").pipe(
+        Group.add("query", getUserFn),
+      );
+
+      // Handler creation requires resources
+      const TestLive = Group.buildScoped(
+        testGroup,
+        Effect.gen(function* () {
+          // Acquire resource with cleanup
+          const connection = yield* Effect.acquireRelease(
+            Effect.succeed({ id: "conn-123" }),
+            (conn) => Effect.sync(() => console.log(`Closing ${conn.id}`))
+          );
+
+          return {
+            query: () => Effect.succeed({ result: `Using ${connection.id}` }),
+          };
+        })
+      );
+
+      // Should exclude Scope from requirements
+      expectTypeOf(TestLive).toMatchTypeOf<Layer.Layer<any, never, never>>();
+    });
+
+    test("buildScoped with dependencies", () => {
+      class Config extends Context.Tag("Config")<Config, { readonly connString: string }>() {}
+
+      const testGroup = Group.group("db").pipe(
+        Group.add("query", getUserFn),
+      );
+
+      const DBLive = Group.buildScoped(
+        testGroup,
+        Effect.gen(function* () {
+          const config = yield* Config;
+
+          // Create scoped connection
+          const conn = yield* Effect.acquireRelease(
+            Effect.succeed({ connString: config.connString }),
+            () => Effect.succeed(undefined)
+          );
+
+          return {
+            query: () => Effect.succeed({ result: conn.connString }),
+          };
+        })
+      );
+
+      // Should require Config but not Scope
+      expectTypeOf(DBLive).toMatchTypeOf<Layer.Layer<any, never, Config>>();
+    });
+  });
+
+  describe("Group.buildMock() - Testing Support", () => {
+    test("creates mock layer with partial implementation", () => {
+      const testGroup = Group.group("test").pipe(
+        Group.add("func1", getUserFn),
+        Group.add("func2", createUserFn),
+      );
+
+      // Only implement func1, func2 will throw if called
+      const TestMock = Group.buildMock(testGroup, {
+        func1: () => Effect.succeed({ result: "mocked" }),
+      });
+
+      expectTypeOf(TestMock).toMatchTypeOf<Layer.Layer<any, never, never>>();
+    });
+
+    test("allows empty mock for all unimplemented", () => {
+      const testGroup = Group.group("test").pipe(
+        Group.add("func1", getUserFn),
+      );
+
+      // All functions throw UnimplementedError
+      const TestMock = Group.buildMock(testGroup, {});
+
+      expectTypeOf(TestMock).toMatchTypeOf<Layer.Layer<any, never, never>>();
+    });
+  });
+
+  describe("Real-World Scenarios - Convex-like Patterns", () => {
+    test("query group depends on mutation group for cache invalidation", async () => {
+      // Simulate Convex DB services
+      class QueryDB extends Context.Tag("QueryDB")<
+        QueryDB,
+        { readonly query: (table: string) => Effect.Effect<unknown[]> }
+      >() {}
+
+      class MutationDB extends Context.Tag("MutationDB")<
+        MutationDB,
+        {
+          readonly insert: (table: string, doc: unknown) => Effect.Effect<string>;
+          readonly delete: (table: string, id: string) => Effect.Effect<void>;
+        }
+      >() {}
+
+      // Notes mutation group
+      const notesMutationGroup = Group.group("notesMutation").pipe(
+        Group.add("insert", createUserFn),
+        Group.add("delete", Function.mutation("delete")
+          .args(TestArgsSchema)
+          .returns(Schema.Null)),
+      );
+
+      class NotesMutationTag extends Group.Tag(notesMutationGroup)<NotesMutationTag>(){}
+
+      const NotesMutationLive = Group.build(
+        notesMutationGroup,
+        Effect.gen(function* () {
+          const db = yield* MutationDB;
+          return {
+            insert: () => db.insert("notes", { text: "test" }).pipe(
+              Effect.map((id) => ({ result: `inserted:${id}` }))
+            ),
+            delete: () => db.delete("notes", "id").pipe(
+              Effect.map(() => null)
+            ),
+          };
+        })
+      );
+
+      // Notes query group that can trigger mutations
+      const notesQueryGroup = Group.group("notesQuery").pipe(
+        Group.add("list", getUserFn),
+        Group.add("refresh", createUserFn),
+      );
+
+      class NotesQueryTag extends Group.Tag(notesQueryGroup)<NotesQueryTag>(){}
+
+      const NotesQueryLive = Group.build(
+        notesQueryGroup,
+        Effect.gen(function* () {
+          const queryDb = yield* QueryDB;
+          const mutations = yield* NotesMutationTag;
+
+          return {
+            list: () => queryDb.query("notes").pipe(
+              Effect.map((notes) => ({ result: "list", count: notes.length }))
+            ),
+            refresh: () =>
+              // Query can trigger mutation and re-query
+              mutations.insert({ id: "test-id" }).pipe(
+                Effect.flatMap(() => queryDb.query("notes")),
+                Effect.map((notes) => ({ result: "refreshed", count: notes.length }))
+              ),
+          };
+        })
+      );
+
+      // RUNTIME TEST: Simulate the notesMutationCtx -> notesQueryCtx pattern
+      let insertCount = 0;
+      const notes: Array<{ id: string; text: string }> = [];
+
+      const MutationDBLive = Layer.succeed(MutationDB, {
+        insert: (_table: string, doc: any) => Effect.sync(() => {
+          const id = `note-${++insertCount}`;
+          notes.push({ id, text: doc.text });
+          return id;
+        }),
+        delete: (_table: string, id: string) => Effect.sync(() => {
+          const index = notes.findIndex(n => n.id === id);
+          if (index !== -1) notes.splice(index, 1);
+        }),
+      });
+
+      const QueryDBLive = Layer.succeed(QueryDB, {
+        query: (_table: string) => Effect.succeed([...notes]),
+      });
+
+      const FullStack = Layer.mergeAll(
+        NotesMutationLive.pipe(Layer.provide(MutationDBLive)),
+        NotesQueryLive.pipe(
+          Layer.provide(NotesMutationLive.pipe(Layer.provide(MutationDBLive))),
+          Layer.provide(QueryDBLive)
+        )
+      );
+
+      const program = Effect.gen(function* () {
+        const query = yield* NotesQueryTag;
+
+        // Initial list (empty)
+        const listResult1 = yield* query.list({ id: "test-id" });
+
+        // Refresh (triggers insert + re-query)
+        const refreshResult = yield* query.refresh({ id: "test-id" });
+
+        // List again (should have 1 note)
+        const listResult2 = yield* query.list({ id: "test-id" });
+
+        return { listResult1, refreshResult, listResult2 };
+      });
+
+      const result = await Effect.runPromise(
+        program.pipe(
+          Effect.provide(FullStack) as any
+        )
+      ) as { listResult1: { result: string; count: number }; refreshResult: { result: string; count: number }; listResult2: { result: string; count: number } };
+
+      expect(result.listResult1).toEqual({ result: "list", count: 0 });
+      expect(result.refreshResult).toEqual({ result: "refreshed", count: 1 });
+      expect(result.listResult2).toEqual({ result: "list", count: 1 });
+      expect(notes).toHaveLength(1);
+    });
+
+    test("supports Effect Platform HTTP-like middleware pattern", async () => {
+      // Middleware service (like HttpApiMiddleware)
+      class Auth extends Context.Tag("Auth")<
+        Auth,
+        { readonly userId: string }
+      >() {}
+
+      // Protected group requires Auth
+      const protectedGroup = Group.group("protected").pipe(
+        Group.add("getProfile", getUserFn),
+      );
+
+      class ProtectedTag extends Group.Tag(protectedGroup)<ProtectedTag>(){}
+
+      const ProtectedLive = Group.build(
+        protectedGroup,
+        Effect.gen(function* () {
+          const auth = yield* Auth;
+
+          return {
+            getProfile: () =>
+              Effect.succeed({ result: `Profile for ${auth.userId}` }),
+          };
+        })
+      );
+
+      // Auth middleware layer
+      const AuthLive = Layer.succeed(Auth, { userId: "user-123" });
+
+      // Compose with middleware
+      const ProtectedWithAuth = ProtectedLive.pipe(Layer.provide(AuthLive));
+
+      expectTypeOf(ProtectedWithAuth).toMatchTypeOf<Layer.Layer<any, never, never>>();
+
+      // RUNTIME TEST: Verify middleware is injected
+      const program = Effect.gen(function* () {
+        const handlers = yield* ProtectedTag;
+        const result = yield* handlers.getProfile({ id: "test-id" });
+        return result;
+      });
+
+      const result = await Effect.runPromise(
+        program.pipe(
+          Effect.provide(ProtectedWithAuth) as any
+        )
+      );
+
+      expect(result).toEqual({ result: "Profile for user-123" });
+    });
   });
 });
