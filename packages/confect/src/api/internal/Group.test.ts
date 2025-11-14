@@ -468,7 +468,7 @@ describe("Layer Building - Complex Dependencies", () => {
       class Database extends Context.Tag("Database")<
         Database,
         { readonly query: (sql: string) => Effect.Effect<string> }
-      >() {}
+      >() { }
 
       const testGroup = Group.group("users").pipe(
         Group.add("getUser", getUserFn),
@@ -528,8 +528,10 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       // Create tags for the groups
-      class NotesWriteTag extends Group.Tag(notesWriteGroup)<NotesWriteTag>(){}
-      class NotesReadTag extends Group.Tag(notesReadGroup)<NotesReadTag>(){}
+      class NotesWriteTag extends Group.Tag(notesWriteGroup)<NotesWriteTag>() { }
+      class NotesReadTag extends Group.Tag(notesReadGroup)<NotesReadTag>() { }
+
+
 
       // Implement query group that depends on mutation handlers
       const NotesReadLive = Group.build(
@@ -550,10 +552,7 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       // Can compose them together
-      const CombinedLayer = Layer.mergeAll(
-        NotesWriteLive,
-        NotesReadLive.pipe(Layer.provide(NotesWriteLive))
-      );
+      const CombinedLayer = Layer.provideMerge(NotesWriteLive, NotesReadLive);
 
       // RUNTIME TEST: Actually use the composed layers
       const program = Effect.gen(function* () {
@@ -585,7 +584,7 @@ describe("Layer Building - Complex Dependencies", () => {
       class QueryDB extends Context.Tag("QueryDB")<
         QueryDB,
         { readonly query: (table: string) => Effect.Effect<unknown[]> }
-      >() {}
+      >() { }
 
       const usersGroup = Group.group("users").pipe(
         Group.add("getUser", getUserFn),
@@ -596,8 +595,8 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       // Create tags
-      class UsersTag extends Group.Tag(usersGroup)<UsersTag>(){}
-      class PostsTag extends Group.Tag(postsGroup)<PostsTag>(){}
+      class UsersTag extends Group.Tag(usersGroup)<UsersTag>() { }
+      class PostsTag extends Group.Tag(postsGroup)<PostsTag>() { }
 
       // Both groups depend on QueryDB
       const UsersLive = Group.build(
@@ -697,14 +696,14 @@ describe("Layer Building - Complex Dependencies", () => {
       class Database extends Context.Tag("Database")<
         Database,
         { readonly query: () => Effect.Effect<unknown[]> }
-      >() {}
+      >() { }
 
       // Level 2: Domain services using infrastructure
       const usersGroup = Group.group("users").pipe(
         Group.add("getUser", getUserFn),
       );
 
-      class UsersTag extends Group.Tag(usersGroup)<UsersTag>(){}
+      class UsersTag extends Group.Tag(usersGroup)<UsersTag>() { }
 
       const UsersLive = Group.build(
         usersGroup,
@@ -721,7 +720,7 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("getProfile", getUserFn),
       );
 
-      class ProfileTag extends Group.Tag(profileGroup)<ProfileTag>(){}
+      class ProfileTag extends Group.Tag(profileGroup)<ProfileTag>() { }
 
       const ProfileLive = Group.build(
         profileGroup,
@@ -771,7 +770,7 @@ describe("Layer Building - Complex Dependencies", () => {
       class Config extends Context.Tag("Config")<
         Config,
         { readonly apiUrl: string }
-      >() {}
+      >() { }
 
       // Two groups both depend on Config
       const authGroup = Group.group("auth").pipe(
@@ -782,8 +781,8 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("upload", createUserFn),
       );
 
-      class AuthTag extends Group.Tag(authGroup)<AuthTag>(){}
-      class StorageTag extends Group.Tag(storageGroup)<StorageTag>(){}
+      class AuthTag extends Group.Tag(authGroup)<AuthTag>() { }
+      class StorageTag extends Group.Tag(storageGroup)<StorageTag>() { }
 
       const AuthLive = Group.build(
         authGroup,
@@ -810,7 +809,7 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("init", getUserFn),
       );
 
-      class AppTag extends Group.Tag(appGroup)<AppTag>(){}
+      class AppTag extends Group.Tag(appGroup)<AppTag>() { }
 
       const AppLive = Group.build(
         appGroup,
@@ -889,7 +888,7 @@ describe("Layer Building - Complex Dependencies", () => {
     });
 
     test("buildScoped with dependencies", () => {
-      class Config extends Context.Tag("Config")<Config, { readonly connString: string }>() {}
+      class Config extends Context.Tag("Config")<Config, { readonly connString: string }>() { }
 
       const testGroup = Group.group("db").pipe(
         Group.add("query", getUserFn),
@@ -944,7 +943,7 @@ describe("Layer Building - Complex Dependencies", () => {
       class QueryDB extends Context.Tag("QueryDB")<
         QueryDB,
         { readonly query: (table: string) => Effect.Effect<unknown[]> }
-      >() {}
+      >() { }
 
       class MutationDB extends Context.Tag("MutationDB")<
         MutationDB,
@@ -952,7 +951,7 @@ describe("Layer Building - Complex Dependencies", () => {
           readonly insert: (table: string, doc: unknown) => Effect.Effect<string>;
           readonly delete: (table: string, id: string) => Effect.Effect<void>;
         }
-      >() {}
+      >() { }
 
       // Notes mutation group
       const notesMutationGroup = Group.group("notesMutation").pipe(
@@ -962,7 +961,7 @@ describe("Layer Building - Complex Dependencies", () => {
           .returns(Schema.Null)),
       );
 
-      class NotesMutationTag extends Group.Tag(notesMutationGroup)<NotesMutationTag>(){}
+      class NotesMutationTag extends Group.Tag(notesMutationGroup)<NotesMutationTag>() { }
 
       const NotesMutationLive = Group.build(
         notesMutationGroup,
@@ -985,7 +984,7 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("refresh", createUserFn),
       );
 
-      class NotesQueryTag extends Group.Tag(notesQueryGroup)<NotesQueryTag>(){}
+      class NotesQueryTag extends Group.Tag(notesQueryGroup)<NotesQueryTag>() { }
 
       const NotesQueryLive = Group.build(
         notesQueryGroup,
@@ -1067,14 +1066,14 @@ describe("Layer Building - Complex Dependencies", () => {
       class Auth extends Context.Tag("Auth")<
         Auth,
         { readonly userId: string }
-      >() {}
+      >() { }
 
       // Protected group requires Auth
       const protectedGroup = Group.group("protected").pipe(
         Group.add("getProfile", getUserFn),
       );
 
-      class ProtectedTag extends Group.Tag(protectedGroup)<ProtectedTag>(){}
+      class ProtectedTag extends Group.Tag(protectedGroup)<ProtectedTag>() { }
 
       const ProtectedLive = Group.build(
         protectedGroup,

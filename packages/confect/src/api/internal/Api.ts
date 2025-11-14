@@ -123,17 +123,19 @@ export type AnyConfectApiGroup = Group.ConfectApiGroup<
   Record<string, Function.ConfectApiFunction>
 >;
 
+export type AnyTagClass = Group.TagClass<any, any, any>;
+
 /**
- * Helper type to merge group records.
+ * Helper type to merge Tag class records.
  * TypeScript cannot prove that MergeRight<A, B> extends Record<string, T>
  * even when A and B both extend Record<string, T>, so we use this helper.
  *
  * @internal
  */
 type MergedGroups<
-  A extends Record<string, AnyConfectApiGroup>,
-  B extends Record<string, AnyConfectApiGroup>,
-> = Types.MergeRight<A, B> extends Record<string, AnyConfectApiGroup>
+  A extends Record<string, AnyTagClass>,
+  B extends Record<string, AnyTagClass>,
+> = Types.MergeRight<A, B> extends Record<string, AnyTagClass>
   ? Types.MergeRight<A, B>
   : never;
 
@@ -149,7 +151,7 @@ type MergedGroups<
  */
 export interface ConfectApi<
   out Name extends string,
-  out Groups extends Record<string, AnyConfectApiGroup>,
+  out Groups extends Record<string, Group.TagClass<any, any, any>>,
   out _R = never,
 > extends Pipeable {
   readonly [ApiTypeId]: ApiTypeId;
@@ -254,7 +256,7 @@ export const api = <Name extends string>(
  */
 export const isApi = (
   u: unknown,
-): u is ConfectApi<string, Record<string, AnyConfectApiGroup>, never> =>
+): u is ConfectApi<string, Record<string, AnyTagClass>, never> =>
   Predicate.hasProperty(u, ApiTypeId);
 
 // =============================================================================
@@ -271,7 +273,7 @@ export const isApi = (
  * const myApi = Api.api("myApp").groups({ ... })
  * type Name = Api.GetName<typeof myApi>  // "myApp"
  */
-export type GetName<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> =
+export type GetName<A extends ConfectApi<string, Record<string, AnyTagClass>, any>> =
   A["name"];
 
 /**
@@ -284,7 +286,7 @@ export type GetName<A extends ConfectApi<string, Record<string, AnyConfectApiGro
  * const myApi = Api.api("myApp").groups(grps)
  * type Groups = Api.GetGroups<typeof myApi>  // typeof grps
  */
-export type GetGroups<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> =
+export type GetGroups<A extends ConfectApi<string, Record<string, AnyTagClass>, any>> =
   A["groups"];
 
 /**
@@ -301,7 +303,7 @@ export type GetGroups<A extends ConfectApi<string, Record<string, AnyConfectApiG
  * type Names = Api.GetGroupNames<typeof myApi>
  * // "users" | "posts"
  */
-export type GetGroupNames<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> =
+export type GetGroupNames<A extends ConfectApi<string, Record<string, AnyTagClass>, any>> =
   keyof GetGroups<A>;
 
 /**
@@ -325,8 +327,8 @@ export type GetGroupNames<A extends ConfectApi<string, Record<string, AnyConfect
  * type AllFunctions = Api.GetAllFunctions<typeof myApi>
  * // Record<string, ConfectApiFunction>
  */
-export type GetAllFunctions<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> = {
-  [K in keyof GetGroups<A>]: Group.GetFunctions<GetGroups<A>[K]>;
+export type GetAllFunctions<A extends ConfectApi<string, Record<string, AnyTagClass>, any>> = {
+  [K in keyof GetGroups<A>]: Group.GetFunctions<GetGroups<A>[K]["group"]>;
 }[keyof GetGroups<A>];
 
 /**
@@ -339,7 +341,7 @@ export type GetAllFunctions<A extends ConfectApi<string, Record<string, AnyConfe
  * const myApi = Api.api("myApp").groups({ ... })
  * type R = Api.GetContext<typeof myApi>  // never (default)
  */
-export type GetContext<A extends ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> =
+export type GetContext<A extends ConfectApi<string, Record<string, AnyTagClass>, any>> =
   A extends ConfectApi<any, any, infer R> ? R : never;
 
 // =============================================================================
@@ -378,15 +380,18 @@ export type GetContext<A extends ConfectApi<string, Record<string, AnyConfectApi
  * // myApi has both users and posts groups
  */
 export const add: <
-  Group extends AnyConfectApiGroup,
-  GR,
+  TagClass extends Group.TagClass<any, any, any>
 >(
-  group: Group,
-) => <Name extends string, Groups extends Record<string, AnyConfectApiGroup>, R>(
+  tagClass: TagClass,
+) => <Name extends string, Groups extends Record<string, Group.TagClass<any, any, any>>, R>(
   api: ConfectApi<Name, Groups, R>,
-) => ConfectApi<Name, MergedGroups<Groups, Record<Group.GetName<Group>, Group>>, R | GR> =
-  (group) => (api) => {
-    const newGroups = Record.set(api.groups, group.name, group)
+) => ConfectApi<
+  Name,
+  MergedGroups<Groups, Record<TagClass["group"]["name"], TagClass>>,
+  R | TagClass
+> =
+  (tagClass) => (api) => {
+    const newGroups = Record.set(api.groups, tagClass.group.name, tagClass)
     return {
       [ApiTypeId]: ApiTypeId,
       name: api.name,
@@ -615,8 +620,8 @@ export class ApiService extends Context.Tag("@confect/ApiService")<
  *
  * @internal
  */
-export type UnionOfGroupServices<Groups extends Record<string, AnyConfectApiGroup>> = {
-  [K in keyof Groups]: Group.Tag<Groups[K]>
+export type UnionOfGroupServices<Groups extends Record<string, Group.TagClass<any, any, any>>> = {
+  [K in keyof Groups]: Groups[K]
 }[keyof Groups];
 
 
@@ -669,7 +674,7 @@ export const toLayer = <
  *
  * @internal
  */
-type ConvexApiServer<Groups extends Record<string, AnyConfectApiGroup>> = {
+type ConvexApiServer<Groups extends Record<string, AnyTagClass>> = {
   [K in keyof Groups]: Record<
     string,
     | RegisteredQuery<"public", DefaultFunctionArgs, any>
@@ -1007,7 +1012,7 @@ type ConfectBuildTimeServices =
 export const serve = <
   S extends GenericConfectSchema,
   Name extends string,
-  Groups extends Record<string, AnyConfectApiGroup>,
+  Groups extends Record<string, AnyTagClass>,
 >(
   schemaDefinition: ConfectSchemaDefinition<S>,
   api: ConfectApi<Name, Groups, any>,
@@ -1015,8 +1020,9 @@ export const serve = <
 ): ConvexApiServer<Groups> => {
   console.log("[confect] Building Convex API server...");
   console.log("[confect] Groups to serve:", Object.keys(api.groups));
-  return Record.map(api.groups, (group, groupName) => {
+  return Record.map(api.groups, (tagClass, groupName) => {
     console.log(`[confect] Processing group: ${groupName}`);
+    const group = tagClass.group;  // Extract group from TagClass
     return Record.map(group.functions, (func, functionName) => {
       console.log(`[confect] Registering function: [${groupName}].${functionName}. Type: ${func.functionType}`);
       return Match.value(func.functionType).pipe(
@@ -1027,7 +1033,7 @@ export const serve = <
             func.args,
             func.returns,
             apiLayer as never,
-            Group.Tag(group)(),
+            tagClass,  // Pass TagClass directly
             functionName
           );
         }),
@@ -1038,7 +1044,7 @@ export const serve = <
             func.args,
             func.returns,
             apiLayer as never,
-            Group.Tag(group)(),
+            tagClass,  // Pass TagClass directly
             functionName
           );
         }),
@@ -1049,7 +1055,7 @@ export const serve = <
             func.args,
             func.returns,
             apiLayer,
-            Group.Tag(group)(),
+            tagClass,  // Pass TagClass directly
             functionName
           );
         }),

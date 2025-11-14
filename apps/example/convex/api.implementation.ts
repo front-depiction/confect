@@ -11,11 +11,10 @@
  */
 
 import * as Api from "@rjdellecese/confect/api/internal/Api";
-import * as Group from "@rjdellecese/confect/api/internal/Group";
 import { MutationDB } from "@rjdellecese/confect/server";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { notesApi, notesGroup } from "./api.definition";
+import { Notes, notesApi } from "./api.definition";
 import { QueryDB } from "./confect";
 
 // =============================================================================
@@ -27,13 +26,13 @@ import { QueryDB } from "./confect";
  * Handlers have open R requirements (QueryDB, MutationDB) that get provided
  * by the Convex runtime when Api.serve() wraps them.
  */
-export const NotesGroupLive = Group.build(
-  notesGroup,
+export const NotesGroupLive = Layer.effect(
+  Notes,
   Effect.gen(function* () {
     const queryDb = yield* QueryDB;
-    const mutationDb = yield* MutationDB;
-    
-    
+    const mutationDB = yield* MutationDB;
+
+
     return {
       listNotes: () =>
         Effect.gen(function* () {
@@ -45,12 +44,12 @@ export const NotesGroupLive = Group.build(
 
       insertNote: (args) =>
         Effect.gen(function* () {
-          return yield* mutationDb.insert("notes", { text: args.text });
+          return yield* mutationDB.insert("notes", { text: args.text });
         }),
 
       deleteNote: (args) =>
         Effect.gen(function* () {
-          yield* mutationDb.delete("notes", args.noteId);
+          yield* mutationDB.delete("notes", args.noteId);
           return null;
         }),
 
@@ -64,8 +63,8 @@ export const NotesGroupLive = Group.build(
   }),
 );
 
-// Type check: Layer provides GroupService, no requirements (handlers have open R)
-// Layer.Layer<Group.GroupService<"notes">, never, never>
+// Type check: Layer provides Notes Tag, requirements are QueryDB | MutationDB
+// Layer.Layer<Notes, never, QueryDB | MutationDB>
 
 // =============================================================================
 // Complete API Layer
@@ -90,4 +89,4 @@ export const NotesApiLayer = Api.toLayer(notesApi).pipe(
 );
 
 // Type check: Layer fully resolved, ready for Api.serve()
-// Layer.Layer<Api.ApiService, never, never>
+// Layer.Layer<Api.ApiService, never, QueryDB | MutationDB>

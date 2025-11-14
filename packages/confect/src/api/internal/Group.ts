@@ -89,17 +89,74 @@ type RenameKey<
 > = MergedFunctions<Omit<A, K1>, Record<K2, A[K1]>>
 
 
-export type Tag<G extends ConfectApiGroup<string, {}>, Id = GetName<G>> = Context.Tag<Id, HandlersFor<G>>
 /**
- * Service tag for a group's handler implementations.
- * The service value is the handlers object.
+ * Tag class for a group's handler implementations.
  *
- * Each group gets its own unique tag based on the group name.
+ * The Tag class extends Context.Tag and stores the group definition.
+ * This ensures single Tag identity while maintaining access to the group.
  *
  * @category Layer Building
  * @since 1.0.0
  */
-export const Tag = <G extends ConfectApiGroup<string, {}>>(group: G) => <Id = GetName<G>>() => Context.Tag(group.name)<Id, HandlersFor<G>>()
+export interface TagClass<Self, Id extends string, G extends ConfectApiGroup<string, any>>
+  extends Context.Tag<Self, HandlersFor<G>> {
+  readonly group: G
+}
+
+/**
+ * Create a Tag class for a group.
+ *
+ * The returned class:
+ * - Extends Context.Tag with the group name as key
+ * - Stores the group definition on `.group` property
+ * - Provides HandlersFor<G> as the service type
+ * - Ensures single Tag identity (one class definition = one tag)
+ *
+ * @category Layer Building
+ * @since 1.0.0
+ *
+ * @example
+ * ```typescript
+ * const notesGroup = Group.group("notes").pipe(
+ *   Group.add("list", listQuery),
+ *   Group.add("create", createMutation)
+ * )
+ *
+ * export class Notes extends Group.Tag(notesGroup)<Notes>() {}
+ *
+ * // Notes is now a Context.Tag with:
+ * // - key: "notes"
+ * // - service: { list: (...) => Effect, create: (...) => Effect }
+ * // - Notes.group === notesGroup
+ * ```
+ */
+export const Tag = <G extends ConfectApiGroup<string, {}>>(group: G) => <Self, Id = GetName<G>>(): TagClass<Self, Id & string, G> => {
+  const limit = Error.stackTraceLimit
+  Error.stackTraceLimit = 2
+  const creationError = new Error()
+  Error.stackTraceLimit = limit
+
+  function TagClass() {}
+  const TagClass_ = TagClass as any
+
+  // Extend Context.Tag prototype
+  Object.setPrototypeOf(TagClass, Object.getPrototypeOf(Context.GenericTag<Self, any>(group.name)))
+
+  // Set the key for Context lookup
+  TagClass_.key = group.name
+
+  // Store the group definition
+  TagClass_.group = group
+
+  // Stack trace for debugging
+  Object.defineProperty(TagClass_, "stack", {
+    get() {
+      return creationError.stack
+    }
+  })
+
+  return TagClass_ as TagClass<Self, Id & string, G>
+}
 /**
  * API Group - collection of related functions.
  *
@@ -413,81 +470,26 @@ export const byName: Order.Order<
 // Layer Building (Dependency Management)
 // =============================================================================
 
-
 /**
- * Build a Layer from an Effect that returns handlers.
+ * @deprecated Use `Layer.effect(TagClass, effect)` directly instead.
  *
- * Thin wrapper around Layer.effect(GroupService(group), effect).
- * The handler Effect can have requirements (R), which become the Layer's requirements.
- * Handler functions themselves must have R = never (they close over dependencies).
+ * The Group.build helpers have been removed in favor of using Effect's
+ * Layer functions directly with Tag classes.
+ *
+ * Migration:
+ * ```typescript
+ * // Before
+ * const NotesLive = Group.build(notesGroup, Effect.gen(...))
+ *
+ * // After
+ * export class Notes extends Group.Tag(notesGroup)<Notes>() {}
+ * const NotesLive = Layer.effect(Notes, Effect.gen(...))
+ * ```
+ *
+ * For scoped resources, use `Layer.scoped(TagClass, effect)`.
+ * For mocks, use `Layer.succeed(TagClass, handlers)` or `Layer.succeedContext`.
  *
  * @category Layer Building
  * @since 1.0.0
  */
-export const build: {
-  <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>>(
-    group: ConfectApiGroup<Name, Functions>
-  ): <E, R>(
-    effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
-  ) => Layer.Layer<ReturnType<ReturnType<typeof Tag<typeof group>>>, E, R>
-
-  <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>, E, R>(
-    group: ConfectApiGroup<Name, Functions>,
-    effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
-  ): Layer.Layer<ReturnType<ReturnType<typeof Tag<typeof group>>>, E, R>
-} = dual(2, (group: any, effect: any) => {
-  const tag = Tag(group)();
-  return Layer.effect(tag, effect);
-});
-
-/**
- * Build a Layer from a scoped Effect.
- *
- * Thin wrapper around Layer.scoped(GroupService(group), effect).
- * Use this when handlers need resources that require cleanup.
- *
- * @category Layer Building
- * @since 1.0.0
- */
-export const buildScoped: {
-  <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>>(
-    group: ConfectApiGroup<Name, Functions>
-  ): <E, R>(
-    effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
-  ) => Layer.Layer<Tag<typeof group>, E, Exclude<R, Scope.Scope>>
-
-  <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>, E, R>(
-    group: ConfectApiGroup<Name, Functions>,
-    effect: Effect.Effect<HandlersFor<ConfectApiGroup<Name, Functions>>, E, R>
-  ): Layer.Layer<Tag<typeof group>, E, Exclude<R, Scope.Scope>>
-} = dual(2, (group: any, effect: any) => {
-  const tag = Tag(group)();
-  return Layer.scoped(tag, effect);
-});
-
-
-/**
- * Create a mock Layer with partial implementation.
- *
- * Thin wrapper around Layer.mock(GroupService(group), handlers).
- * Unimplemented handlers throw UnimplementedError when called.
- *
- * @category Layer Building
- * @since 1.0.0
- */
-export const buildMock: {
-  <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>>(
-    group: ConfectApiGroup<Name, Functions>
-  ): (
-    handlers: Partial<HandlersFor<ConfectApiGroup<Name, Functions>>>
-  ) => Layer.Layer<Tag<typeof group>>
-
-  <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>>(
-    group: ConfectApiGroup<Name, Functions>,
-    handlers: Partial<HandlersFor<ConfectApiGroup<Name, Functions>>>
-  ): Layer.Layer<Tag<typeof group>>
-} = dual(2, (group: any, handlers: any) => {
-  const tag = Tag(group)();
-  return Layer.mock(tag, handlers);
-});
 
