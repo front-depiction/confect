@@ -380,17 +380,17 @@ export type GetContext<A extends ConfectApi<string, Record<string, AnyTagClass>,
  * // myApi has both users and posts groups
  */
 export const add: <
-  TagClass extends Group.TagClass<any, any, any>
+  TC extends Group.TagClass<any, any, any>
 >(
-  tagClass: TagClass,
+  tagClass: TC,
 ) => <Name extends string, Groups extends Record<string, Group.TagClass<any, any, any>>, R>(
   api: ConfectApi<Name, Groups, R>,
 ) => ConfectApi<
   Name,
-  MergedGroups<Groups, Record<TagClass["group"]["name"], TagClass>>,
-  R | TagClass
+  MergedGroups<Groups, Record<TC["group"]["name"], TC>>,
+  R | TC
 > =
-  (tagClass) => (api) => {
+  (tagClass: any) => (api) => {
     const newGroups = Record.set(api.groups, tagClass.group.name, tagClass)
     return {
       [ApiTypeId]: ApiTypeId,
@@ -488,10 +488,10 @@ export const byName: Order.Order<ConfectApi<string, Record<string, AnyConfectApi
  * const sorted = Array.sort(apis, Api.byGroupCount)
  * // APIs with fewer groups come first
  */
-export const byGroupCount: Order.Order<ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> =
+export const byGroupCount: Order.Order<ConfectApi<string, Record<string, AnyTagClass>, any>> =
   Order.mapInput(
     Order.number,
-    (api: ConfectApi<string, Record<string, AnyConfectApiGroup>, any>) =>
+    (api: ConfectApi<string, Record<string, AnyTagClass>, any>) =>
       Object.keys(api.groups).length,
   );
 
@@ -508,13 +508,13 @@ export const byGroupCount: Order.Order<ConfectApi<string, Record<string, AnyConf
  * const sorted = Array.sort(apis, Api.byFunctionCount)
  * // APIs with fewer functions come first
  */
-export const byFunctionCount: Order.Order<ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> =
+export const byFunctionCount: Order.Order<ConfectApi<string, Record<string, AnyTagClass>, any>> =
   Order.mapInput(
     Order.number,
-    (api: ConfectApi<string, Record<string, AnyConfectApiGroup>, any>) => {
+    (api: ConfectApi<string, Record<string, AnyTagClass>, any>) => {
       let count = 0;
-      for (const group of Object.values(api.groups)) {
-        count += Object.keys(group.functions).length;
+      for (const tagClass of Object.values(api.groups)) {
+        count += Object.keys(tagClass.group.functions).length;
       }
       return count;
     },
@@ -541,7 +541,7 @@ export const byFunctionCount: Order.Order<ConfectApi<string, Record<string, AnyC
  */
 export const getGroup = <
   Name extends string,
-  Groups extends Record<string, AnyConfectApiGroup>,
+  Groups extends Record<string, AnyTagClass>,
   R,
   Key extends keyof Groups,
 >(
@@ -574,7 +574,7 @@ export const getGroup = <
  */
 export const getFunction = <
   Name extends string,
-  Groups extends Record<string, AnyConfectApiGroup>,
+  Groups extends Record<string, AnyTagClass>,
   R,
   GroupKey extends keyof Groups,
   FunctionKey extends string,
@@ -583,9 +583,9 @@ export const getFunction = <
   groupName: GroupKey,
   functionName: FunctionKey,
 ): Function.ConfectApiFunction | undefined => {
-  const group = api.groups[groupName];
-  if (!group) return undefined;
-  return group.functions[functionName];
+  const tagClass = api.groups[groupName];
+  if (!tagClass) return undefined;
+  return tagClass.group.functions[functionName];
 };
 
 // =============================================================================
@@ -645,7 +645,7 @@ export type UnionOfGroupServices<Groups extends Record<string, Group.TagClass<an
  */
 export const toLayer = <
   Name extends string,
-  Groups extends Record<string, AnyConfectApiGroup>,
+  Groups extends Record<string, AnyTagClass>,
   R
 >(
   api: ConfectApi<Name, Groups, R>

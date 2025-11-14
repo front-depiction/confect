@@ -453,9 +453,11 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("getUser", getUserFn),
       );
 
+      class TestTag extends Group.Tag(testGroup)<TestTag>() {}
+
       // Simple handler with no dependencies
-      const TestLive = Group.build(
-        testGroup,
+      const TestLive = Layer.effect(
+        TestTag,
         Effect.succeed({
           getUser: () => Effect.succeed({ result: "test" }),
         })
@@ -474,9 +476,11 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("getUser", getUserFn),
       );
 
+      class UsersTag extends Group.Tag(testGroup)<UsersTag>() {}
+
       // Handler Effect requires Database
-      const UsersLive = Group.build(
-        testGroup,
+      const UsersLive = Layer.effect(
+        UsersTag,
         Effect.gen(function* () {
           const db = yield* Database;
           return {
@@ -518,24 +522,22 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("get", getUserFn),
       );
 
+      // Create tags for the groups
+      class NotesWriteTag extends Group.Tag(notesWriteGroup)<NotesWriteTag>() { }
+      class NotesReadTag extends Group.Tag(notesReadGroup)<NotesReadTag>() { }
+
       // Implement mutation group with no dependencies
-      const NotesWriteLive = Group.build(
-        notesWriteGroup,
+      const NotesWriteLive = Layer.effect(
+        NotesWriteTag,
         Effect.succeed({
           create: () => Effect.succeed({ result: "created" }),
           delete: () => Effect.succeed(null),
         })
       );
 
-      // Create tags for the groups
-      class NotesWriteTag extends Group.Tag(notesWriteGroup)<NotesWriteTag>() { }
-      class NotesReadTag extends Group.Tag(notesReadGroup)<NotesReadTag>() { }
-
-
-
       // Implement query group that depends on mutation handlers
-      const NotesReadLive = Group.build(
-        notesReadGroup,
+      const NotesReadLive = Layer.effect(
+        NotesReadTag,
         Effect.gen(function* () {
           // Access the mutation group's tag
           const writeHandlers = yield* NotesWriteTag;
@@ -552,7 +554,10 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       // Can compose them together
-      const CombinedLayer = Layer.provideMerge(NotesWriteLive, NotesReadLive);
+      const CombinedLayer = Layer.mergeAll(
+        NotesWriteLive,
+        NotesReadLive.pipe(Layer.provide(NotesWriteLive))
+      );
 
       // RUNTIME TEST: Actually use the composed layers
       const program = Effect.gen(function* () {
@@ -599,8 +604,8 @@ describe("Layer Building - Complex Dependencies", () => {
       class PostsTag extends Group.Tag(postsGroup)<PostsTag>() { }
 
       // Both groups depend on QueryDB
-      const UsersLive = Group.build(
-        usersGroup,
+      const UsersLive = Layer.effect(
+        UsersTag,
         Effect.gen(function* () {
           const db = yield* QueryDB;
           return {
@@ -609,8 +614,8 @@ describe("Layer Building - Complex Dependencies", () => {
         })
       );
 
-      const PostsLive = Group.build(
-        postsGroup,
+      const PostsLive = Layer.effect(
+        PostsTag,
         Effect.gen(function* () {
           const db = yield* QueryDB;
           return {
@@ -669,11 +674,13 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("funcB", createUserFn),
       );
 
+      class GroupATag extends Group.Tag(groupA)<GroupATag>() {}
+      class GroupBTag extends Group.Tag(groupB)<GroupBTag>() {}
+
       // GroupA depends on GroupB - this is fine
-      const GroupALive = Group.build(
-        groupA,
+      const GroupALive = Layer.effect(
+        GroupATag,
         Effect.gen(function* () {
-          const GroupBTag = Group.Tag(groupB)();
           const bHandlers = yield* GroupBTag;
 
           return {
@@ -705,8 +712,8 @@ describe("Layer Building - Complex Dependencies", () => {
 
       class UsersTag extends Group.Tag(usersGroup)<UsersTag>() { }
 
-      const UsersLive = Group.build(
-        usersGroup,
+      const UsersLive = Layer.effect(
+        UsersTag,
         Effect.gen(function* () {
           const db = yield* Database;
           return {
@@ -722,8 +729,8 @@ describe("Layer Building - Complex Dependencies", () => {
 
       class ProfileTag extends Group.Tag(profileGroup)<ProfileTag>() { }
 
-      const ProfileLive = Group.build(
-        profileGroup,
+      const ProfileLive = Layer.effect(
+        ProfileTag,
         Effect.gen(function* () {
           const users = yield* UsersTag;
 
@@ -784,8 +791,8 @@ describe("Layer Building - Complex Dependencies", () => {
       class AuthTag extends Group.Tag(authGroup)<AuthTag>() { }
       class StorageTag extends Group.Tag(storageGroup)<StorageTag>() { }
 
-      const AuthLive = Group.build(
-        authGroup,
+      const AuthLive = Layer.effect(
+        AuthTag,
         Effect.gen(function* () {
           const config = yield* Config;
           return {
@@ -794,8 +801,8 @@ describe("Layer Building - Complex Dependencies", () => {
         })
       );
 
-      const StorageLive = Group.build(
-        storageGroup,
+      const StorageLive = Layer.effect(
+        StorageTag,
         Effect.gen(function* () {
           const config = yield* Config;
           return {
@@ -811,8 +818,8 @@ describe("Layer Building - Complex Dependencies", () => {
 
       class AppTag extends Group.Tag(appGroup)<AppTag>() { }
 
-      const AppLive = Group.build(
-        appGroup,
+      const AppLive = Layer.effect(
+        AppTag,
         Effect.gen(function* () {
           const auth = yield* AuthTag;
           const storage = yield* StorageTag;
@@ -869,9 +876,11 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("query", getUserFn),
       );
 
+      class TestTag extends Group.Tag(testGroup)<TestTag>() {}
+
       // Handler creation requires resources
-      const TestLive = Group.buildScoped(
-        testGroup,
+      const TestLive = Layer.scoped(
+        TestTag,
         Effect.gen(function* () {
           // Acquire resource with cleanup
           const connection = yield* Effect.acquireRelease(
@@ -894,8 +903,10 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("query", getUserFn),
       );
 
-      const DBLive = Group.buildScoped(
-        testGroup,
+      class DBTag extends Group.Tag(testGroup)<DBTag>() {}
+
+      const DBLive = Layer.scoped(
+        DBTag,
         Effect.gen(function* () {
           const config = yield* Config;
 
@@ -921,9 +932,12 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("func2", createUserFn),
       );
 
+      class TestTag extends Group.Tag(testGroup)<TestTag>() {}
+
       // Only implement func1, func2 will throw if called
-      const TestMock = Group.buildMock(testGroup, {
+      const TestMock = Layer.succeed(TestTag, {
         func1: () => Effect.succeed({ result: "mocked" }),
+        func2: () => Effect.dieMessage("func2 not implemented in mock"),
       });
     });
 
@@ -932,8 +946,12 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("func1", getUserFn),
       );
 
+      class TestTag extends Group.Tag(testGroup)<TestTag>() {}
+
       // All functions throw UnimplementedError
-      const TestMock = Group.buildMock(testGroup, {});
+      const TestMock = Layer.succeed(TestTag, {
+        func1: () => Effect.dieMessage("func1 not implemented in mock"),
+      });
     });
   });
 
@@ -963,8 +981,8 @@ describe("Layer Building - Complex Dependencies", () => {
 
       class NotesMutationTag extends Group.Tag(notesMutationGroup)<NotesMutationTag>() { }
 
-      const NotesMutationLive = Group.build(
-        notesMutationGroup,
+      const NotesMutationLive = Layer.effect(
+        NotesMutationTag,
         Effect.gen(function* () {
           const db = yield* MutationDB;
           return {
@@ -986,8 +1004,8 @@ describe("Layer Building - Complex Dependencies", () => {
 
       class NotesQueryTag extends Group.Tag(notesQueryGroup)<NotesQueryTag>() { }
 
-      const NotesQueryLive = Group.build(
-        notesQueryGroup,
+      const NotesQueryLive = Layer.effect(
+        NotesQueryTag,
         Effect.gen(function* () {
           const queryDb = yield* QueryDB;
           const mutations = yield* NotesMutationTag;
@@ -1075,8 +1093,8 @@ describe("Layer Building - Complex Dependencies", () => {
 
       class ProtectedTag extends Group.Tag(protectedGroup)<ProtectedTag>() { }
 
-      const ProtectedLive = Group.build(
-        protectedGroup,
+      const ProtectedLive = Layer.effect(
+        ProtectedTag,
         Effect.gen(function* () {
           const auth = yield* Auth;
 
