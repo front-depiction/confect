@@ -240,7 +240,7 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
 
     // Type check: Layer requires Database | Auth
     expectTypeOf(UsersLive).toMatchTypeOf<
-      Layer.Layer<Group.GroupService<"users">, any, Database | Auth>
+      Layer.Layer<Group.Tag<typeof usersGroup>, any, Database | Auth>
     >();
   });
 
@@ -328,7 +328,7 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
     );
 
     expectTypeOf(UsersLive).toMatchTypeOf<
-      Layer.Layer<Group.GroupService<"users">, any, Database>
+      Layer.Layer<Group.Tag<typeof usersGroup>, any, Database>
     >();
   });
 });

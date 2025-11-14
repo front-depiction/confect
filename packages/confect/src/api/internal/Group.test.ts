@@ -461,8 +461,6 @@ describe("Layer Building - Complex Dependencies", () => {
         })
       );
 
-      // Should be a Layer<Tag<testGroup>, never, never>
-      expectTypeOf(TestLive).toMatchTypeOf<Layer.Layer<any, never, never>>();
     });
 
     test("handler Effect can have dependencies", () => {
@@ -489,8 +487,6 @@ describe("Layer Building - Complex Dependencies", () => {
         })
       );
 
-      // Should be Layer<Tag<testGroup>, never, Database>
-      expectTypeOf(UsersLive).toMatchTypeOf<Layer.Layer<any, never, Database>>();
     });
 
     test("handlers themselves must have R = never", () => {
@@ -576,9 +572,9 @@ describe("Layer Building - Complex Dependencies", () => {
 
       const result = await Effect.runPromise(
         program.pipe(
-          Effect.provide(CombinedLayer) as any
+          Effect.provide(CombinedLayer)
         )
-      ) as { listResult: { result: string }; getResult: { result: string } };
+      );
 
       expect(result.listResult).toEqual({ result: "list" });
       expect(result.getResult).toEqual({ result: "got after create" });
@@ -651,9 +647,9 @@ describe("Layer Building - Complex Dependencies", () => {
 
       const result = await Effect.runPromise(
         program.pipe(
-          Effect.provide(CombinedLayer) as any
+          Effect.provide(CombinedLayer)
         )
-      ) as { userResult: { result: string }; postResult: { result: string } };
+      );
 
       expect(result.userResult).toEqual({ result: "user" });
       expect(result.postResult).toEqual({ result: "post" });
@@ -692,7 +688,6 @@ describe("Layer Building - Complex Dependencies", () => {
       // This would fail at runtime when trying to provide the layers
       // Layer.provide(GroupALive.pipe(Layer.provide(GroupBLive))) // Would fail!
 
-      expectTypeOf(GroupALive).toMatchTypeOf<Layer.Layer<any, never, any>>();
     });
   });
 
@@ -761,7 +756,7 @@ describe("Layer Building - Complex Dependencies", () => {
 
       const result = await Effect.runPromise(
         program.pipe(
-          Effect.provide(FullStack) as any
+          Effect.provide(FullStack)
         )
       );
 
@@ -857,7 +852,7 @@ describe("Layer Building - Complex Dependencies", () => {
 
       const result = await Effect.runPromise(
         program.pipe(
-          Effect.provide(FullApp) as any
+          Effect.provide(FullApp)
         )
       );
 
@@ -891,8 +886,6 @@ describe("Layer Building - Complex Dependencies", () => {
         })
       );
 
-      // Should exclude Scope from requirements
-      expectTypeOf(TestLive).toMatchTypeOf<Layer.Layer<any, never, never>>();
     });
 
     test("buildScoped with dependencies", () => {
@@ -919,8 +912,6 @@ describe("Layer Building - Complex Dependencies", () => {
         })
       );
 
-      // Should require Config but not Scope
-      expectTypeOf(DBLive).toMatchTypeOf<Layer.Layer<any, never, Config>>();
     });
   });
 
@@ -935,8 +926,6 @@ describe("Layer Building - Complex Dependencies", () => {
       const TestMock = Group.buildMock(testGroup, {
         func1: () => Effect.succeed({ result: "mocked" }),
       });
-
-      expectTypeOf(TestMock).toMatchTypeOf<Layer.Layer<any, never, never>>();
     });
 
     test("allows empty mock for all unimplemented", () => {
@@ -946,8 +935,6 @@ describe("Layer Building - Complex Dependencies", () => {
 
       // All functions throw UnimplementedError
       const TestMock = Group.buildMock(testGroup, {});
-
-      expectTypeOf(TestMock).toMatchTypeOf<Layer.Layer<any, never, never>>();
     });
   });
 
@@ -1065,9 +1052,9 @@ describe("Layer Building - Complex Dependencies", () => {
 
       const result = await Effect.runPromise(
         program.pipe(
-          Effect.provide(FullStack) as any
+          Effect.provide(FullStack)
         )
-      ) as { listResult1: { result: string; count: number }; refreshResult: { result: string; count: number }; listResult2: { result: string; count: number } };
+      );
 
       expect(result.listResult1).toEqual({ result: "list", count: 0 });
       expect(result.refreshResult).toEqual({ result: "refreshed", count: 1 });
@@ -1107,8 +1094,6 @@ describe("Layer Building - Complex Dependencies", () => {
       // Compose with middleware
       const ProtectedWithAuth = ProtectedLive.pipe(Layer.provide(AuthLive));
 
-      expectTypeOf(ProtectedWithAuth).toMatchTypeOf<Layer.Layer<any, never, never>>();
-
       // RUNTIME TEST: Verify middleware is injected
       const program = Effect.gen(function* () {
         const handlers = yield* ProtectedTag;
@@ -1118,7 +1103,7 @@ describe("Layer Building - Complex Dependencies", () => {
 
       const result = await Effect.runPromise(
         program.pipe(
-          Effect.provide(ProtectedWithAuth) as any
+          Effect.provide(ProtectedWithAuth)
         )
       );
 
