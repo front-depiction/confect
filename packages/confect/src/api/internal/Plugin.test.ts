@@ -447,7 +447,7 @@ describe("Plugin Dependencies", () => {
     await Effect.runPromise(
       program.pipe(
         Effect.provide(
-          Layer.mergeAll(MutationDBLive.pipe(withAudit), AuditLogLive)
+          MutationDBLive.pipe(withAudit, Layer.provide(AuditLogLive))
         )
       )
     );
@@ -592,7 +592,7 @@ describe("Real-World Plugins", () => {
     await Effect.runPromise(
       program.pipe(
         Effect.provide(
-          Layer.mergeAll(TrackingDBLive.pipe(withRLS), CurrentUserLive)
+          TrackingDBLive.pipe(withRLS, Layer.provide(CurrentUserLive))
         )
       )
     );

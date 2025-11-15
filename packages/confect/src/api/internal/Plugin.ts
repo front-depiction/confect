@@ -54,17 +54,7 @@ export type Plugin<S, E = never, R = never> = <E2, R2>(
   baseLayer: Layer.Layer<S, E2, R2>
 ) => Layer.Layer<S, E | E2, R | R2>;
 
-/**
- * Extract the service type from a Context.Tag
- *
- * @internal
- */
-type ServiceOf<T extends Context.Tag<any, any>> = T extends Context.Tag<
-  infer _Id,
-  infer Service
->
-  ? Service
-  : never;
+
 
 // =============================================================================
 // Plugin Constructors
@@ -99,7 +89,7 @@ type ServiceOf<T extends Context.Tag<any, any>> = T extends Context.Tag<
  */
 export const enhance = <T extends Context.Tag<any, any>>(
   tag: T,
-  wrapper: (base: ServiceOf<T>) => ServiceOf<T>
+  wrapper: (base: Context.Tag.Service<T>) => Context.Tag.Service<T>
 ): Plugin<T> =>
   <E, R>(baseLayer: Layer.Layer<T, E, R>): Layer.Layer<T, E, R> =>
     Layer.map(baseLayer, (ctx) => {
@@ -145,35 +135,15 @@ export const enhance = <T extends Context.Tag<any, any>>(
  */
 export const enhanceEffect = <T extends Context.Tag<any, any>, E2 = never, R2 = never>(
   tag: T,
-  wrapper: (base: ServiceOf<T>) => Effect.Effect<ServiceOf<T>, E2, R2>
-): Plugin<T, E2, T | R | R2> =>
-  <E, R>(baseLayer: Layer.Layer<T, E, R>): Layer.Layer<T, E | E2, T | R | R2> =>
-    Layer.suspend(() => {
-      // Use a mutable ref to hold the base service once extracted
-      let baseService: ServiceOf<T> | null = null;
-
-      // Layer that extracts and stores the base service
-      const extractBase = Layer.flatMap(baseLayer, (ctx) => {
-        baseService = Context.get(ctx, tag);
-        return Layer.succeed(tag, baseService);
-      });
-
-      // Layer that wraps the base service
-      const wrapLayer = Layer.effect(
-        tag,
-        Effect.gen(function* () {
-          if (!baseService) {
-            throw new Error("Base service not extracted");
-          }
-          // Wrapper can access services from R2
-          return yield* wrapper(baseService);
-        })
-      );
-
-      // Provide extractBase to wrapLayer so baseService is available
-      return wrapLayer.pipe(Layer.provide(extractBase));
-    });
-
+  wrapper: (base: Context.Tag.Service<T>) => Effect.Effect<Context.Tag.Service<T>, E2, R2>
+): Plugin<T, E2, R2> =>
+  <E, R>(baseLayer: Layer.Layer<T, E, R>): Layer.Layer<T, E | E2, R | R2> => Layer.flatMap(baseLayer, context =>
+    Layer.effectContext(Effect.gen(function* () {
+      const base = Context.get(context, tag);
+      const enhanced = yield* wrapper(base);
+      return Context.merge(context, Context.make(tag, enhanced));
+    }))
+  )
 // =============================================================================
 // Utility Functions
 // =============================================================================
