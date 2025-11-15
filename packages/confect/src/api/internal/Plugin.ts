@@ -88,7 +88,7 @@ export type Plugin<I, E = never, R = never> = <E2, R2>(
  * const Enhanced = MutationDBLive.pipe(withLogging);
  * ```
  */
-export const forTag = <I, S>(
+export const succeed = <I, S>(
   tag: Context.Tag<I, S>,
   wrapper: (base: S) => S | Partial<S>
 ): Plugin<I> =>
@@ -136,7 +136,7 @@ export const forTag = <I, S>(
  * const Enhanced = MutationDBLive.pipe(withAudit);
  * ```
  */
-export const effectForTag = <S, I, E2 = never, R2 = never>(
+export const effect = <S, I, E2 = never, R2 = never>(
   tag: Context.Tag<I, S>,
   wrapper: (base: S) => Effect.Effect<S | Partial<S>, E2, R2>
 ): Plugin<I, E2, R2> =>

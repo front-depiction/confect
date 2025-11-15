@@ -494,10 +494,13 @@ describe("toConvexFunction", () => {
     const mockCompiler = (schema: Schema.Schema.AnyNoContext) => schema as any;
     const convexFn = Function.toConvexFunction(fn, mockCompiler);
 
-    expect(convexFn.exportName).toBe("test");
-    expect(convexFn.visibility).toBe("public");
-    expect(convexFn.argsValidator).toBe(TestArgsSchema);
-    expect(convexFn.returnsValidator).toBe(TestReturnsSchema);
+    // Convex types are opaque - verify structure via runtime checks
+    // Using any here is acceptable as this is testing the Convex API boundary
+    const fnObj = convexFn as any;
+    expect(fnObj.exportName).toBe("test");
+    expect(fnObj.visibility).toBe("public");
+    expect(fnObj.argsValidator).toBe(TestArgsSchema);
+    expect(fnObj.returnsValidator).toBe(TestReturnsSchema);
   });
 
   test("converts mutation function to Convex format", () => {
@@ -508,8 +511,10 @@ describe("toConvexFunction", () => {
     const mockCompiler = (schema: Schema.Schema.AnyNoContext) => schema as any;
     const convexFn = Function.toConvexFunction(fn, mockCompiler);
 
-    expect(convexFn.exportName).toBe("test");
-    expect(convexFn.visibility).toBe("public");
+    // Convex types are opaque - verify structure via runtime checks
+    const fnObj = convexFn as any;
+    expect(fnObj.exportName).toBe("test");
+    expect(fnObj.visibility).toBe("public");
   });
 
   test("converts action function to Convex format", () => {
@@ -520,8 +525,10 @@ describe("toConvexFunction", () => {
     const mockCompiler = (schema: Schema.Schema.AnyNoContext) => schema as any;
     const convexFn = Function.toConvexFunction(fn, mockCompiler);
 
-    expect(convexFn.exportName).toBe("test");
-    expect(convexFn.visibility).toBe("public");
+    // Convex types are opaque - verify structure via runtime checks
+    const fnObj = convexFn as any;
+    expect(fnObj.exportName).toBe("test");
+    expect(fnObj.visibility).toBe("public");
   });
 
   test("uses provided schema compiler", () => {
@@ -533,8 +540,10 @@ describe("toConvexFunction", () => {
     const mockCompiler = () => mockValidator;
     const convexFn = Function.toConvexFunction(fn, mockCompiler);
 
-    expect(convexFn.argsValidator).toBe(mockValidator);
-    expect(convexFn.returnsValidator).toBe(mockValidator);
+    // Convex types are opaque - verify structure via runtime checks
+    const fnObj = convexFn as any;
+    expect(fnObj.argsValidator).toBe(mockValidator);
+    expect(fnObj.returnsValidator).toBe(mockValidator);
   });
 });
 

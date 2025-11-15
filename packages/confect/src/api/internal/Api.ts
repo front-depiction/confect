@@ -385,21 +385,21 @@ export type GetContext<A extends ConfectApi<string, Record<string, AnyTagClass>,
  * // myApi has both users and posts groups
  */
 export const add = <
-  TC extends Group.TagClass<any, any, any>
+  Self, Id extends string
 >(
-  tagClass: TC,
+  tagClass: Group.TagClass<Self, Id, any>,
 ) => <Name extends string, Groups extends Record<string, AnyTagClass>, R>(
   api: ConfectApi<Name, Groups, R>,
 ): ConfectApi<
   Name,
-  MergedGroups<Groups, Record<TC["group"]["name"], TC>>,
-  R | TC
+  MergedGroups<Groups, Record<Id, typeof tagClass>>,
+  R | Self
 > => {
-  const self = Object.create(ConfectApiProto);
-  self.name = api.name;
-  self.groups = Record.set(api.groups, tagClass.group.name, tagClass);
-  return self;
-};
+    const self = Object.create(ConfectApiProto);
+    self.name = api.name;
+    self.groups = Record.set(api.groups, tagClass.group.name, tagClass);
+    return self;
+  };
 
 /**
  * Merge another API's groups into this API (pipeable).

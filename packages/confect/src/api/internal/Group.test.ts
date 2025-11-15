@@ -463,6 +463,7 @@ describe("Layer Building - Complex Dependencies", () => {
         })
       );
 
+      void TestLive;
     });
 
     test("handler Effect can have dependencies", () => {
@@ -491,6 +492,7 @@ describe("Layer Building - Complex Dependencies", () => {
         })
       );
 
+      void UsersLive;
     });
 
     test("handlers themselves must have R = never", () => {
@@ -633,9 +635,10 @@ describe("Layer Building - Complex Dependencies", () => {
         }),
       });
 
-      const CombinedLayer = Layer.mergeAll(
-        UsersLive.pipe(Layer.provide(QueryDBLive)),
-        PostsLive.pipe(Layer.provide(QueryDBLive))
+      // Provide the shared dependency once at the top level
+      const CombinedLayer = UsersLive.pipe(
+        Layer.merge(PostsLive),
+        Layer.provide(QueryDBLive)
       );
 
       // RUNTIME TEST: Use both groups
@@ -657,7 +660,8 @@ describe("Layer Building - Complex Dependencies", () => {
 
       expect(result.userResult).toEqual({ result: "user" });
       expect(result.postResult).toEqual({ result: "post" });
-      expect(queryCount).toBe(1);
+      // Both handlers call query once each, so queryCount should be 2
+      expect(queryCount).toBe(2);
     });
   });
 
@@ -689,6 +693,8 @@ describe("Layer Building - Complex Dependencies", () => {
           };
         })
       );
+
+      void GroupALive;
 
       // If GroupB tried to depend on GroupA, we'd have a circular dependency
       // This would fail at runtime when trying to provide the layers
@@ -894,6 +900,7 @@ describe("Layer Building - Complex Dependencies", () => {
         })
       );
 
+      void TestLive;
     });
 
     test("buildScoped with dependencies", () => {
@@ -922,6 +929,7 @@ describe("Layer Building - Complex Dependencies", () => {
         })
       );
 
+      void DBLive;
     });
   });
 
@@ -939,6 +947,8 @@ describe("Layer Building - Complex Dependencies", () => {
         func1: () => Effect.succeed({ result: "mocked" }),
         func2: () => Effect.dieMessage("func2 not implemented in mock"),
       });
+
+      void TestMock;
     });
 
     test("allows empty mock for all unimplemented", () => {
@@ -952,6 +962,8 @@ describe("Layer Building - Complex Dependencies", () => {
       const TestMock = Layer.succeed(TestTag, {
         func1: () => Effect.dieMessage("func1 not implemented in mock"),
       });
+
+      void TestMock;
     });
   });
 
