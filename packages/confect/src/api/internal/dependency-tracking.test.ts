@@ -164,9 +164,7 @@ describe("Pure Definitions", () => {
       ),
     );
 
-    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
-
-    const myApi = Api.api("myApp").pipe(Api.add(UsersTag));
+    const myApi = Api.api("myApp").pipe(Api.add(usersGroup));
 
     // Runtime checks: Pure composition
     expect(myApi.name).toBe("myApp");
@@ -188,11 +186,10 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
     );
 
     // Create Tag class for the group
-    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
 
     // Handler Effect can have requirements (R)
     const UsersLive = Layer.effect(
-      UsersTag,
+      usersGroup,
       Effect.gen(function* () {
         const db = yield* Database; // ← R includes Database
 
@@ -204,7 +201,7 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
 
     // Type check: Layer requires Database
     expectTypeOf(UsersLive).toMatchTypeOf<
-      Layer.Layer<UsersTag, any, Database>
+      Layer.Layer<usersGroup, any, Database>
     >();
   });
 
@@ -222,10 +219,8 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
       ),
     );
 
-    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
-
     const UsersLive = Layer.effect(
-      UsersTag,
+      usersGroup,
       Effect.gen(function* () {
         const db = yield* Database; // ← R includes Database
         const auth = yield* Auth; // ← R includes Auth
@@ -247,7 +242,7 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
 
     // Type check: Layer requires Database | Auth
     expectTypeOf(UsersLive).toMatchTypeOf<
-      Layer.Layer<UsersTag, any, Database | Auth>
+      Layer.Layer<usersGroup, any, Database | Auth>
     >();
   });
 
@@ -259,10 +254,8 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
       ),
     );
 
-    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
-
     Layer.effect(
-      UsersTag,
+      usersGroup,
       Effect.gen(function* () {
         const db = yield* Database;
 
@@ -292,10 +285,8 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
       ),
     );
 
-    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
-
     Layer.effect(
-      UsersTag,
+      usersGroup,
       Effect.gen(function* () {
         const db = yield* Database;
 
@@ -326,10 +317,8 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
       ),
     );
 
-    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
-
     const UsersLive = Layer.effect(
-      UsersTag,
+      usersGroup,
       Effect.gen(function* () {
         const db = yield* Database;
         return {
@@ -339,7 +328,7 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
     );
 
     expectTypeOf(UsersLive).toMatchTypeOf<
-      Layer.Layer<typeof UsersTag, any, Database>
+      Layer.Layer<typeof usersGroup, any, Database>
     >();
   });
 });
@@ -380,10 +369,8 @@ describe("Group.buildScoped() - Scoped Resource Management", () => {
       ),
     );
 
-    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
-
     const UsersLive = Layer.scoped(
-      UsersTag,
+      usersGroup,
       Effect.gen(function* () {
         const pool = yield* DbPool; // Requires DbPool (which is scoped)
 
@@ -395,7 +382,7 @@ describe("Group.buildScoped() - Scoped Resource Management", () => {
 
     // Type check: Layer requires DbPool, but NOT Scope
     expectTypeOf(UsersLive).toMatchTypeOf<
-      Layer.Layer<typeof UsersTag, any, DbPool>
+      Layer.Layer<typeof usersGroup, any, DbPool>
     >();
   });
 });
@@ -419,10 +406,8 @@ describe("Mocking with Layer.mock", () => {
       ),
     );
 
-    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
-
     // Provide mock handlers - can be partial with Layer.mock
-    const UsersMock = Layer.succeed(UsersTag, UsersTag.of({
+    const UsersMock = Layer.succeed(usersGroup, usersGroup.of({
       getUser: (args) =>
         Effect.succeed({
           id: args.id,
@@ -435,7 +420,7 @@ describe("Mocking with Layer.mock", () => {
 
     // Type check: No requirements (it's a mock)
     expectTypeOf(UsersMock).toMatchTypeOf<
-      Layer.Layer<typeof UsersTag>
+      Layer.Layer<typeof usersGroup>
     >();
   });
 
@@ -453,9 +438,7 @@ describe("Mocking with Layer.mock", () => {
       ),
     );
 
-    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
-
-    const UsersMock = Layer.succeed(UsersTag, UsersTag.of({
+    const UsersMock = Layer.succeed(usersGroup, usersGroup.of({
       getUser: (args) =>
         Effect.succeed({ id: args.id, name: "Mock", email: "mock@test.com" }),
       createUser: (args) =>
@@ -463,7 +446,7 @@ describe("Mocking with Layer.mock", () => {
     }));
 
     expectTypeOf(UsersMock).toMatchTypeOf<
-      Layer.Layer<typeof UsersTag>
+      Layer.Layer<typeof usersGroup>
     >();
   });
 });
@@ -488,12 +471,10 @@ describe("Api.build() - API Layer Composition", () => {
       ),
     );
 
-    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
-    class FilesTag extends Group.Tag(filesGroup)<FilesTag>() {}
 
     const myApi = Api.api("myApp").pipe(
-      Api.add(UsersTag),
-      Api.add(FilesTag),
+      Api.add(usersGroup),
+      Api.add(filesGroup),
     );
 
     const MyApiLive = Api.toLayer(myApi);
@@ -503,7 +484,7 @@ describe("Api.build() - API Layer Composition", () => {
       Layer.Layer<
         Api.ApiService,
         never,
-        typeof UsersTag | typeof FilesTag
+        typeof usersGroup | typeof filesGroup
       >
     >();
   });
@@ -524,16 +505,15 @@ describe("Api.build() - API Layer Composition", () => {
     );
 
     // Implement groups with dependencies
-    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
-    class FilesTag extends Group.Tag(filesGroup)<FilesTag>() {}
+
 
     const myApi = Api.api("myApp").pipe(
-      Api.add(UsersTag),
-      Api.add(FilesTag),
+      Api.add(usersGroup),
+      Api.add(filesGroup),
     );
 
     const UsersLive = Layer.effect(
-      UsersTag,
+      usersGroup,
       Effect.gen(function* () {
         const db = yield* Database;
         const auth = yield* Auth;
@@ -544,7 +524,7 @@ describe("Api.build() - API Layer Composition", () => {
     );
 
     const FilesLive = Layer.effect(
-      FilesTag,
+      filesGroup,
       Effect.gen(function* () {
         const storage = yield* Storage;
         return {
@@ -595,16 +575,15 @@ describe("End-to-End Integration", () => {
     );
 
     // Step 2: Implement handlers
-    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
-    class FilesTag extends Group.Tag(filesGroup)<FilesTag>() {}
+
 
     const myApi = Api.api("myApp").pipe(
-      Api.add(UsersTag),
-      Api.add(FilesTag),
+      Api.add(usersGroup),
+      Api.add(filesGroup),
     );
 
     const UsersLive = Layer.effect(
-      UsersTag,
+      usersGroup,
       Effect.gen(function* () {
         const db = yield* Database;
         const auth = yield* Auth;
@@ -625,7 +604,7 @@ describe("End-to-End Integration", () => {
     );
 
     const FilesLive = Layer.effect(
-      FilesTag,
+      filesGroup,
       Effect.gen(function* () {
         const storage = yield* Storage;
         return {
@@ -683,16 +662,15 @@ describe("End-to-End Integration", () => {
     );
 
     // Real implementation for users
-    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
-    class FilesTag extends Group.Tag(filesGroup)<FilesTag>() {}
+
 
     const myApi = Api.api("myApp").pipe(
-      Api.add(UsersTag),
-      Api.add(FilesTag),
+      Api.add(usersGroup),
+      Api.add(filesGroup),
     );
 
     const UsersLive = Layer.effect(
-      UsersTag,
+      usersGroup,
       Effect.gen(function* () {
         const db = yield* Database;
         return {
@@ -702,7 +680,7 @@ describe("End-to-End Integration", () => {
     );
 
     // Mock implementation for files
-    const FilesMock = Layer.succeed(FilesTag, FilesTag.of({
+    const FilesMock = Layer.succeed(filesGroup, filesGroup.of({
       upload: (args) => Effect.succeed({ url: "https://mock.example.com/file" }),
     }));
 
@@ -738,15 +716,14 @@ describe("Documentation Examples", () => {
     );
 
     // Implement handlers
-    class GreetingsTag extends Group.Tag(greetingsGroup)<GreetingsTag>() {}
 
     const MyApi = Api.api("MyApi").pipe(
-      Api.add(GreetingsTag),
+      Api.add(greetingsGroup),
     );
 
     const GreetingsLive = Layer.succeed(
-      GreetingsTag,
-      GreetingsTag.of({
+      greetingsGroup,
+      greetingsGroup.of({
         "hello-world": () => Effect.succeed("Hello, World!"),
       }),
     );
@@ -778,15 +755,14 @@ describe("Api.serve() - Convert Layer-based API to Convex", () => {
     );
 
     // Implement handlers
-    class GreetingsTag extends Group.Tag(greetingsGroup)<GreetingsTag>() {}
 
     const MyApi = Api.api("TestApi").pipe(
-      Api.add(GreetingsTag),
+      Api.add(greetingsGroup),
     );
 
     const GreetingsLive = Layer.succeed(
-      GreetingsTag,
-      GreetingsTag.of({
+      greetingsGroup,
+      greetingsGroup.of({
         hello: (args) => Effect.succeed(`Hello, ${args.name}!`),
       }),
     );
@@ -832,24 +808,23 @@ describe("Api.serve() - Convert Layer-based API to Convex", () => {
     );
 
     // Implement handlers
-    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
-    class PostsTag extends Group.Tag(postsGroup)<PostsTag>() {}
+
 
     const MyApi = Api.api("MultiGroupApi").pipe(
-      Api.add(UsersTag),
-      Api.add(PostsTag),
+      Api.add(usersGroup),
+      Api.add(postsGroup),
     );
 
     const UsersLive = Layer.succeed(
-      UsersTag,
-      UsersTag.of({
+      usersGroup,
+      usersGroup.of({
         getUser: (args) => Effect.succeed({ id: args.id, name: "Test User" }),
       }),
     );
 
     const PostsLive = Layer.succeed(
-      PostsTag,
-      PostsTag.of({
+      postsGroup,
+      postsGroup.of({
         getPost: (args) => Effect.succeed({ id: args.id, title: "Test Post" }),
       }),
     );
@@ -897,7 +872,6 @@ describe("Api.serve() - Convert Layer-based API to Convex", () => {
     );
 
     // Implement handlers
-    class MixedTag extends Group.Tag(mixedGroup)<MixedTag>() {}
 
     const MyApi = Api.api("MixedApi").pipe(
       Api.add(MixedTag),

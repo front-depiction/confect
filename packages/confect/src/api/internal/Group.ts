@@ -1,4 +1,4 @@
-/* eslint-disable prefer-rest-params */
+
 /**
  * @module internal/Group
  *
@@ -66,125 +66,58 @@ export type GroupTypeId = typeof GroupTypeId;
 // Group Types
 // =============================================================================
 
-/**
- * Helper type to ensure MergeRight result satisfies Record constraint.
- * TypeScript cannot prove that MergeRight<A, B> extends Record<string, T>
- * even when A and B both extend Record<string, T>, so we use this helper.
- *
- * @internal
- */
-type MergedFunctions<
-  A extends Record<string, Function.ConfectApiFunction>,
-  B extends Record<string, Function.ConfectApiFunction>,
-> = Types.MergeRight<A, B> extends Record<string, Function.ConfectApiFunction> ? Types.MergeRight<A, B> : never;
+// Removed: MergedFunctions and RenameKey helpers
+// Functions are now stored as union types, not Record types
+
+// =============================================================================
+// Type Helpers (must be defined before ConfectApiGroup)
+// =============================================================================
 
 /**
- * Helper type to rename a key of a Function record.
- * @internal
- */
-type RenameKey<
-  A extends Record<string, Function.ConfectApiFunction>,
-  K1 extends keyof A,
-  K2 extends string,
-> = MergedFunctions<Omit<A, K1>, Record<K2, A[K1]>>
-
-
-/**
- * Tag class for a group's handler implementations.
+ * Convert a Functions union type to a handlers object type.
  *
- * The Tag class extends Context.Tag and stores the group definition.
- * This ensures single Tag identity while maintaining access to the group.
- *
- * @category Layer Building
- * @since 1.0.0
- */
-export interface TagClass<Self, Id extends string, G extends ConfectApiGroup<string, any>>
-  extends Context.Tag<Self, HandlersFor<G>> {
-  new(_: never): Context.TagClassShape<Id, HandlersFor<G>>
-  readonly group: G
-  readonly key: Id
-}
-
-/**
- * Create a Tag class for a group.
- *
- * The returned class:
- * - Extends Context.Tag with the group name as key
- * - Stores the group definition on `.group` property
- * - Provides HandlersFor<G> as the service type
- * - Ensures single Tag identity (one class definition = one tag)
- *
- * @category Layer Building
+ * @category Type Utilities
  * @since 1.0.0
  *
  * @example
- * ```typescript
- * const notesGroup = Group.group("notes").pipe(
- *   Group.add("list", listQuery),
- *   Group.add("create", createMutation)
- * )
- *
- * export class Notes extends Group.Tag(notesGroup)<Notes>() {}
- *
- * // Notes is now a Context.Tag with:
- * // - key: "notes"
- * // - service: { list: (...) => Effect, create: (...) => Effect }
- * // - Notes.group === notesGroup
- * ```
+ * type MyFunctions = GetUserFn | CreateUserFn
+ * type Handlers = FunctionsToHandlers<MyFunctions>
+ * // { getUser: (...) => Effect, createUser: (...) => Effect }
  */
-export const Tag = <G extends ConfectApiGroup<string, {}>>(group: G) => <Self>(): TagClass<Self, GetName<G>, G> => {
-  const limit = Error.stackTraceLimit
-  Error.stackTraceLimit = 2
-  const creationError = new Error()
-  Error.stackTraceLimit = limit
-
-  function TagClass() { }
-  const TagClass_ = TagClass as any
-
-  // Extend Context.Tag prototype
-  Object.setPrototypeOf(TagClass, Object.getPrototypeOf(Context.GenericTag<Self, any>(group.name)))
-
-  // Set the key for Context lookup
-  TagClass_.key = group.name
-
-  // Store the group definition
-  TagClass_.group = group
-
-  // Stack trace for debugging
-  Object.defineProperty(TagClass_, "stack", {
-    get() {
-      return creationError.stack
-    }
-  })
-
-  return TagClass_ as any
+export type FunctionsToHandlers<Functions extends Function.ConfectApiFunction> = {
+  [K in Function.GetName<Functions>]: (
+    args: Function.GetArgsType<Extract<Functions, { readonly name: K }>>
+  ) => Effect.Effect<
+    Function.GetReturnsType<Extract<Functions, { readonly name: K }>>,
+    any,   // E is open
+    never  // R must be never (handlers close over deps)
+  >
 }
+
+
+// TagClass removed - groups are now Context.Tags directly
 /**
  * API Group - collection of related functions.
  *
  * Groups are simple namespaced containers for functions.
  * They don't propagate E/R - that's handled at the function level.
  *
+ * The group itself is a Context.Tag, so you can use it directly in Layers:
+ * - yield* usersGroup to get the handlers
+ * - Layer.effect(usersGroup, ...) to provide the handlers
+ *
  * @category Types
  * @since 1.0.0
  */
 export interface ConfectApiGroup<
-  out Name extends string,
-  Functions extends Record<string, Function.ConfectApiFunction>,
-> extends Pipeable {
+  in out Name extends string,
+  in out Functions extends Function.ConfectApiFunction = never,
+> extends Context.Tag<Name, FunctionsToHandlers<Functions>> {
   readonly [GroupTypeId]: GroupTypeId;
   readonly name: Name;
-  readonly functions: Functions;
+  readonly functions: Record.ReadonlyRecord<string, Functions>;
 }
 
-const makeConfectApiGroupProto = <Name extends string>(name: Name) => ({
-  [GroupTypeId]: GroupTypeId,
-  name,
-  functions: {},
-  pipe() {
-    return pipeArguments(this, arguments);
-  },
-})
 
 
 
@@ -235,10 +168,17 @@ const makeConfectApiGroupProto = <Name extends string>(name: Name) => ({
  */
 export const group = <Name extends string>(
   name: Name,
-): ConfectApiGroup<Name, {}> =>
-  Object.assign(
-    makeConfectApiGroupProto(name),
-  ) as any;
+): ConfectApiGroup<Name> => {
+  // Create a Context.Tag first
+  const tag = Context.GenericTag<Name, {}>(name);
+
+  // Then enhance it with group-specific properties
+  return Object.assign(tag, {
+    [GroupTypeId]: GroupTypeId,
+    name,
+    functions: {},
+  }) as any;
+};
 
 // =============================================================================
 // Predicates (using Predicate.hasProperty)
@@ -262,7 +202,7 @@ export const group = <Name extends string>(
  *   console.log(Object.keys(value.functions))
  * }
  */
-export const isGroup = (u: unknown): u is ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>> =>
+export const isGroup = (u: unknown): u is ConfectApiGroup<string, Function.ConfectApiFunction> =>
   Predicate.hasProperty(u, GroupTypeId);
 
 // =============================================================================
@@ -296,38 +236,49 @@ export type GetFunctions<G extends ConfectApiGroup<any, any>> =
   G extends ConfectApiGroup<any, infer Functions> ? Functions : never;
 
 /**
- * Extract function names (keys)
+ * Extract function names from the functions stored in the group's record
  *
  * @category Type Utilities
  * @since 1.0.0
  *
  * @example
- * const userGroup = Group.group("users").functions({
- *   getUser: ...,
- *   createUser: ...
- * })
+ * const userGroup = Group.group("users").pipe(
+ *   Group.add("getUser", ...),
+ *   Group.add("createUser", ...)
+ * )
  * type Names = Group.GetFunctionNames<typeof userGroup>
  * // "getUser" | "createUser"
  */
 export type GetFunctionNames<G extends ConfectApiGroup<any, any>> =
-  keyof GetFunctions<G>;
+  G extends ConfectApiGroup<any, infer Functions>
+  ? Functions extends Function.ConfectApiFunction
+  ? Function.GetName<Functions>
+  : never
+  : never;
 
+/**
+ * Extract a specific function from the union by name
+ *
+ * @category Type Utilities
+ * @since 1.0.0
+ */
+export type GetFunction<
+  G extends ConfectApiGroup<any, any>,
+  Name extends string
+> = G extends ConfectApiGroup<any, infer Functions>
+  ? Extract<Functions, { readonly name: Name }>
+  : never;
 
-
-export type HandlersFromRecord<Functions extends Record<string, Function.ConfectApiFunction>> = {
-  [K in keyof Functions]: Function.GetHandler<Functions[K]>
-}
-
-
-export type HandlersFor<G extends ConfectApiGroup<any, any>> = {
-  [K in GetFunctionNames<G>]: (
-    args: Function.GetArgsType<GetFunctions<G>[K]>
-  ) => Effect.Effect<
-    Function.GetReturnsType<GetFunctions<G>[K]>,
-    any,   // E is open
-    never  // R must be never (handlers close over deps)
-  >
-}
+/**
+ * Extract handler types for a group.
+ *
+ * @category Type Utilities
+ * @since 1.0.0
+ */
+export type HandlersFor<G extends ConfectApiGroup<any, any>> =
+  G extends ConfectApiGroup<any, infer Functions>
+  ? FunctionsToHandlers<Functions>
+  : never
 
 // =============================================================================
 // Pipeable Utilities
@@ -338,6 +289,7 @@ export type HandlersFor<G extends ConfectApiGroup<any, any>> = {
  *
  * Returns a transformer function that adds the function to the group.
  * Does not mutate the original group.
+ * Functions are stored as a union type.
  *
  * @param key - Function name (key)
  * @param fn - Function to add
@@ -358,16 +310,18 @@ export type HandlersFor<G extends ConfectApiGroup<any, any>> = {
 export const add: <K extends string, Fn extends Function.ConfectApiFunction>(
   key: K,
   fn: Fn,
-) => <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>>(
+) => <Name extends string, Functions extends Function.ConfectApiFunction>(
   group: ConfectApiGroup<Name, Functions>,
-) => ConfectApiGroup<Name, MergedFunctions<Functions, Record<K, Fn>>> =
-  (key, fn) =>
+) => ConfectApiGroup<Name, Functions | Fn> =
+  (name, fn) =>
     (group) => {
-      const functions = Record.set(group.functions, key, fn);
-      return Object.assign(
-        makeConfectApiGroupProto(group.name),
-        { functions }
-      ) as any;
+      const functions = Record.set(group.functions, name, fn);
+      const tag = Context.GenericTag<typeof group.name, {}>(group.name);
+      return Object.assign(tag, {
+        [GroupTypeId]: GroupTypeId,
+        name: group.name,
+        functions
+      }) as any;
     };
 
 /**
@@ -392,20 +346,22 @@ export const add: <K extends string, Fn extends Function.ConfectApiFunction>(
  * )
  * // userGroup has fetchUser instead of getUser
  */
-export const rename = <Functions extends Record<string, Function.ConfectApiFunction>, OldKey extends keyof Functions, NewKey extends string>(
+export const rename = <OldKey extends string, NewKey extends string>(
   oldKey: OldKey,
   newKey: NewKey,
 ) =>
-  <Name extends string>(
+  <Name extends string, Functions extends Function.ConfectApiFunction>(
     group: ConfectApiGroup<Name, Functions>,
-  ): ConfectApiGroup<Name, RenameKey<Functions, Extract<OldKey, keyof Functions>, NewKey>> => {
+  ): ConfectApiGroup<Name, Functions> => {
     const functions = Record.mapKeys(group.functions, (key) =>
       equals(key, oldKey) ? newKey : key,
     );
-    return Object.assign(
-      makeConfectApiGroupProto(group.name),
-      { functions },
-    ) as any;
+    const tag = Context.GenericTag<typeof group.name, {}>(group.name);
+    return Object.assign(tag, {
+      [GroupTypeId]: GroupTypeId,
+      name: group.name,
+      functions,
+    }) as any;
   };
 
 /**
@@ -413,7 +369,7 @@ export const rename = <Functions extends Record<string, Function.ConfectApiFunct
  *
  * Returns a transformer function that merges functions from another group.
  * If there are duplicate function names, functions from the other group take precedence.
- * The error and context types are unioned.
+ * Functions are unioned at the type level.
  * Does not mutate either group.
  *
  * @param other - Group whose functions to merge
@@ -432,19 +388,21 @@ export const rename = <Functions extends Record<string, Function.ConfectApiFunct
  */
 export const merge: <
   Name2 extends string,
-  Functions2 extends Record<string, Function.ConfectApiFunction>,
+  Functions2 extends Function.ConfectApiFunction,
 >(
   other: ConfectApiGroup<Name2, Functions2>,
-) => <Name extends string, Functions extends Record<string, Function.ConfectApiFunction>>(
+) => <Name extends string, Functions extends Function.ConfectApiFunction>(
   group: ConfectApiGroup<Name, Functions>,
-) => ConfectApiGroup<Name, MergedFunctions<Functions, Functions2>> =
+) => ConfectApiGroup<Name, Functions | Functions2> =
   (other) =>
     (group) => {
       const functions = Record.union(group.functions, other.functions, SK);
-      return Object.assign(
-        makeConfectApiGroupProto(group.name),
-        { functions }
-      ) as any;
+      const tag = Context.GenericTag<typeof group.name, {}>(group.name);
+      return Object.assign(tag, {
+        [GroupTypeId]: GroupTypeId,
+        name: group.name,
+        functions
+      }) as any;
     };
 
 // =============================================================================
@@ -465,31 +423,40 @@ export const merge: <
  * // [adminGroup, publicGroup, userGroup]
  */
 export const byName: Order.Order<
-  ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>
-> = Order.mapInput(String.Order, (group: ConfectApiGroup<string, Record<string, Function.ConfectApiFunction>>) => group.name);
+  ConfectApiGroup<string, Function.ConfectApiFunction>
+> = Order.mapInput(String.Order, (group: ConfectApiGroup<string, Function.ConfectApiFunction>) => group.name);
 
 // =============================================================================
 // Layer Building (Dependency Management)
 // =============================================================================
 
 /**
- * @deprecated Use `Layer.effect(TagClass, effect)` directly instead.
+ * Groups are Context.Tags, so use Effect's Layer functions directly:
  *
- * The Group.build helpers have been removed in favor of using Effect's
- * Layer functions directly with Tag classes.
- *
- * Migration:
  * ```typescript
- * // Before
- * const NotesLive = Group.build(notesGroup, Effect.gen(...))
+ * const notesGroup = Group.group("notes").pipe(
+ *   Group.add("list", listQuery),
+ *   Group.add("create", createMutation)
+ * )
  *
- * // After
- * export class Notes extends Group.Tag(notesGroup)<Notes>() {}
- * const NotesLive = Layer.effect(Notes, Effect.gen(...))
+ * // Use the group directly as a tag!
+ * const NotesLive = Layer.effect(notesGroup, Effect.gen(function*() {
+ *   const db = yield* Database
+ *   return {
+ *     list: () => db.query("SELECT * FROM notes"),
+ *     create: (args) => db.insert("notes", args)
+ *   }
+ * }))
+ *
+ * // Provide dependencies
+ * const program = Effect.gen(function*() {
+ *   const notes = yield* notesGroup  // Get the handlers
+ *   yield* notes.list()
+ * })
  * ```
  *
- * For scoped resources, use `Layer.scoped(TagClass, effect)`.
- * For mocks, use `Layer.succeed(TagClass, handlers)` or `Layer.succeedContext`.
+ * For scoped resources, use `Layer.scoped(group, effect)`.
+ * For mocks, use `Layer.succeed(group, handlers)`.
  *
  * @category Layer Building
  * @since 1.0.0

@@ -62,10 +62,9 @@ const postsGroup = Group.group("posts").pipe(
 
 const emptyGroup = Group.group("empty");
 
-// Tag classes for the groups
-class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
-class PostsTag extends Group.Tag(postsGroup)<PostsTag>() {}
-class EmptyTag extends Group.Tag(emptyGroup)<EmptyTag>() {}
+
+
+
 
 // =============================================================================
 // Constructor Tests
@@ -96,20 +95,20 @@ describe("Api Constructor", () => {
 
     test("works with pipe to add groups", () => {
       const myApi = Api.api("myApp").pipe(
-        Api.add(UsersTag),
-        Api.add(PostsTag),
+        Api.add(usersGroup),
+        Api.add(postsGroup),
       );
 
       expect(myApi.name).toBe("myApp");
-      expect(myApi.groups.users).toBe(UsersTag);
-      expect(myApi.groups.posts).toBe(PostsTag);
+      expect(myApi.groups.users).toBe(usersGroup);
+      expect(myApi.groups.posts).toBe(postsGroup);
       expect(Object.keys(myApi.groups)).toHaveLength(2);
     });
 
     test("preserves group names as literal types with pipe", () => {
       const myApi = Api.api("myApp").pipe(
-        Api.add(UsersTag),
-        Api.add(PostsTag),
+        Api.add(usersGroup),
+        Api.add(postsGroup),
       );
 
       type GroupNames = keyof typeof myApi.groups;
@@ -127,7 +126,7 @@ describe("Api Constructor", () => {
 
 describe("Api Predicates", () => {
   const validApi = Api.api("myApp").pipe(
-    Api.add(UsersTag),
+    Api.add(usersGroup),
   );
   
 
@@ -174,8 +173,8 @@ describe("Api Predicates", () => {
 
 describe("Type Extraction Utilities", () => {
   const testApi = Api.api("testApp").pipe(
-    Api.add(UsersTag),
-    Api.add(PostsTag),
+    Api.add(usersGroup),
+    Api.add(postsGroup),
   );
 
   describe("GetName", () => {
@@ -193,8 +192,8 @@ describe("Type Extraction Utilities", () => {
       type Groups = Api.GetGroups<typeof testApi>;
       // Use toMatchTypeOf for structural compatibility instead of exact equality
       expectTypeOf<Groups>().toMatchTypeOf<{
-        users: typeof UsersTag;
-        posts: typeof PostsTag;
+        users: typeof usersGroup;
+        posts: typeof postsGroup;
       }>();
 
       // Verify it's a record with the right keys
@@ -227,25 +226,25 @@ describe("Pipeable Utilities", () => {
   describe("add()", () => {
     test("adds a group to an API", () => {
       const original = Api.api("myApp").pipe(
-        Api.add(UsersTag),
+        Api.add(usersGroup),
       );
 
       const updated = original.pipe(
-        Api.add(PostsTag)
+        Api.add(postsGroup)
       );
 
       expect(updated.name).toBe("myApp");
-      expect(updated.groups.users).toBe(UsersTag);
-      expect(updated.groups.posts).toBe(PostsTag);
+      expect(updated.groups.users).toBe(usersGroup);
+      expect(updated.groups.posts).toBe(postsGroup);
       expect(Object.keys(updated.groups)).toHaveLength(2);
     });
 
     test("does not mutate original API", () => {
       const original = Api.api("myApp").pipe(
-        Api.add(UsersTag),
+        Api.add(usersGroup),
       );
 
-      original.pipe(Api.add(PostsTag));
+      original.pipe(Api.add(postsGroup));
 
       expect(Object.keys(original.groups)).toHaveLength(1);
       expect(original.groups).not.toHaveProperty("posts");
@@ -253,7 +252,7 @@ describe("Pipeable Utilities", () => {
 
     test("overwrites existing group with same name", () => {
       const original = Api.api("myApp").pipe(
-        Api.add(UsersTag),
+        Api.add(usersGroup),
       );
 
       const newUsersGroup = Group.group("users").pipe(
@@ -264,38 +263,38 @@ describe("Pipeable Utilities", () => {
       const updated = original.pipe(Api.add(NewUsersTag));
 
       expect(updated.groups.users).toBe(NewUsersTag);
-      expect(updated.groups.users).not.toBe(UsersTag);
+      expect(updated.groups.users).not.toBe(usersGroup);
     });
 
     test("works with multiple adds in single pipe", () => {
       const api = Api.api("myApp").pipe(
-        Api.add(UsersTag),
-        Api.add(PostsTag),
-        Api.add(EmptyTag),
+        Api.add(usersGroup),
+        Api.add(postsGroup),
+        Api.add(emptyGroup),
       );
 
       expect(Object.keys(api.groups)).toHaveLength(3);
-      expect(api.groups.users).toBe(UsersTag);
-      expect(api.groups.posts).toBe(PostsTag);
-      expect(api.groups.empty).toBe(EmptyTag);
+      expect(api.groups.users).toBe(usersGroup);
+      expect(api.groups.posts).toBe(postsGroup);
+      expect(api.groups.empty).toBe(emptyGroup);
     });
   });
 
   describe("merge()", () => {
     test("merges two APIs with different groups", () => {
       const api1 = Api.api("myApp").pipe(
-        Api.add(UsersTag),
+        Api.add(usersGroup),
       );
 
       const api2 = Api.api("myApp").pipe(
-        Api.add(PostsTag),
+        Api.add(postsGroup),
       );
 
       const merged = api1.pipe(Api.merge(api2));
 
       expect(merged.name).toBe("myApp");
-      expect(merged.groups.users).toBe(UsersTag);
-      expect(merged.groups.posts).toBe(PostsTag);
+      expect(merged.groups.users).toBe(usersGroup);
+      expect(merged.groups.posts).toBe(postsGroup);
       expect(Object.keys(merged.groups)).toHaveLength(2);
     });
 
@@ -312,7 +311,7 @@ describe("Pipeable Utilities", () => {
 
       const api1 = Api.api("myApp").pipe(
         Api.add(Shared1Tag),
-        Api.add(UsersTag),
+        Api.add(usersGroup),
       );
 
       const api2 = Api.api("myApp").pipe(
@@ -322,16 +321,16 @@ describe("Pipeable Utilities", () => {
       const merged = api1.pipe(Api.merge(api2));
 
       expect(merged.groups.shared).toBe(Shared2Tag);
-      expect(merged.groups.users).toBe(UsersTag);
+      expect(merged.groups.users).toBe(usersGroup);
     });
 
     test("does not mutate original APIs", () => {
       const api1 = Api.api("myApp").pipe(
-        Api.add(UsersTag),
+        Api.add(usersGroup),
       );
 
       const api2 = Api.api("myApp").pipe(
-        Api.add(PostsTag),
+        Api.add(postsGroup),
       );
 
       api1.pipe(Api.merge(api2));
@@ -373,15 +372,15 @@ describe("Order Utilities", () => {
 
   describe("byGroupCount", () => {
     test("orders APIs by number of groups (ascending)", () => {
-      const api1 = Api.api("one").pipe(Api.add(UsersTag));
+      const api1 = Api.api("one").pipe(Api.add(usersGroup));
       const api3 = Api.api("three").pipe(
-        Api.add(UsersTag),
-        Api.add(PostsTag),
-        Api.add(EmptyTag),
+        Api.add(usersGroup),
+        Api.add(postsGroup),
+        Api.add(emptyGroup),
       );
       const api2 = Api.api("two").pipe(
-        Api.add(UsersTag),
-        Api.add(PostsTag),
+        Api.add(usersGroup),
+        Api.add(postsGroup),
       );
 
       const apis = [api3, api1, api2];
@@ -395,11 +394,11 @@ describe("Order Utilities", () => {
 
   describe("byFunctionCount", () => {
     test("orders APIs by total number of functions (ascending)", () => {
-      const api1 = Api.api("one").pipe(Api.add(EmptyTag)); // 0 functions
-      const api2 = Api.api("two").pipe(Api.add(UsersTag)); // 2 functions
+      const api1 = Api.api("one").pipe(Api.add(emptyGroup)); // 0 functions
+      const api2 = Api.api("two").pipe(Api.add(usersGroup)); // 2 functions
       const api3 = Api.api("three").pipe(
-        Api.add(UsersTag),
-        Api.add(PostsTag),
+        Api.add(usersGroup),
+        Api.add(postsGroup),
       ); // 4 functions
 
       const apis = [api3, api1, api2];
@@ -418,14 +417,14 @@ describe("Order Utilities", () => {
 
 describe("Path Navigation", () => {
   const testApi = Api.api("testApp").pipe(
-    Api.add(UsersTag),
-    Api.add(PostsTag),
+    Api.add(usersGroup),
+    Api.add(postsGroup),
   );
 
   describe("getGroup()", () => {
     test("returns group when it exists", () => {
       const users = Api.getGroup(testApi, "users");
-      expect(users).toBe(UsersTag);
+      expect(users).toBe(usersGroup);
     });
 
     test("returns undefined when group does not exist", () => {
@@ -464,7 +463,7 @@ describe("Path Navigation", () => {
 describe("Variance Behavior", () => {
   test("Name is covariant", () => {
     const specific = Api.api("specificName").pipe(
-      Api.add(UsersTag),
+      Api.add(usersGroup),
     );
 
     expect(specific.name).toBe("specificName");
@@ -478,10 +477,10 @@ describe("Variance Behavior", () => {
 
   test("Groups maintains type structure", () => {
     const specific = Api.api("test").pipe(
-      Api.add(UsersTag),
+      Api.add(usersGroup),
     );
 
-    expect(specific.groups.users).toBe(UsersTag);
+    expect(specific.groups.users).toBe(usersGroup);
 
     type GroupNames = keyof typeof specific.groups;
     expectTypeOf<GroupNames>().toEqualTypeOf<"users">();
@@ -512,13 +511,13 @@ describe("Api.serve", () => {
   describe("Object Structure", () => {
     test("returns nested object structure matching API groups", () => {
       const testApi = Api.api("testApp").pipe(
-        Api.add(UsersTag),
-        Api.add(PostsTag),
+        Api.add(usersGroup),
+        Api.add(postsGroup),
       );
 
       // Create minimal handler implementations
       const UsersLive = Layer.succeed(
-        UsersTag,
+        usersGroup,
         {
           getUser: () => Effect.succeed({ result: "user" }),
           createUser: () => Effect.succeed({ result: "created" }),
@@ -526,7 +525,7 @@ describe("Api.serve", () => {
       );
 
       const PostsLive = Layer.succeed(
-        PostsTag,
+        postsGroup,
         {
           getPost: () => Effect.succeed({ result: "post" }),
           createPost: () => Effect.succeed({ result: "created" }),
@@ -550,11 +549,11 @@ describe("Api.serve", () => {
 
     test("each group contains function names as keys", () => {
       const testApi = Api.api("testApp").pipe(
-        Api.add(UsersTag),
+        Api.add(usersGroup),
       );
 
       const UsersLive = Layer.succeed(
-        UsersTag,
+        usersGroup,
         {
           getUser: () => Effect.succeed({ result: "user" }),
           createUser: () => Effect.succeed({ result: "created" }),
@@ -576,11 +575,11 @@ describe("Api.serve", () => {
 
     test("works with empty groups", () => {
       const testApi = Api.api("testApp").pipe(
-        Api.add(EmptyTag),
+        Api.add(emptyGroup),
       );
 
       const EmptyLive = Layer.succeed(
-        EmptyTag,
+        emptyGroup,
         {}
       );
 
@@ -597,11 +596,11 @@ describe("Api.serve", () => {
 
     test("functions are Convex registered handlers", () => {
       const testApi = Api.api("testApp").pipe(
-        Api.add(UsersTag),
+        Api.add(usersGroup),
       );
 
       const UsersLive = Layer.succeed(
-        UsersTag,
+        usersGroup,
         {
           getUser: () => Effect.succeed({ result: "user" }),
           createUser: () => Effect.succeed({ result: "created" }),
@@ -624,11 +623,11 @@ describe("Api.serve", () => {
   describe("Handler Execution", () => {
     test("query handlers can be invoked", async () => {
       const testApi = Api.api("testApp").pipe(
-        Api.add(UsersTag),
+        Api.add(usersGroup),
       );
 
       const UsersLive = Layer.succeed(
-        UsersTag,
+        usersGroup,
         {
           getUser: (args: { id: string }) =>
             Effect.succeed({ result: `user-${args.id}` }),
@@ -661,11 +660,11 @@ describe("Api.serve", () => {
 
     test("mutation handlers can be invoked", async () => {
       const testApi = Api.api("testApp").pipe(
-        Api.add(UsersTag),
+        Api.add(usersGroup),
       );
 
       const UsersLive = Layer.succeed(
-        UsersTag,
+        usersGroup,
         {
           getUser: () => Effect.succeed({ result: "user" }),
           createUser: (args: { id: string }) =>
@@ -699,12 +698,12 @@ describe("Api.serve", () => {
 
     test("multiple groups with handlers work correctly", async () => {
       const testApi = Api.api("testApp").pipe(
-        Api.add(UsersTag),
-        Api.add(PostsTag),
+        Api.add(usersGroup),
+        Api.add(postsGroup),
       );
 
       const UsersLive = Layer.succeed(
-        UsersTag,
+        usersGroup,
         {
           getUser: (args: { id: string }) =>
             Effect.succeed({ result: `user-${args.id}` }),
@@ -713,7 +712,7 @@ describe("Api.serve", () => {
       );
 
       const PostsLive = Layer.succeed(
-        PostsTag,
+        postsGroup,
         {
           getPost: (args: { id: string }) =>
             Effect.succeed({ result: `post-${args.id}` }),
@@ -751,13 +750,13 @@ describe("Api.serve", () => {
 
     test("handlers receive correct argument types", async () => {
       const testApi = Api.api("testApp").pipe(
-        Api.add(UsersTag),
+        Api.add(usersGroup),
       );
 
       let receivedArgs: any = null;
 
       const UsersLive = Layer.succeed(
-        UsersTag,
+        usersGroup,
         {
           getUser: (args: { id: string }) => {
             receivedArgs = args;
