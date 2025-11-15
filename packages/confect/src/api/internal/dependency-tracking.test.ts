@@ -185,9 +185,12 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
       ),
     );
 
+    // Create Tag class for the group
+    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
+
     // Handler Effect can have requirements (R)
-    const UsersLive = Group.build(
-      usersGroup,
+    const UsersLive = Layer.effect(
+      UsersTag,
       Effect.gen(function* () {
         const db = yield* Database; // ← R includes Database
 
@@ -199,7 +202,7 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
 
     // Type check: Layer requires Database
     expectTypeOf(UsersLive).toMatchTypeOf<
-      Layer.Layer<Group.Tag<typeof usersGroup>, any, Database>
+      Layer.Layer<UsersTag, any, Database>
     >();
   });
 
@@ -217,8 +220,10 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
       ),
     );
 
-    const UsersLive = Group.build(
-      usersGroup,
+    class UsersTag extends Group.Tag(usersGroup)<UsersTag>() {}
+
+    const UsersLive = Layer.effect(
+      UsersTag,
       Effect.gen(function* () {
         const db = yield* Database; // ← R includes Database
         const auth = yield* Auth; // ← R includes Auth
@@ -240,7 +245,7 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
 
     // Type check: Layer requires Database | Auth
     expectTypeOf(UsersLive).toMatchTypeOf<
-      Layer.Layer<Group.Tag<typeof usersGroup>, any, Database | Auth>
+      Layer.Layer<UsersTag, any, Database | Auth>
     >();
   });
 

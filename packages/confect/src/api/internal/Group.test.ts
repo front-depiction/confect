@@ -453,7 +453,7 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("getUser", getUserFn),
       );
 
-      class TestTag extends Group.Tag(testGroup)<TestTag>() {}
+      class TestTag extends Group.Tag(testGroup)<TestTag>() { }
 
       // Simple handler with no dependencies
       const TestLive = Layer.effect(
@@ -476,7 +476,7 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("getUser", getUserFn),
       );
 
-      class UsersTag extends Group.Tag(testGroup)<UsersTag>() {}
+      class UsersTag extends Group.Tag(testGroup)<UsersTag>() { }
 
       // Handler Effect requires Database
       const UsersLive = Layer.effect(
@@ -657,7 +657,7 @@ describe("Layer Building - Complex Dependencies", () => {
 
       expect(result.userResult).toEqual({ result: "user" });
       expect(result.postResult).toEqual({ result: "post" });
-      expect(queryCount).toBeGreaterThan(0);
+      expect(queryCount).toBe(1);
     });
   });
 
@@ -674,8 +674,8 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("funcB", createUserFn),
       );
 
-      class GroupATag extends Group.Tag(groupA)<GroupATag>() {}
-      class GroupBTag extends Group.Tag(groupB)<GroupBTag>() {}
+      class GroupATag extends Group.Tag(groupA)<GroupATag>() { }
+      class GroupBTag extends Group.Tag(groupB)<GroupBTag>() { }
 
       // GroupA depends on GroupB - this is fine
       const GroupALive = Layer.effect(
@@ -876,7 +876,7 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("query", getUserFn),
       );
 
-      class TestTag extends Group.Tag(testGroup)<TestTag>() {}
+      class TestTag extends Group.Tag(testGroup)<TestTag>() { }
 
       // Handler creation requires resources
       const TestLive = Layer.scoped(
@@ -903,7 +903,7 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("query", getUserFn),
       );
 
-      class DBTag extends Group.Tag(testGroup)<DBTag>() {}
+      class DBTag extends Group.Tag(testGroup)<DBTag>() { }
 
       const DBLive = Layer.scoped(
         DBTag,
@@ -932,7 +932,7 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("func2", createUserFn),
       );
 
-      class TestTag extends Group.Tag(testGroup)<TestTag>() {}
+      class TestTag extends Group.Tag(testGroup)<TestTag>() { }
 
       // Only implement func1, func2 will throw if called
       const TestMock = Layer.succeed(TestTag, {
@@ -946,7 +946,7 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add("func1", getUserFn),
       );
 
-      class TestTag extends Group.Tag(testGroup)<TestTag>() {}
+      class TestTag extends Group.Tag(testGroup)<TestTag>() { }
 
       // All functions throw UnimplementedError
       const TestMock = Layer.succeed(TestTag, {

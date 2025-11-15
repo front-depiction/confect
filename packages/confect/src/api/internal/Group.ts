@@ -100,7 +100,9 @@ type RenameKey<
  */
 export interface TagClass<Self, Id extends string, G extends ConfectApiGroup<string, any>>
   extends Context.Tag<Self, HandlersFor<G>> {
+  new(_: never): Context.TagClassShape<Id, HandlersFor<G>>
   readonly group: G
+  readonly key: Id
 }
 
 /**
@@ -136,7 +138,7 @@ export const Tag = <G extends ConfectApiGroup<string, {}>>(group: G) => <Self, I
   const creationError = new Error()
   Error.stackTraceLimit = limit
 
-  function TagClass() {}
+  function TagClass() { }
   const TagClass_ = TagClass as any
 
   // Extend Context.Tag prototype

@@ -69,14 +69,14 @@ const getRandomAction = Function.action("getRandom")
 // Group Definition (Pure, R = never)
 // =============================================================================
 
-export const notesGroup = Group.group("notes").pipe(
+export class Notes extends Group.group("notes").pipe(
   Group.add("listNotes", listNotesQuery),
   Group.add("insertNote", insertNoteMutation),
   Group.add("deleteNote", deleteNoteMutation),
   Group.add("getFirst", getFirstQuery),
   Group.add("getRandom", getRandomAction),
-);
-export class Notes extends Group.Tag(notesGroup)<Notes>() { }
+  g => Group.Tag(g)<Notes>()
+) { }
 
 // =============================================================================
 // API Definition (Pure, R = never)

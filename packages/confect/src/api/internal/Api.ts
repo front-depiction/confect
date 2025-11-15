@@ -113,16 +113,11 @@ export type ApiTypeId = typeof ApiTypeId;
 // =============================================================================
 
 /**
- * Type alias for any ConfectApiGroup.
+ * Type alias for any TagClass.
  *
  * @category Type Aliases
  * @since 1.0.0
  */
-export type AnyConfectApiGroup = Group.ConfectApiGroup<
-  string,
-  Record<string, Function.ConfectApiFunction>
->;
-
 export type AnyTagClass = Group.TagClass<any, any, any>;
 
 /**
@@ -161,8 +156,20 @@ export interface ConfectApi<
 }
 
 // =============================================================================
-// Constructors (using satisfies pattern)
+// Constructors (using prototype pattern)
 // =============================================================================
+
+/**
+ * Prototype for all ConfectApi instances.
+ * Shared across all API objects for memory efficiency.
+ * @internal
+ */
+const ConfectApiProto = {
+  [ApiTypeId]: ApiTypeId,
+  pipe() {
+    return pipeArguments(this, arguments);
+  },
+};
 
 /**
  * Create an empty API with the given name.
@@ -223,14 +230,12 @@ export interface ConfectApi<
  */
 export const api = <Name extends string>(
   name: Name,
-): ConfectApi<Name, {}, never> => ({
-  [ApiTypeId]: ApiTypeId,
-  name,
-  groups: {},
-  pipe() {
-    return pipeArguments(this, arguments);
-  },
-});
+): ConfectApi<Name, {}, never> => {
+  const self = Object.create(ConfectApiProto);
+  self.name = name;
+  self.groups = {};
+  return self;
+};
 
 // =============================================================================
 // Predicates (using Predicate.hasProperty)
@@ -379,28 +384,22 @@ export type GetContext<A extends ConfectApi<string, Record<string, AnyTagClass>,
  * )
  * // myApi has both users and posts groups
  */
-export const add: <
+export const add = <
   TC extends Group.TagClass<any, any, any>
 >(
   tagClass: TC,
-) => <Name extends string, Groups extends Record<string, Group.TagClass<any, any, any>>, R>(
+) => <Name extends string, Groups extends Record<string, AnyTagClass>, R>(
   api: ConfectApi<Name, Groups, R>,
-) => ConfectApi<
+): ConfectApi<
   Name,
   MergedGroups<Groups, Record<TC["group"]["name"], TC>>,
   R | TC
-> =
-  (tagClass: any) => (api) => {
-    const newGroups = Record.set(api.groups, tagClass.group.name, tagClass)
-    return {
-      [ApiTypeId]: ApiTypeId,
-      name: api.name,
-      groups: newGroups as any,
-      pipe() {
-        return pipeArguments(this, arguments);
-      },
-    };
-  };
+> => {
+  const self = Object.create(ConfectApiProto);
+  self.name = api.name;
+  self.groups = Record.set(api.groups, tagClass.group.name, tagClass);
+  return self;
+};
 
 /**
  * Merge another API's groups into this API (pipeable).
@@ -430,27 +429,22 @@ export const add: <
  */
 export const merge = <
   Name2 extends string,
-  Groups2 extends Record<string, AnyConfectApiGroup>,
+  Groups2 extends Record<string, AnyTagClass>,
   R2,
 >(
   other: ConfectApi<Name2, Groups2, R2>,
 ) =>
   <
     Name extends string,
-    Groups extends Record<string, AnyConfectApiGroup>,
+    Groups extends Record<string, AnyTagClass>,
     R,
   >(
     api: ConfectApi<Name, Groups, R>,
   ): ConfectApi<Name, MergedGroups<Groups, Groups2>, R | R2> => {
-    const newGroups = Record.union(api.groups, other.groups, SK);
-    return {
-      [ApiTypeId]: ApiTypeId,
-      name: api.name,
-      groups: newGroups as any,
-      pipe() {
-        return pipeArguments(this, arguments);
-      },
-    };
+    const self = Object.create(ConfectApiProto);
+    self.name = api.name;
+    self.groups = Record.union(api.groups, other.groups, SK);
+    return self;
   };
 
 // =============================================================================
@@ -469,10 +463,10 @@ export const merge = <
  * const apis = [api1, api2, api3]
  * const sorted = Array.sort(apis, Api.byName)
  */
-export const byName: Order.Order<ConfectApi<string, Record<string, AnyConfectApiGroup>, any>> =
+export const byName: Order.Order<ConfectApi<string, Record<string, AnyTagClass>, any>> =
   Order.mapInput(
     String.Order,
-    (api: ConfectApi<string, Record<string, AnyConfectApiGroup>, any>) => api.name,
+    (api: ConfectApi<string, Record<string, AnyTagClass>, any>) => api.name,
   );
 
 /**
@@ -610,7 +604,7 @@ export const getFunction = <
 export class ApiService extends Context.Tag("@confect/ApiService")<
   ApiService,
   {
-    readonly api: ConfectApi<string, Record<string, AnyConfectApiGroup>, any>
+    readonly api: ConfectApi<string, Record<string, AnyTagClass>, any>
     readonly context: Context.Context<never>
   }
 >() { }
@@ -814,7 +808,7 @@ const makeQueryFunction = <S extends GenericConfectSchema>(
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
   apiLayer: Layer.Layer<ApiService, never, QueryLayers>,
-  groupServiceTag: Group.Tag<any>,
+  groupServiceTag: Group.TagClass<any, any, any>,
   functionName: string
 ): RegisteredQuery<"public", any, any> =>
   queryGeneric({
@@ -859,7 +853,7 @@ const makeMutationFunction = <S extends GenericConfectSchema>(
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
   apiLayer: Layer.Layer<ApiService, never, MutationLayers>,
-  groupServiceTag: Group.Tag<any>,
+  groupServiceTag: Group.TagClass<any, any, any>,
   functionName: string
 ): RegisteredMutation<"public", any, any> => {
   console.log("[confect] Constructing mutation function:", functionName);
@@ -914,7 +908,7 @@ const makeActionFunction = <S extends GenericConfectSchema>(
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
   apiLayer: Layer.Layer<ApiService, never, ActionLayers>,
-  groupServiceTag: Group.Tag<any>,
+  groupServiceTag: Group.TagClass<any, any, any>,
   functionName: string
 ): RegisteredAction<"public", any, any> => {
   console.log("[confect] Constructing action function:", functionName);
