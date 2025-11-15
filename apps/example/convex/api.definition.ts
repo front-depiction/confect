@@ -75,7 +75,7 @@ export class Notes extends Group.group("notes").pipe(
   Group.add("deleteNote", deleteNoteMutation),
   Group.add("getFirst", getFirstQuery),
   Group.add("getRandom", getRandomAction),
-  g => Group.Tag(g)<Notes>()
+  Group.Tag<Notes>()
 ) { }
 
 // =============================================================================

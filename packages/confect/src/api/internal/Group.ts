@@ -132,7 +132,7 @@ export interface TagClass<Self, Id extends string, G extends ConfectApiGroup<str
  * // - Notes.group === notesGroup
  * ```
  */
-export const Tag = <G extends ConfectApiGroup<string, {}>>(group: G) => <Self, Id = GetName<G>>(): TagClass<Self, Id & string, G> => {
+export const Tag = <Self>() => <G extends ConfectApiGroup<string, {}>>(group: G): TagClass<Self, GetName<G>, G> => {
   const limit = Error.stackTraceLimit
   Error.stackTraceLimit = 2
   const creationError = new Error()
@@ -157,7 +157,7 @@ export const Tag = <G extends ConfectApiGroup<string, {}>>(group: G) => <Self, I
     }
   })
 
-  return TagClass_ as TagClass<Self, Id & string, G>
+  return TagClass_ as any
 }
 /**
  * API Group - collection of related functions.
