@@ -14,7 +14,7 @@
  * ## Pattern
  *
  * ```typescript
- * const withLogging = Plugin.enhance(MutationDB, (base) => ({
+ * const withLogging = Plugin.forTag(MutationDB, (base) => ({
  *   ...base,
  *   insert: (table, value) =>
  *     Effect.gen(function*() {
@@ -50,9 +50,9 @@ import * as Layer from "effect/Layer";
  *
  * @since 1.0.0
  */
-export type Plugin<S, E = never, R = never> = <E2, R2>(
-  baseLayer: Layer.Layer<S, E2, R2>
-) => Layer.Layer<S, E | E2, R | R2>;
+export type Plugin<I, E = never, R = never> = <E2, R2>(
+  baseLayer: Layer.Layer<I, E2, R2>
+) => Layer.Layer<I, E | E2, R | R2>;
 
 
 
@@ -64,7 +64,8 @@ export type Plugin<S, E = never, R = never> = <E2, R2>(
  * Create a plugin that enhances a service with synchronous wrapper.
  *
  * The wrapper function receives the base service and returns an enhanced version.
- * All methods must be wrapped - use spread operator to pass through unchanged methods.
+ * You can return a complete service or a partial with only the enhanced methods.
+ * Unspecified methods will be passed through from the base service.
  *
  * @param tag - Service tag to enhance
  * @param wrapper - Function that wraps the base service
@@ -75,8 +76,8 @@ export type Plugin<S, E = never, R = never> = <E2, R2>(
  *
  * @example
  * ```typescript
- * const withLogging = Plugin.enhance(MutationDB, (base) => ({
- *   ...base,
+ * // Return only the enhanced method (partial)
+ * const withLogging = Plugin.forTag(MutationDB, (base) => ({
  *   insert: (table, value) =>
  *     Effect.gen(function*() {
  *       yield* Effect.logInfo(`Inserting into ${table}`);
@@ -87,15 +88,15 @@ export type Plugin<S, E = never, R = never> = <E2, R2>(
  * const Enhanced = MutationDBLive.pipe(withLogging);
  * ```
  */
-export const enhance = <T extends Context.Tag<any, any>>(
-  tag: T,
-  wrapper: (base: Context.Tag.Service<T>) => Context.Tag.Service<T>
-): Plugin<T> =>
-  <E, R>(baseLayer: Layer.Layer<T, E, R>): Layer.Layer<T, E, R> =>
+export const forTag = <I, S>(
+  tag: Context.Tag<I, S>,
+  wrapper: (base: S) => S | Partial<S>
+): Plugin<I> =>
+  <E, R>(baseLayer: Layer.Layer<I, E, R>): Layer.Layer<I, E, R> =>
     Layer.map(baseLayer, (ctx) => {
       const base = Context.get(ctx, tag);
-      const enhanced = wrapper(base);
-      return Context.merge(ctx, Context.make(tag, enhanced));
+      const partial = wrapper(base);
+      return Context.add(ctx, tag, Object.assign({}, base, partial));
     });
 
 /**
@@ -103,6 +104,8 @@ export const enhance = <T extends Context.Tag<any, any>>(
  *
  * The wrapper function is an Effect that can access other services during setup,
  * then returns an enhanced service implementation.
+ * You can return a complete service or a partial with only the enhanced methods.
+ * Unspecified methods will be passed through from the base service.
  * Use this when the plugin needs to access dependencies or perform async initialization.
  *
  * @param tag - Service tag to enhance
@@ -114,13 +117,13 @@ export const enhance = <T extends Context.Tag<any, any>>(
  *
  * @example
  * ```typescript
- * const withAudit = Plugin.enhanceEffect(MutationDB, (base) =>
+ * // Return only the enhanced method (partial)
+ * const withAudit = Plugin.effectForTag(MutationDB, (base) =>
  *   Effect.gen(function*() {
  *     const audit = yield* AuditLog;
  *     yield* Effect.logInfo("Audit plugin initialized");
  *
  *     return {
- *       ...base,
  *       insert: (table, value) =>
  *         Effect.gen(function*() {
  *           yield* audit.log(`Inserting into ${table}`);
@@ -133,15 +136,15 @@ export const enhance = <T extends Context.Tag<any, any>>(
  * const Enhanced = MutationDBLive.pipe(withAudit);
  * ```
  */
-export const enhanceEffect = <T extends Context.Tag<any, any>, E2 = never, R2 = never>(
-  tag: T,
-  wrapper: (base: Context.Tag.Service<T>) => Effect.Effect<Context.Tag.Service<T>, E2, R2>
-): Plugin<T, E2, R2> =>
-  <E, R>(baseLayer: Layer.Layer<T, E, R>): Layer.Layer<T, E | E2, R | R2> => Layer.flatMap(baseLayer, context =>
+export const effectForTag = <S, I, E2 = never, R2 = never>(
+  tag: Context.Tag<I, S>,
+  wrapper: (base: S) => Effect.Effect<S | Partial<S>, E2, R2>
+): Plugin<I, E2, R2> =>
+  <E, R>(baseLayer: Layer.Layer<I, E, R>): Layer.Layer<I, E | E2, R | R2> => Layer.flatMap(baseLayer, context =>
     Layer.effectContext(Effect.gen(function* () {
       const base = Context.get(context, tag);
-      const enhanced = yield* wrapper(base);
-      return Context.merge(context, Context.make(tag, enhanced));
+      const partial = yield* wrapper(base);
+      return Context.add(context, tag, Object.assign({}, base, partial));
     }))
   )
 // =============================================================================

@@ -13,7 +13,7 @@
  * - Compose via .pipe() on layers
  */
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Context from "effect/Context";
@@ -47,38 +47,25 @@ class MutationDB extends Context.Tag("MutationDB")<
 >() { }
 
 // Simple in-memory implementation for testing
-const MutationDBLive = Layer.succeed(MutationDB, {
-  insert: (table, value) => Effect.succeed(`${table}-${Math.random()}`),
-  patch: (table, id, value) => Effect.void,
-  remove: (table, id) => Effect.void,
-});
+const MutationDBLive = Layer.succeed(
+  MutationDB,
+  MutationDB.of({
+    insert: (table, _value) => Effect.succeed(`${table}-${Math.random()}`),
+    patch: (_table, _id, _value) => Effect.void,
+    remove: (_table, _id) => Effect.void,
+  })
+)
 
 // =============================================================================
 // Plugin Definition Pattern
 // =============================================================================
 
 describe("Plugin Definition", () => {
-  test("Plugin enhances a Layer by wrapping its service", () => {
-    const withLogging = <R, E>(
-      baseLayer: Layer.Layer<MutationDB, E, R>
-    ): Layer.Layer<MutationDB, E, R> => Layer.map(baseLayer, (ctx) => {
-      const base = Context.get(ctx, MutationDB);
-      const enhanced = MutationDB.of({
-        ...base,
-        insert: (table, value) => base.insert(table, value)
-      })
-      return Context.merge(ctx, Context.make(MutationDB, enhanced));
-    })
 
 
-    const enhanced = withLogging(MutationDBLive);
-    expect(enhanced).toBeDefined();
-  });
-
-  test("Plugin.enhance helper simplifies plugin creation", () => {
-    // Plugin.enhance handles Layer.build + Context.get boilerplate
-    const withLogging = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+  test("Plugin.forTag helper simplifies plugin creation", () => {
+    // Plugin.forTag handles Layer.build + Context.get boilerplate
+    const withLogging = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value) =>
         Effect.gen(function* () {
           yield* Effect.logInfo(`[LOG] ${table}`);
@@ -91,9 +78,32 @@ describe("Plugin Definition", () => {
     expect(enhanced).toBeDefined();
   });
 
+  test("Plugin.forTag supports partial service (only enhanced methods)", async () => {
+    // Return only the methods you want to enhance
+    const withLogging = Plugin.forTag(MutationDB, (base) => ({
+      insert: (table, value) =>
+        Effect.gen(function* () {
+          yield* Effect.logInfo(`[PARTIAL LOG] ${table}`);
+          return yield* base.insert(table, value);
+        }),
+      // patch and remove are not specified - they'll be passed through from base
+    }));
+
+    const Enhanced = MutationDBLive.pipe(withLogging);
+
+    const program = Effect.gen(function* () {
+      const db = yield* MutationDB;
+      yield* db.insert("notes", { text: "test" });
+      yield* db.patch("notes", "id", { text: "updated" }); // Should still work
+      yield* db.remove("notes", "id"); // Should still work
+    });
+
+    await Effect.runPromise(program.pipe(Effect.provide(Enhanced)));
+  });
+
   test("Multiple plugins compose via .pipe()", () => {
-    const withAudit = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    // Using partial pattern - only specify enhanced methods
+    const withAudit = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value) =>
         Effect.gen(function* () {
           yield* Effect.logInfo("[AUDIT]");
@@ -101,12 +111,11 @@ describe("Plugin Definition", () => {
         }),
     }));
 
-    const withValidation = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const withValidation = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value: any) =>
         Effect.gen(function* () {
           if (!value) {
-            return yield* Effect.fail(new Error("Invalid"));
+            return yield* Effect.die(new Error("Invalid"));
           }
           return yield* base.insert(table, value);
         }),
@@ -127,8 +136,7 @@ describe("Plugin Order", () => {
   test("Plugins execute in pipe order (onion model)", async () => {
     const executionOrder: string[] = [];
 
-    const plugin1 = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const plugin1 = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value) =>
         Effect.gen(function* () {
           executionOrder.push("plugin1-before");
@@ -138,8 +146,7 @@ describe("Plugin Order", () => {
         }),
     }));
 
-    const plugin2 = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const plugin2 = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value) =>
         Effect.gen(function* () {
           executionOrder.push("plugin2-before");
@@ -149,8 +156,7 @@ describe("Plugin Order", () => {
         }),
     }));
 
-    const plugin3 = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const plugin3 = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value) =>
         Effect.gen(function* () {
           executionOrder.push("plugin3-before");
@@ -168,7 +174,7 @@ describe("Plugin Order", () => {
       return yield* db.insert("notes", { text: "test" });
     });
 
-    await Effect.runPromise(program.pipe(Effect.provide(Enhanced)));
+    await Effect.runPromise(program.pipe(Effect.provide(Enhanced)) as Effect.Effect<string>);
 
     // Execution order: plugin3 -> plugin2 -> plugin1 -> base -> plugin1 -> plugin2 -> plugin3
     expect(executionOrder).toEqual([
@@ -190,8 +196,7 @@ describe("Plugin Interception", () => {
   test("Plugin can run logic before operation", async () => {
     const beforeLog: string[] = [];
 
-    const withBefore = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const withBefore = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value) =>
         Effect.gen(function* () {
           beforeLog.push(`before:${table}`);
@@ -214,8 +219,7 @@ describe("Plugin Interception", () => {
   test("Plugin can run logic after operation", async () => {
     const afterLog: Array<{ table: string; id: string }> = [];
 
-    const withAfter = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const withAfter = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value) =>
         Effect.gen(function* () {
           const id = yield* base.insert(table, value);
@@ -235,13 +239,14 @@ describe("Plugin Interception", () => {
     );
 
     expect(afterLog).toHaveLength(1);
-    expect(afterLog[0].table).toBe("notes");
-    expect(afterLog[0].id).toBe(result);
+    const firstLog = afterLog[0];
+    expect(firstLog).toBeDefined();
+    expect(firstLog?.table).toBe("notes");
+    expect(firstLog?.id).toBe(result);
   });
 
   test("Plugin can modify arguments", async () => {
-    const withTimestamp = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const withTimestamp = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value) => {
         // Add timestamp to all inserts
         const enriched = { ...value, _timestamp: Date.now() };
@@ -262,8 +267,7 @@ describe("Plugin Interception", () => {
   });
 
   test("Plugin can modify return value", async () => {
-    const withPrefix = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const withPrefix = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value) =>
         Effect.gen(function* () {
           const id = yield* base.insert(table, value);
@@ -283,18 +287,18 @@ describe("Plugin Interception", () => {
     expect(result.startsWith("prefix:")).toBe(true);
   });
 
-  test("Plugin can prevent execution (validation)", async () => {
+  test("Plugin can prevent execution (validation with defects)", async () => {
     class ValidationError extends Schema.TaggedError<ValidationError>()(
       "ValidationError",
       { message: Schema.String }
     ) { }
 
-    const withValidation = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const withValidation = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value: any) =>
         Effect.gen(function* () {
           if (!value.text || value.text.length === 0) {
-            return yield* Effect.fail(
+            // Service interface doesn't allow typed errors, so use defects
+            return yield* Effect.die(
               new ValidationError({ message: "Text required" })
             );
           }
@@ -317,18 +321,17 @@ describe("Plugin Interception", () => {
     // Valid should succeed
     await Effect.runPromise(programValid.pipe(Effect.provide(Enhanced)));
 
-    // Invalid should fail
+    // Invalid should die (defect, not typed error)
     const result = await Effect.runPromise(
-      programInvalid.pipe(Effect.provide(Enhanced), Effect.either)
+      programInvalid.pipe(Effect.provide(Enhanced), Effect.exit)
     );
-    expect(result._tag).toBe("Left");
+    expect(result._tag).toBe("Failure");
   });
 
   test("Plugin can short-circuit (caching)", async () => {
     const cache = new Map<string, string>();
 
-    const withCache = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const withCache = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value: any) =>
         Effect.gen(function* () {
           const cacheKey = `${table}:${value.text}`;
@@ -381,15 +384,19 @@ describe("Plugin Dependencies", () => {
         }),
     });
 
-    const withAudit = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
-      insert: (table, value) =>
-        Effect.gen(function* () {
-          const audit = yield* AuditLog; // Access other service
-          yield* audit.log(`Inserting into ${table}`);
-          return yield* base.insert(table, value);
-        }),
-    }));
+    const withAudit = Plugin.effectForTag(MutationDB, (base) =>
+      Effect.gen(function* () {
+        const audit = yield* AuditLog; // Access service during setup
+
+        return {
+          insert: (table, value) =>
+            Effect.gen(function* () {
+              yield* audit.log(`Inserting into ${table}`);
+              return yield* base.insert(table, value);
+            }),
+        };
+      })
+    );
 
     const program = Effect.gen(function* () {
       const db = yield* MutationDB;
@@ -399,7 +406,7 @@ describe("Plugin Dependencies", () => {
     await Effect.runPromise(
       program.pipe(
         Effect.provide(
-          Layer.mergeAll(MutationDBLive.pipe(withAudit), AuditLogLive)
+          MutationDBLive.pipe(withAudit, Layer.provide(AuditLogLive))
         )
       )
     );
@@ -422,14 +429,13 @@ describe("Plugin Dependencies", () => {
         }),
     });
 
-    // Plugin.enhanceEffect for async setup
-    const withAudit = Plugin.enhanceEffect(MutationDB, (base) =>
+    // Plugin.effectForTag for async setup
+    const withAudit = Plugin.effectForTag(MutationDB, (base) =>
       Effect.gen(function* () {
         const audit = yield* AuditLog; // Can yield during setup
         yield* Effect.logInfo("Audit plugin initialized");
 
         return {
-          ...base,
           insert: (table, value) =>
             Effect.gen(function* () {
               yield* audit.log(`Inserting into ${table}`);
@@ -464,8 +470,7 @@ describe("Real-World Plugins", () => {
   test("Audit Log Plugin", async () => {
     const auditLog: Array<{ action: string; table: string; id?: string }> = [];
 
-    const withAuditLog = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const withAuditLog = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value) =>
         Effect.gen(function* () {
           const id = yield* base.insert(table, value);
@@ -490,15 +495,16 @@ describe("Real-World Plugins", () => {
     );
 
     expect(auditLog).toHaveLength(2);
-    expect(auditLog[0].action).toBe("insert");
-    expect(auditLog[1].action).toBe("remove");
+    expect(auditLog[0]).toBeDefined();
+    expect(auditLog[1]).toBeDefined();
+    expect(auditLog[0]?.action).toBe("insert");
+    expect(auditLog[1]?.action).toBe("remove");
   });
 
   test("Soft Delete Plugin", async () => {
     const patches: Array<{ table: string; id: string }> = [];
 
-    const withSoftDelete = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const withSoftDelete = Plugin.forTag(MutationDB, (base) => ({
       remove: (table, id) => {
         // Convert remove to patch
         patches.push({ table, id });
@@ -521,8 +527,7 @@ describe("Real-World Plugins", () => {
   test("Trigger Plugin", async () => {
     const triggered: Array<{ event: string; id: string }> = [];
 
-    const withTriggers = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const withTriggers = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value) =>
         Effect.gen(function* () {
           const id = yield* base.insert(table, value);
@@ -546,7 +551,8 @@ describe("Real-World Plugins", () => {
     );
 
     expect(triggered).toHaveLength(1);
-    expect(triggered[0].event).toBe("note_created");
+    expect(triggered[0]).toBeDefined();
+    expect(triggered[0]?.event).toBe("note_created");
   });
 
   test("Row-Level Security Plugin", async () => {
@@ -569,12 +575,11 @@ describe("Real-World Plugins", () => {
       remove: () => Effect.void,
     });
 
-    const withRLS = Plugin.enhanceEffect(MutationDB, (base) =>
+    const withRLS = Plugin.effectForTag(MutationDB, (base) =>
       Effect.gen(function* () {
         const user = yield* CurrentUser;
 
         return {
-          ...base,
           insert: (table, value) => {
             // Auto-inject userId
             const withUser = { ...value, userId: user.id };
@@ -603,8 +608,7 @@ describe("Real-World Plugins", () => {
   test("Composing Multiple Plugins", async () => {
     const events: string[] = [];
 
-    const withLogging = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const withLogging = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value) =>
         Effect.gen(function* () {
           events.push("log");
@@ -612,20 +616,18 @@ describe("Real-World Plugins", () => {
         }),
     }));
 
-    const withValidation = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
-      insert: (table, value: any) =>
+    const withValidation = Plugin.forTag(MutationDB, (base) => ({
+      insert: (table, value) =>
         Effect.gen(function* () {
           events.push("validate");
           if (!value.text) {
-            return yield* Effect.fail(new Error("Invalid"));
+            return yield* Effect.die(new Error("Invalid"));
           }
           return yield* base.insert(table, value);
         }),
     }));
 
-    const withAudit = Plugin.enhance(MutationDB, (base) => ({
-      ...base,
+    const withAudit = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value) =>
         Effect.gen(function* () {
           events.push("audit");
