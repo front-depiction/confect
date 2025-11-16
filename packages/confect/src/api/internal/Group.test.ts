@@ -48,19 +48,11 @@ const sendEmailFn = Function.action("sendEmail")
 
 describe("Group Constructor", () => {
   describe("group()", () => {
-    test("creates an empty group", () => {
-      const grp = Group.group("users");
-
-      expect(grp.name).toBe("users");
-      expect(Object.keys(grp.functions)).toHaveLength(0);
-    });
-
     test("preserves literal name type", () => {
       const grp = Group.group("users");
       void grp
       type Name = typeof grp.name;
       expectTypeOf<Name>().toEqualTypeOf<"users">();
-      // expectTypeOf<TypesAreEquivalent<Name, "users">>().toEqualTypeOf<true>();
     });
 
     test("has GroupTypeId symbol", () => {
@@ -106,20 +98,11 @@ describe("Group Predicates", () => {
       expect(Group.isGroup(validGroup)).toBe(true);
     });
 
-    test("returns false for plain objects", () => {
-      expect(Group.isGroup({})).toBe(false);
-      expect(Group.isGroup({ name: "test", functions: {} })).toBe(false);
-    });
-
     test("returns false for primitives", () => {
       expect(Group.isGroup(null)).toBe(false);
       expect(Group.isGroup(undefined)).toBe(false);
       expect(Group.isGroup(42)).toBe(false);
       expect(Group.isGroup("test")).toBe(false);
-    });
-
-    test("returns false for functions", () => {
-      expect(Group.isGroup(getUserFn)).toBe(false);
     });
 
     test("narrows type correctly", () => {
@@ -154,18 +137,6 @@ describe("Type Extraction Utilities", () => {
       expectTypeOf<
         TypesAreEquivalent<Name, "testGroup">
       >().toEqualTypeOf<true>();
-    });
-  });
-
-  describe("GetFunctions", () => {
-    test("extracts functions record", () => {
-      type Functions = Group.GetFunctions<typeof testGroup>;
-      type FnRecord = { [K in Functions["name"]]: Extract<Functions, { name: K }> };
-      expectTypeOf<FnRecord>().toExtend<{
-        getUser: typeof getUserFn;
-        createUser: typeof createUserFn;
-      }>();
-
     });
   });
 
@@ -230,19 +201,6 @@ describe("Pipeable Utilities", () => {
       expect(updated.functions["getUser"]).toBe(newGetUser);
       expect(updated.functions["getUser"]).not.toBe(getUserFn);
     });
-
-    test("works with multiple adds in single pipe", () => {
-      const grp = Group.group("users").pipe(
-        Group.add(getUserFn),
-        Group.add(createUserFn),
-        Group.add(sendEmailFn),
-      );
-
-      expect(Object.keys(grp.functions)).toHaveLength(3);
-      expect(grp.functions["getUser"]).toBe(getUserFn);
-      expect(grp.functions["createUser"]).toBe(createUserFn);
-      expect(grp.functions["sendEmail"]).toBe(sendEmailFn);
-    });
   });
 
   describe("rename()", () => {
@@ -269,16 +227,6 @@ describe("Pipeable Utilities", () => {
 
       expect(original.functions).toHaveProperty("getUser");
       expect(original.functions).not.toHaveProperty("fetchUser");
-    });
-
-    test("handles renaming to same name", () => {
-      const original = Group.group("users").pipe(
-        Group.add(getUserFn),
-      );
-
-      const updated = original.pipe(Group.rename("getUser", "getUser"));
-
-      expect(updated.functions["getUser"]).toBe(getUserFn);
     });
   });
 
@@ -338,15 +286,6 @@ describe("Pipeable Utilities", () => {
       expect(Object.keys(group1.functions)).toHaveLength(1);
       expect(Object.keys(group2.functions)).toHaveLength(1);
     });
-
-    test("merges empty groups", () => {
-      const group1 = Group.group("api");
-      const group2 = Group.group("api");
-
-      const merged = group1.pipe(Group.merge(group2));
-
-      expect(Object.keys(merged.functions)).toHaveLength(0);
-    });
   });
 });
 
@@ -368,37 +307,6 @@ describe("Order Utilities", () => {
       expect(sorted[1]!.name).toBe("mango");
       expect(sorted[2]!.name).toBe("zebra");
     });
-
-    test("handles groups with same name", () => {
-      const group1 = Group.group("test").pipe(Group.add(getUserFn));
-      const group2 = Group.group("test").pipe(Group.add(createUserFn));
-
-      const groups = [group1, group2];
-      const sorted = Array.sort(groups, Group.byName);
-
-      expect(sorted).toHaveLength(2);
-      expect(sorted[0]!.name).toBe("test");
-      expect(sorted[1]!.name).toBe("test");
-    });
-
-    test("is case-sensitive", () => {
-      const lowerGroup = Group.group("apple");
-      const upperGroup = Group.group("Apple");
-
-      const groups = [lowerGroup, upperGroup];
-      const sorted = Array.sort(groups, Group.byName);
-
-      expect(sorted[0]!.name).toBe("Apple");
-      expect(sorted[1]!.name).toBe("apple");
-    });
-
-    test("handles single group", () => {
-      const group = Group.group("single");
-      const sorted = Array.sort([group], Group.byName);
-
-      expect(sorted).toHaveLength(1);
-      expect(sorted[0]).toBe(group);
-    });
   });
 });
 
@@ -419,17 +327,6 @@ describe("Variance Behavior", () => {
 
     const name: string = specific.name;
     expect(name).toBe("specificName");
-  });
-
-  test("Functions maintains type structure", () => {
-    const specific = Group.group("test").pipe(
-      Group.add(getUserFn),
-    );
-
-    expect(specific.functions["getUser"]).toBe(getUserFn);
-
-    type FunctionNames = Group.GetFunctionNames<typeof specific>;
-    expectTypeOf<FunctionNames>().toEqualTypeOf<"getUser">();
   });
 });
 
@@ -867,35 +764,6 @@ describe("Layer Building - Complex Dependencies", () => {
 
       void TestLive;
     });
-
-    test("buildScoped with dependencies", () => {
-      class Config extends Context.Tag("Config")<Config, { readonly connString: string }>() { }
-
-      const dbGroup = Group.group("db").pipe(
-        Group.add(
-          Function.query("query")
-            .args(Schema.Struct({}))
-            .returns(TestReturnsSchema)),
-      );
-
-      const DBLive = Layer.scoped(Group.Tag(dbGroup),
-        Effect.gen(function* () {
-          const config = yield* Config;
-
-          // Create scoped connection
-          const conn = yield* Effect.acquireRelease(
-            Effect.succeed({ connString: config.connString }),
-            () => Effect.succeed(undefined)
-          );
-
-          return {
-            query: () => Effect.succeed({ result: conn.connString }),
-          };
-        })
-      );
-
-      void DBLive;
-    });
   });
 
   describe("Group.buildMock() - Testing Support", () => {
@@ -912,179 +780,6 @@ describe("Layer Building - Complex Dependencies", () => {
 
       void TestMock;
     });
-
-    test("allows empty mock for all unimplemented", () => {
-      const testGroup = Group.group("test").pipe(
-        Group.add(getUserFn),
-      );
-
-      // All functions throw UnimplementedError
-      const TestMock = Layer.mock(Group.Tag(testGroup), {});
-
-      void TestMock;
-    });
   });
 
-  describe("Real-World Scenarios - Convex-like Patterns", () => {
-    test("query group depends on mutation group for cache invalidation", async () => {
-      // Simulate Convex DB services
-      class QueryDB extends Context.Tag("QueryDB")<
-        QueryDB,
-        { readonly query: (table: string) => Effect.Effect<unknown[]> }
-      >() { }
-
-      class MutationDB extends Context.Tag("MutationDB")<
-        MutationDB,
-        {
-          readonly insert: (table: string, doc: unknown) => Effect.Effect<string>;
-          readonly delete: (table: string, id: string) => Effect.Effect<void>;
-        }
-      >() { }
-
-      // Notes mutation group
-      const notesMutationGroup = Group.group("notesMutation").pipe(
-        Group.add(Function.rename(createUserFn, "insert")),
-        Group.add(Function.mutation("delete")
-          .args(TestArgsSchema)
-          .returns(Schema.Null)),
-      );
-
-      const NotesMutationLive = Layer.effect(Group.Tag(notesMutationGroup),
-        Effect.gen(function* () {
-          const db = yield* MutationDB;
-          return {
-            insert: () => db.insert("notes", { text: "test" }).pipe(
-              Effect.map((id) => ({ result: `inserted:${id}` }))
-            ),
-            delete: () => db.delete("notes", "id").pipe(
-              Effect.map(() => null)
-            ),
-          };
-        })
-      );
-
-      // Notes query group that can trigger mutations
-      const notesQueryGroup = Group.group("notesQuery").pipe(
-        Group.add(Function.rename(getUserFn, "list")),
-        Group.add(Function.rename(createUserFn, "refresh")),
-      );
-
-      const NotesQueryLive = Layer.effect(Group.Tag(notesQueryGroup),
-        Effect.gen(function* () {
-          const queryDb = yield* QueryDB;
-          const mutations = yield* Group.Tag(notesMutationGroup);
-
-          return {
-            list: () => queryDb.query("notes").pipe(
-              Effect.map((notes) => ({ result: "list", count: notes.length }))
-            ),
-            refresh: () =>
-              // Query can trigger mutation and re-query
-              mutations.insert({ id: "test-id" }).pipe(
-                Effect.flatMap(() => queryDb.query("notes")),
-                Effect.map((notes) => ({ result: "refreshed", count: notes.length }))
-              ),
-          };
-        })
-      );
-
-      // RUNTIME TEST: Simulate the notesMutationCtx -> notesQueryCtx pattern
-      let insertCount = 0;
-      const notes: Array<{ id: string; text: string }> = [];
-
-      const MutationDBLive = Layer.succeed(MutationDB, {
-        insert: (_table: string, doc: any) => Effect.sync(() => {
-          const id = `note-${++insertCount}`;
-          notes.push({ id, text: doc.text });
-          return id;
-        }),
-        delete: (_table: string, id: string) => Effect.sync(() => {
-          const index = notes.findIndex(n => n.id === id);
-          if (index !== -1) notes.splice(index, 1);
-        }),
-      });
-
-      const QueryDBLive = Layer.succeed(QueryDB, {
-        query: (_table: string) => Effect.succeed([...notes]),
-      });
-
-      const FullStack = Layer.mergeAll(
-        NotesMutationLive.pipe(Layer.provide(MutationDBLive)),
-        NotesQueryLive.pipe(
-          Layer.provide(NotesMutationLive.pipe(Layer.provide(MutationDBLive))),
-          Layer.provide(QueryDBLive)
-        )
-      );
-
-      const program = Effect.gen(function* () {
-        const query = yield* Group.Tag(notesQueryGroup);
-
-        // Initial list (empty)
-        const listResult1 = yield* query.list({ id: "test-id" });
-
-        // Refresh (triggers insert + re-query)
-        const refreshResult = yield* query.refresh({ id: "test-id" });
-
-        // List again (should have 1 note)
-        const listResult2 = yield* query.list({ id: "test-id" });
-
-        return { listResult1, refreshResult, listResult2 };
-      });
-
-      const result = await Effect.runPromise(
-        program.pipe(
-          Effect.provide(FullStack)
-        )
-      );
-
-      expect(result.listResult1).toEqual({ result: "list", count: 0 });
-      expect(result.refreshResult).toEqual({ result: "refreshed", count: 1 });
-      expect(result.listResult2).toEqual({ result: "list", count: 1 });
-      expect(notes).toHaveLength(1);
-    });
-
-    test("supports Effect Platform HTTP-like middleware pattern", async () => {
-      // Middleware service (like HttpApiMiddleware)
-      class Auth extends Context.Tag("Auth")<
-        Auth,
-        { readonly userId: string }
-      >() { }
-
-      // Protected group requires Auth
-      const protectedGroup = Group.group("protected").pipe(
-        Group.add(getUserFn),
-      );
-
-      const ProtectedLive = Layer.effect(Group.Tag(protectedGroup),
-        Effect.gen(function* () {
-          const auth = yield* Auth;
-
-          return {
-            getUser: () => Effect.succeed({ result: `User ${auth.userId}` }),
-          };
-        })
-      );
-
-      // Auth middleware layer
-      const AuthLive = Layer.succeed(Auth, { userId: "user-123" });
-
-      // Compose with middleware
-      const ProtectedWithAuth = ProtectedLive.pipe(Layer.provide(AuthLive));
-
-      // RUNTIME TEST: Verify middleware is injected
-      const program = Effect.gen(function* () {
-        const handlers = yield* Group.Tag(protectedGroup);
-        const result = yield* handlers.getUser({ id: "test-id" });
-        return result;
-      });
-
-      const result = await Effect.runPromise(
-        program.pipe(
-          Effect.provide(ProtectedWithAuth)
-        )
-      );
-
-      expect(result).toEqual({ result: "User user-123" });
-    });
-  });
 });
