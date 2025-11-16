@@ -147,8 +147,8 @@ describe("Pure Definitions", () => {
       .returns(UserSchema);
 
     const usersGroup = Group.group("users").pipe(
-      Group.add("getUser", getUser),
-      Group.add("createUser", createUser),
+      Group.add(getUser),
+      Group.add(createUser),
     );
 
     // Runtime checks: Pure composition
@@ -158,9 +158,7 @@ describe("Pure Definitions", () => {
 
   test("Api definitions compose groups (pure data)", () => {
     const usersGroup = Group.group("users").pipe(
-      Group.add(
-        "getUser",
-        Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
+      Group.add(Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
       ),
     );
 
@@ -179,9 +177,7 @@ describe("Pure Definitions", () => {
 describe("Group.build() - Layer Creation with Dependencies", () => {
   test("build creates Layer with single dependency", () => {
     const usersGroup = Group.group("users").pipe(
-      Group.add(
-        "getUser",
-        Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
+      Group.add(Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
       ),
     );
 
@@ -207,13 +203,9 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
 
   test("build creates Layer with multiple dependencies", () => {
     const usersGroup = Group.group("users").pipe(
-      Group.add(
-        "getUser",
-        Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
+      Group.add(Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
       ),
-      Group.add(
-        "createUser",
-        Function.mutation("createUser")
+      Group.add(Function.mutation("createUser")
           .args(CreateUserArgsSchema)
           .returns(UserSchema),
       ),
@@ -248,9 +240,7 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
 
   test("handlers close over dependencies (R = never for handler functions)", () => {
     const usersGroup = Group.group("users").pipe(
-      Group.add(
-        "getUser",
-        Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
+      Group.add(Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
       ),
     );
 
@@ -273,13 +263,9 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
 
   test("handlers can reuse other handlers", () => {
     const usersGroup = Group.group("users").pipe(
-      Group.add(
-        "getUser",
-        Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
+      Group.add(Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
       ),
-      Group.add(
-        "getUserWithPrefix",
-        Function.query("getUserWithPrefix")
+      Group.add(Function.query("getUserWithPrefix")
           .args(UserArgsSchema)
           .returns(UserSchema),
       ),
@@ -311,9 +297,7 @@ describe("Group.build() - Layer Creation with Dependencies", () => {
 
   test("Tag pattern preserves group type information", () => {
     const usersGroup = Group.group("users").pipe(
-      Group.add(
-        "getUser",
-        Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
+      Group.add(Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
       ),
     );
 
@@ -363,9 +347,7 @@ describe("Group.buildScoped() - Scoped Resource Management", () => {
     );
 
     const usersGroup = Group.group("users").pipe(
-      Group.add(
-        "getUser",
-        Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
+      Group.add(Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
       ),
     );
 
@@ -394,13 +376,9 @@ describe("Group.buildScoped() - Scoped Resource Management", () => {
 describe("Mocking with Layer.mock", () => {
   test("Layer.mock creates mock Layer with partial implementation", () => {
     const usersGroup = Group.group("users").pipe(
-      Group.add(
-        "getUser",
-        Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
+      Group.add(Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
       ),
-      Group.add(
-        "createUser",
-        Function.mutation("createUser")
+      Group.add(Function.mutation("createUser")
           .args(CreateUserArgsSchema)
           .returns(UserSchema),
       ),
@@ -426,13 +404,9 @@ describe("Mocking with Layer.mock", () => {
 
   test("Layer.mock allows fully mocked implementations", () => {
     const usersGroup = Group.group("users").pipe(
-      Group.add(
-        "getUser",
-        Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
+      Group.add(Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
       ),
-      Group.add(
-        "createUser",
-        Function.mutation("createUser")
+      Group.add(Function.mutation("createUser")
           .args(CreateUserArgsSchema)
           .returns(UserSchema),
       ),
@@ -458,16 +432,12 @@ describe("Mocking with Layer.mock", () => {
 describe("Api.build() - API Layer Composition", () => {
   test("build creates Layer requiring all GroupServices", () => {
     const usersGroup = Group.group("users").pipe(
-      Group.add(
-        "getUser",
-        Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
+      Group.add(Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
       ),
     );
 
     const filesGroup = Group.group("files").pipe(
-      Group.add(
-        "upload",
-        Function.action("upload").args(FileArgsSchema).returns(FileResultSchema),
+      Group.add(Function.action("upload").args(FileArgsSchema).returns(FileResultSchema),
       ),
     );
 
@@ -491,16 +461,12 @@ describe("Api.build() - API Layer Composition", () => {
 
   test("Api Layer composition with dependencies flows correctly", () => {
     const usersGroup = Group.group("users").pipe(
-      Group.add(
-        "getUser",
-        Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
+      Group.add(Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
       ),
     );
 
     const filesGroup = Group.group("files").pipe(
-      Group.add(
-        "upload",
-        Function.action("upload").args(FileArgsSchema).returns(FileResultSchema),
+      Group.add(Function.action("upload").args(FileArgsSchema).returns(FileResultSchema),
       ),
     );
 
@@ -566,12 +532,12 @@ describe("End-to-End Integration", () => {
       .returns(FileResultSchema);
 
     const usersGroup = Group.group("users").pipe(
-      Group.add("getUser", getUserQuery),
-      Group.add("createUser", createUserMutation),
+      Group.add(getUserQuery),
+      Group.add(createUserMutation),
     );
 
     const filesGroup = Group.group("files").pipe(
-      Group.add("upload", uploadAction),
+      Group.add(uploadAction),
     );
 
     // Step 2: Implement handlers
@@ -648,16 +614,12 @@ describe("End-to-End Integration", () => {
 
   test("Mixing real and mock implementations", () => {
     const usersGroup = Group.group("users").pipe(
-      Group.add(
-        "getUser",
-        Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
+      Group.add(Function.query("getUser").args(UserArgsSchema).returns(UserSchema),
       ),
     );
 
     const filesGroup = Group.group("files").pipe(
-      Group.add(
-        "upload",
-        Function.action("upload").args(FileArgsSchema).returns(FileResultSchema),
+      Group.add(Function.action("upload").args(FileArgsSchema).returns(FileResultSchema),
       ),
     );
 
@@ -707,9 +669,7 @@ describe("Documentation Examples", () => {
 
     // Define API
     const greetingsGroup = Group.group("Greetings").pipe(
-      Group.add(
-        "hello-world",
-        Function.query("hello-world")
+      Group.add(Function.query("hello-world")
           .args(Schema.Struct({}))
           .returns(Schema.String),
       ),
@@ -746,9 +706,7 @@ describe("Api.serve() - Convert Layer-based API to Convex", () => {
   test("serve converts API to Convex registered functions", () => {
     // Define API
     const greetingsGroup = Group.group("greetings").pipe(
-      Group.add(
-        "hello",
-        Function.query("hello")
+      Group.add(Function.query("hello")
           .args(Schema.Struct({ name: Schema.String }))
           .returns(Schema.String),
       ),
@@ -790,18 +748,14 @@ describe("Api.serve() - Convert Layer-based API to Convex", () => {
   test("serve handles multiple groups", () => {
     // Define API with multiple groups
     const usersGroup = Group.group("users").pipe(
-      Group.add(
-        "getUser",
-        Function.query("getUser")
+      Group.add(Function.query("getUser")
           .args(Schema.Struct({ id: Schema.String }))
           .returns(Schema.Struct({ id: Schema.String, name: Schema.String })),
       ),
     );
 
     const postsGroup = Group.group("posts").pipe(
-      Group.add(
-        "getPost",
-        Function.query("getPost")
+      Group.add(Function.query("getPost")
           .args(Schema.Struct({ id: Schema.String }))
           .returns(Schema.Struct({ id: Schema.String, title: Schema.String })),
       ),
@@ -851,21 +805,15 @@ describe("Api.serve() - Convert Layer-based API to Convex", () => {
   test("serve handles different function types", () => {
     // Define API with query, mutation, and action
     const mixedGroup = Group.group("mixed").pipe(
-      Group.add(
-        "getItem",
-        Function.query("getItem")
+      Group.add(Function.query("getItem")
           .args(Schema.Struct({ id: Schema.String }))
           .returns(Schema.String),
       ),
-      Group.add(
-        "createItem",
-        Function.mutation("createItem")
+      Group.add(Function.mutation("createItem")
           .args(Schema.Struct({ name: Schema.String }))
           .returns(Schema.String),
       ),
-      Group.add(
-        "sendEmail",
-        Function.action("sendEmail")
+      Group.add(Function.action("sendEmail")
           .args(Schema.Struct({ to: Schema.String }))
           .returns(Schema.Struct({})),
       ),
@@ -874,12 +822,12 @@ describe("Api.serve() - Convert Layer-based API to Convex", () => {
     // Implement handlers
 
     const MyApi = Api.api("MixedApi").pipe(
-      Api.add(MixedTag),
+      Api.add(mixedGroup),
     );
 
     const MixedLive = Layer.succeed(
-      MixedTag,
-      MixedTag.of({
+      mixedGroup,
+      {
         getItem: (args) => Effect.succeed(args.id),
         createItem: (args) => Effect.succeed(args.name),
         sendEmail: () => Effect.succeed({}),

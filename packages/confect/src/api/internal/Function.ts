@@ -35,6 +35,7 @@ import type {
   RegisteredQuery,
 } from "convex/server";
 import * as Effect from "effect/Effect";
+import { dual } from "effect/Function";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
@@ -538,6 +539,47 @@ export const isMutation = (fn: ConfectApiFunction,): fn is ConfectApiMutationFun
  */
 export const isAction = (fn: ConfectApiFunction,): fn is ConfectApiActionFunction =>
   Predicate.hasProperty(fn, ActionFunctionTypeId);
+
+// =============================================================================
+// Utilities
+// =============================================================================
+
+/**
+ * Rename a function (pipeable).
+ *
+ * Creates a new function with a different name while preserving all other properties.
+ * Useful when adding functions to groups with different keys than their original names.
+ *
+ * @param newName - The new name for the function
+ * @returns Transformer function that renames the function
+ *
+ * @category Utilities
+ * @since 1.0.0
+ *
+ * @example
+ * import * as Function from "./internal/Function"
+ * import * as Group from "./internal/Group"
+ *
+ * const getUser = Function.query("getUser").args(...).returns(...)
+ * const fetchUser = getUser.pipe(Function.rename("fetchUser"))
+ *
+ * // Or inline with Group.add:
+ * const grp = Group.group("users").pipe(
+ *   Group.add(Function.rename(getUser, "fetchUser"))
+ * )
+ */
+export const rename: {
+  <NewName extends string>(
+    newName: NewName,
+  ): <Fn extends ConfectApiFunction>(
+    fn: Fn,
+  ) => Omit<Fn, "name"> & { readonly name: NewName };
+
+  <Fn extends ConfectApiFunction, NewName extends string>(
+    fn: Fn,
+    newName: NewName,
+  ): Omit<Fn, "name"> & { readonly name: NewName };
+} = dual(2, (fn, newName) => Object.assign({}, fn, { name: newName }));
 
 // =============================================================================
 // Type Extraction Utilities

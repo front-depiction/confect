@@ -368,6 +368,70 @@ describe("Function Refinements", () => {
 });
 
 // =============================================================================
+// Utilities Tests
+// =============================================================================
+
+describe("Function Utilities", () => {
+  describe("rename()", () => {
+    test("renames a query function", () => {
+      const getUser = Function.query("getUser")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const fetchUser = Function.rename(getUser, "fetchUser");
+
+      expect(fetchUser.name).toBe("fetchUser");
+      expect(fetchUser.functionType).toBe("Query");
+      expect(fetchUser.args).toBe(TestArgsSchema);
+      expect(fetchUser.returns).toBe(TestReturnsSchema);
+    });
+
+    test("renames a mutation function", () => {
+      const createUser = Function.mutation("createUser")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const insertUser = Function.rename(createUser, "insertUser");
+
+      expect(insertUser.name).toBe("insertUser");
+      expect(insertUser.functionType).toBe("Mutation");
+    });
+
+    test("renames an action function", () => {
+      const sendEmail = Function.action("sendEmail")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const deliverEmail = Function.rename(sendEmail, "deliverEmail");
+
+      expect(deliverEmail.name).toBe("deliverEmail");
+      expect(deliverEmail.functionType).toBe("Action");
+    });
+
+    test("works in pipeable form", () => {
+      const getUser = Function.query("getUser")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const fetchUser = getUser.pipe(Function.rename("fetchUser"));
+
+      expect(fetchUser.name).toBe("fetchUser");
+    });
+
+    test("preserves literal name type", () => {
+      const getUser = Function.query("getUser")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const fetchUser = Function.rename(getUser, "fetchUser");
+
+      type Name = typeof fetchUser.name;
+      expectTypeOf<Name>().toEqualTypeOf<"fetchUser">();
+    });
+  });
+});
+
+// =============================================================================
 // Type Extraction Tests
 // =============================================================================
 

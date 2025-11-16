@@ -93,8 +93,11 @@ export type FunctionsToHandlers<Functions extends Function.ConfectApiFunction> =
     never  // R must be never (handlers close over deps)
   >
 }
-
-
+const ConfectServiceSymbol: unique symbol = Symbol.for("@confect/ConfectService");
+type ConfectServiceSymbol = typeof ConfectServiceSymbol;
+export interface ConfectService<Name> {
+  [ConfectServiceSymbol]: Name
+}
 // TagClass removed - groups are now Context.Tags directly
 /**
  * API Group - collection of related functions.
@@ -112,7 +115,7 @@ export type FunctionsToHandlers<Functions extends Function.ConfectApiFunction> =
 export interface ConfectApiGroup<
   in out Name extends string,
   in out Functions extends Function.ConfectApiFunction = never,
-> extends Context.Tag<Name, FunctionsToHandlers<Functions>> {
+> extends Context.Tag<ConfectService<Name>, FunctionsToHandlers<Functions>> {
   readonly [GroupTypeId]: GroupTypeId;
   readonly name: Name;
   readonly functions: Record.ReadonlyRecord<string, Functions>;
@@ -249,7 +252,7 @@ export type GetFunctions<G extends ConfectApiGroup<any, any>> =
  * type Names = Group.GetFunctionNames<typeof userGroup>
  * // "getUser" | "createUser"
  */
-export type GetFunctionNames<G extends ConfectApiGroup<any, any>> =
+export type GetFunctionNames<G> =
   G extends ConfectApiGroup<any, infer Functions>
   ? Functions extends Function.ConfectApiFunction
   ? Function.GetName<Functions>
@@ -307,15 +310,14 @@ export type HandlersFor<G extends ConfectApiGroup<any, any>> =
  *   Group.add("createUser", createUserFn)
  * )
  */
-export const add: <K extends string, Fn extends Function.ConfectApiFunction>(
-  key: K,
+export const add: <Fn extends Function.ConfectApiFunction>(
   fn: Fn,
 ) => <Name extends string, Functions extends Function.ConfectApiFunction>(
   group: ConfectApiGroup<Name, Functions>,
 ) => ConfectApiGroup<Name, Functions | Fn> =
-  (name, fn) =>
+  (fn) =>
     (group) => {
-      const functions = Record.set(group.functions, name, fn);
+      const functions = Record.set(group.functions, fn.name, fn);
       const tag = Context.GenericTag<typeof group.name, {}>(group.name);
       return Object.assign(tag, {
         [GroupTypeId]: GroupTypeId,
@@ -422,9 +424,7 @@ export const merge: <
  * const sorted = Array.sort(groups, Group.byName)
  * // [adminGroup, publicGroup, userGroup]
  */
-export const byName: Order.Order<
-  ConfectApiGroup<string, Function.ConfectApiFunction>
-> = Order.mapInput(String.Order, (group: ConfectApiGroup<string, Function.ConfectApiFunction>) => group.name);
+export const byName = Order.mapInput(Order.string, (group: { name: string }) => group.name);
 
 // =============================================================================
 // Layer Building (Dependency Management)

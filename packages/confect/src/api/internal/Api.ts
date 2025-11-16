@@ -999,9 +999,8 @@ export const serve = <
 ): ConvexApiServer<Groups> => {
   console.log("[confect] Building Convex API server...");
   console.log("[confect] Groups to serve:", Object.keys(api.groups));
-  return Record.map(api.groups, (tagClass, groupName) => {
+  return Record.map(api.groups, (group, groupName) => {
     console.log(`[confect] Processing group: ${groupName}`);
-    const group = tagClass.group;  // Extract group from TagClass
     return Record.map(group.functions, (func, functionName) => {
       console.log(`[confect] Registering function: [${groupName}].${functionName}. Type: ${func.functionType}`);
       return Match.value(func.functionType).pipe(

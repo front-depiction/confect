@@ -51,13 +51,13 @@ const createPostFn = Function.mutation("createPost")
   .returns(TestReturnsSchema);
 
 const usersGroup = Group.group("users").pipe(
-  Group.add("getUser", getUserFn),
-  Group.add("createUser", createUserFn),
+  Group.add(getUserFn),
+  Group.add(createUserFn),
 );
 
 const postsGroup = Group.group("posts").pipe(
-  Group.add("getPost", getPostFn),
-  Group.add("createPost", createPostFn),
+  Group.add(getPostFn),
+  Group.add(createPostFn),
 );
 
 const emptyGroup = Group.group("empty");
@@ -256,7 +256,7 @@ describe("Pipeable Utilities", () => {
       );
 
       const newUsersGroup = Group.group("users").pipe(
-        Group.add("getUser", getUserFn),
+        Group.add(getUserFn),
       );
       class NewUsersTag extends Group.Tag(newUsersGroup)<NewUsersTag>() {}
 
@@ -300,12 +300,12 @@ describe("Pipeable Utilities", () => {
 
     test("second API groups take precedence on conflict", () => {
       const group1 = Group.group("shared").pipe(
-        Group.add("fn1", getUserFn),
+        Group.add(getUserFn),
       );
       class Shared1Tag extends Group.Tag(group1)<Shared1Tag>() {}
 
       const group2 = Group.group("shared").pipe(
-        Group.add("fn2", createUserFn),
+        Group.add(createUserFn),
       );
       class Shared2Tag extends Group.Tag(group2)<Shared2Tag>() {}
 
