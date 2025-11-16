@@ -64,7 +64,7 @@ describe("Plugin Definition", () => {
 
 
   test("Plugin.forTag helper simplifies plugin creation", () => {
-    // Plugin.forTag handles Layer.build + Context.get boilerplate
+    // Plugin.forTag uses Layer.updateService internally
     const withLogging = Plugin.forTag(MutationDB, (base) => ({
       insert: (table, value) =>
         Effect.gen(function* () {
@@ -73,8 +73,9 @@ describe("Plugin Definition", () => {
         }),
     }));
 
-    // Returns a function: Layer<T> => Layer<T>
-    const enhanced = withLogging(MutationDBLive);
+    // Pattern: EmptyBase.pipe(plugin, Layer.provide(requirement))
+    const EmptyBase = Layer.context<never>();
+    const enhanced = EmptyBase.pipe(withLogging, Layer.provide(MutationDBLive));
     expect(enhanced).toBeDefined();
   });
 
@@ -89,7 +90,8 @@ describe("Plugin Definition", () => {
       // patch and remove are not specified - they'll be passed through from base
     }));
 
-    const Enhanced = MutationDBLive.pipe(withLogging);
+    const EmptyBase = Layer.context<never>();
+    const Enhanced = EmptyBase.pipe(withLogging, Layer.provide(MutationDBLive));
 
     const program = Effect.gen(function* () {
       const db = yield* MutationDB;
@@ -122,7 +124,7 @@ describe("Plugin Definition", () => {
     }));
 
     // Compose plugins via pipe
-    const Enhanced = MutationDBLive.pipe(withAudit, withValidation);
+    const Enhanced = Layer.context<never>().pipe(withAudit, withValidation, Layer.provide(MutationDBLive));
 
     expect(Enhanced).toBeDefined();
   });
@@ -166,8 +168,8 @@ describe("Plugin Order", () => {
         }),
     }));
 
-    // Compose: Base -> plugin1 -> plugin2 -> plugin3
-    const Enhanced = MutationDBLive.pipe(plugin1, plugin2, plugin3);
+    // Compose: Layer.context -> plugin1 -> plugin2 -> plugin3 -> MutationDBLive
+    const Enhanced = Layer.context<never>().pipe(plugin1, plugin2, plugin3, Layer.provide(MutationDBLive));
 
     const program = Effect.gen(function* () {
       const db = yield* MutationDB;
@@ -176,14 +178,14 @@ describe("Plugin Order", () => {
 
     await Effect.runPromise(program.pipe(Effect.provide(Enhanced)));
 
-    // Execution order: plugin3 -> plugin2 -> plugin1 -> base -> plugin1 -> plugin2 -> plugin3
+    // Execution order: plugin1 -> plugin2 -> plugin3 -> base -> plugin3 -> plugin2 -> plugin1 (left-to-right onion)
     expect(executionOrder).toEqual([
-      "plugin3-before",
-      "plugin2-before",
       "plugin1-before",
-      "plugin1-after",
-      "plugin2-after",
+      "plugin2-before",
+      "plugin3-before",
       "plugin3-after",
+      "plugin2-after",
+      "plugin1-after",
     ]);
   });
 });
@@ -210,7 +212,7 @@ describe("Plugin Interception", () => {
     });
 
     await Effect.runPromise(
-      program.pipe(Effect.provide(MutationDBLive.pipe(withBefore)))
+      program.pipe(Effect.provide(Layer.context<never>().pipe(withBefore, Layer.provide(MutationDBLive))))
     );
 
     expect(beforeLog).toEqual(["before:notes"]);
@@ -235,7 +237,7 @@ describe("Plugin Interception", () => {
     });
 
     const result = await Effect.runPromise(
-      program.pipe(Effect.provide(MutationDBLive.pipe(withAfter)))
+      program.pipe(Effect.provide(Layer.context<never>().pipe(withAfter, Layer.provide(MutationDBLive))))
     );
 
     expect(afterLog).toHaveLength(1);
@@ -260,7 +262,7 @@ describe("Plugin Interception", () => {
     });
 
     await Effect.runPromise(
-      program.pipe(Effect.provide(MutationDBLive.pipe(withTimestamp)))
+      program.pipe(Effect.provide(Layer.context<never>().pipe(withTimestamp, Layer.provide(MutationDBLive))))
     );
 
     expect(true).toBe(true); // Would verify timestamp was added in real impl
@@ -281,7 +283,7 @@ describe("Plugin Interception", () => {
     });
 
     const result = await Effect.runPromise(
-      program.pipe(Effect.provide(MutationDBLive.pipe(withPrefix)))
+      program.pipe(Effect.provide(Layer.context<never>().pipe(withPrefix, Layer.provide(MutationDBLive))))
     );
 
     expect(result.startsWith("prefix:")).toBe(true);
@@ -316,7 +318,7 @@ describe("Plugin Interception", () => {
       return yield* db.insert("notes", { text: "" });
     });
 
-    const Enhanced = MutationDBLive.pipe(withValidation);
+    const Enhanced = Layer.context<never>().pipe(withValidation, Layer.provide(MutationDBLive));
 
     // Valid should succeed
     await Effect.runPromise(programValid.pipe(Effect.provide(Enhanced)));
@@ -356,7 +358,7 @@ describe("Plugin Interception", () => {
     });
 
     const result = await Effect.runPromise(
-      program.pipe(Effect.provide(MutationDBLive.pipe(withCache)))
+      program.pipe(Effect.provide(Layer.context<never>().pipe(withCache, Layer.provide(MutationDBLive))))
     );
 
     // Both calls return same cached ID
@@ -406,7 +408,10 @@ describe("Plugin Dependencies", () => {
     await Effect.runPromise(
       program.pipe(
         Effect.provide(
-          MutationDBLive.pipe(withAudit, Layer.provide(AuditLogLive))
+          Layer.context<never>().pipe(
+            withAudit,
+            Layer.provide(Layer.provideMerge(AuditLogLive, MutationDBLive))
+          )
         )
       )
     );
@@ -453,7 +458,10 @@ describe("Plugin Dependencies", () => {
     await Effect.runPromise(
       program.pipe(
         Effect.provide(
-          MutationDBLive.pipe(withAudit, Layer.provide(AuditLogLive))
+          Layer.context<never>().pipe(
+            withAudit,
+            Layer.provide(Layer.provideMerge(AuditLogLive, MutationDBLive))
+          )
         )
       )
     );
@@ -491,7 +499,7 @@ describe("Real-World Plugins", () => {
     });
 
     await Effect.runPromise(
-      program.pipe(Effect.provide(MutationDBLive.pipe(withAuditLog)))
+      program.pipe(Effect.provide(Layer.context<never>().pipe(withAuditLog, Layer.provide(MutationDBLive))))
     );
 
     expect(auditLog).toHaveLength(2);
@@ -518,7 +526,7 @@ describe("Real-World Plugins", () => {
     });
 
     await Effect.runPromise(
-      program.pipe(Effect.provide(MutationDBLive.pipe(withSoftDelete)))
+      program.pipe(Effect.provide(Layer.context<never>().pipe(withSoftDelete, Layer.provide(MutationDBLive))))
     );
 
     expect(patches).toEqual([{ table: "notes", id: "note-123" }]);
@@ -547,7 +555,7 @@ describe("Real-World Plugins", () => {
     });
 
     await Effect.runPromise(
-      program.pipe(Effect.provide(MutationDBLive.pipe(withTriggers)))
+      program.pipe(Effect.provide(Layer.context<never>().pipe(withTriggers, Layer.provide(MutationDBLive))))
     );
 
     expect(triggered).toHaveLength(1);
@@ -597,7 +605,10 @@ describe("Real-World Plugins", () => {
     await Effect.runPromise(
       program.pipe(
         Effect.provide(
-          TrackingDBLive.pipe(withRLS, Layer.provide(CurrentUserLive))
+          Layer.context<never>().pipe(
+            withRLS,
+            Layer.provide(Layer.provideMerge(CurrentUserLive, TrackingDBLive))
+          )
         )
       )
     );
@@ -636,7 +647,7 @@ describe("Real-World Plugins", () => {
     }));
 
     // Compose all plugins via pipe
-    const Enhanced = MutationDBLive.pipe(withLogging, withValidation, withAudit);
+    const Enhanced = Layer.context<never>().pipe(withLogging, withValidation, withAudit, Layer.provide(MutationDBLive));
 
     const program = Effect.gen(function* () {
       const db = yield* MutationDB;
@@ -645,7 +656,7 @@ describe("Real-World Plugins", () => {
 
     await Effect.runPromise(program.pipe(Effect.provide(Enhanced)));
 
-    // Execution order: audit -> validate -> log -> base
-    expect(events).toEqual(["audit", "validate", "log"]);
+    // Execution order: log -> validate -> audit -> base (left-to-right in pipe)
+    expect(events).toEqual(["log", "validate", "audit"]);
   });
 });

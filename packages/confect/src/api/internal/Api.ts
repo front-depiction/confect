@@ -1,4 +1,4 @@
-/* eslint-disable prefer-rest-params */
+
 /**
  * @module internal/Api
  *
@@ -52,6 +52,7 @@ import type {
   RegisteredMutation,
   RegisteredQuery,
 } from "convex/server";
+import * as ConvexCtx from "../../server/convex_ctx";
 import { actionGeneric, mutationGeneric, queryGeneric } from "convex/server";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -86,7 +87,6 @@ import {
   ConfectStorageWriter,
 } from "../../server/storage";
 import { ConfectVectorSearch } from "../../server/vector_search";
-import * as Function from "./Function";
 import * as Group from "./Group";
 
 // =============================================================================
@@ -279,8 +279,12 @@ export type GetName<A extends ConfectApi<string, Group.ConfectApiGroup.AnyGroup>
  * const myApi = Api.api("myApp").groups(grps)
  * type Groups = Api.GetGroups<typeof myApi>  // typeof grps
  */
-export type GetGroups<A extends ConfectApi.AnyApi> =
-  A["groups"];
+export type GetGroups<A extends ConfectApi.AnyApi> = {
+  [K in GetGroupNames<A>]: Extract<
+    A["groups"][string],
+    { name: K }
+  >;
+}
 
 /**
  * Extract group names as a union of literal types.
@@ -471,16 +475,14 @@ export const getGroup = <Api extends ConfectApi.AnyApi>(
 export const getFunction = <
   Name extends string,
   Groups extends Group.ConfectApiGroup.AnyGroup,
-  GroupKey extends keyof Groups,
   FunctionKey extends string,
 >(
   api: ConfectApi<Name, Groups>,
-  groupName: GroupKey,
+  groupName: GetGroupNames<typeof api>,
   functionName: FunctionKey,
-): Function.ConfectApiFunction | undefined => {
+) => {
   const group = api.groups[groupName];
-  if (!group) return undefined;
-  return group.functions[functionName];
+  return group?.functions[functionName];
 };
 
 // =============================================================================
@@ -695,7 +697,7 @@ const makeQueryFunction = <S extends GenericConfectSchema>(
   confectSchemaDefinition: ConfectSchemaDefinition<S>,
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
-  apiLayer: Layer.Layer<any, never, QueryLayers>,
+  groupLayer: Layer.Layer<any, never, QueryRuntimeServices<S>>,
   group: Group.ConfectApiGroup.AnyGroup,
   functionName: string
 ): RegisteredQuery<"public", any, any> =>
@@ -704,11 +706,14 @@ const makeQueryFunction = <S extends GenericConfectSchema>(
     returns: compileReturnsSchema(returns),
     handler: async (ctx: GenericQueryCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
 
-      // Get handlers from the group Tag in the provided Layer
-      const handlers = await Group.Tag(group).pipe(
-        Effect.provide(apiLayer),
-        Effect.provide(QueryLayers<S>()),
-        Effect.provide(makeQueryRuntimeLayer(confectSchemaDefinition, ctx)),
+      const layer = groupLayer.pipe(
+        Layer.provide(makeQueryRuntimeLayer(confectSchemaDefinition, ctx))
+      )
+
+      // Get handlers from the group Tag with precomputed merged layer
+      const handlers = await pipe(
+        Group.Tag(group),
+        Effect.provide(layer),
         Effect.runPromise
       )
 
@@ -736,7 +741,7 @@ const makeMutationFunction = <S extends GenericConfectSchema>(
   confectSchemaDefinition: ConfectSchemaDefinition<S>,
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
-  apiLayer: Layer.Layer<any, never, MutationLayers>,
+  groupLayer: Layer.Layer<any, never, MutationRuntimeServices<S>>,
   group: Group.ConfectApiGroup.AnyGroup,
   functionName: string
 ): RegisteredMutation<"public", any, any> => {
@@ -747,11 +752,10 @@ const makeMutationFunction = <S extends GenericConfectSchema>(
     handler: async (ctx: GenericMutationCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
       console.log(`[confect] Executing mutation handler for ${functionName} with actualArgs:`, actualArgs);
 
-      // Get handlers from the group Tag in the provided Layer
+      const layer = groupLayer.pipe(Layer.provide(makeMutationRuntimeLayer(confectSchemaDefinition, ctx)))
+      // Get handlers from the group Tag with precomputed merged layer
       const handlers = await Group.Tag(group).pipe(
-        Effect.provide(apiLayer),
-        Effect.provide(MutationLayers<S>()),
-        Effect.provide(makeMutationRuntimeLayer(confectSchemaDefinition, ctx)),
+        Effect.provide(layer),
         Effect.runPromise
       )
 
@@ -785,7 +789,7 @@ const makeActionFunction = <S extends GenericConfectSchema>(
   confectSchemaDefinition: ConfectSchemaDefinition<S>,
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
-  apiLayer: Layer.Layer<any, never, ActionLayers>,
+  groupLayer: Layer.Layer<any, never, ActionRuntimeServices<S>>,
   group: Group.ConfectApiGroup.AnyGroup,
   functionName: string
 ): RegisteredAction<"public", any, any> => {
@@ -795,12 +799,10 @@ const makeActionFunction = <S extends GenericConfectSchema>(
     returns: compileReturnsSchema(returns),
     handler: async (ctx: GenericActionCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
       console.log(`[confect] Executing action handler for ${functionName} with actualArgs:`, actualArgs);
-
-      // Get handlers from the group Tag in the provided Layer
+      const layer = groupLayer.pipe(Layer.provide(makeActionRuntimeLayer(confectSchemaDefinition, ctx)))
+      // Get handlers from the group Tag with precomputed merged layer
       const handlers = await Group.Tag(group).pipe(
-        Effect.provide(apiLayer),
-        Effect.provide(ActionLayers<S>()),
-        Effect.provide(makeActionRuntimeLayer(confectSchemaDefinition, ctx)),
+        Effect.provide(layer),
         Effect.runPromise
       )
 
@@ -826,6 +828,36 @@ const makeActionFunction = <S extends GenericConfectSchema>(
   });
 };
 
+// Runtime services provided by makeQueryRuntimeLayer
+type QueryRuntimeServices<S extends GenericConfectSchema> =
+  | ConvexCtx.Auth
+  | ConvexCtx.StorageReader
+  | GenericQueryCtx<DataModelFromConfectSchema<S>>
+
+// Runtime services provided by makeMutationRuntimeLayer
+type MutationRuntimeServices<S extends GenericConfectSchema> =
+  | ConvexCtx.Auth
+  | ConvexCtx.Scheduler
+  | ConvexCtx.StorageReader
+  | ConvexCtx.StorageWriter
+  | GenericQueryCtx<DataModelFromConfectSchema<S>>
+  | GenericMutationCtx<DataModelFromConfectSchema<S>>
+
+// Runtime services provided by makeActionRuntimeLayer
+type ActionRuntimeServices<S extends GenericConfectSchema> =
+  | ConvexCtx.Auth
+  | ConvexCtx.Scheduler
+  | ConvexCtx.StorageReader
+  | ConvexCtx.StorageWriter
+  | ConvexCtx.StorageActionWriter
+  | GenericActionCtx<DataModelFromConfectSchema<S>>
+
+// All runtime services (union for serve signature)
+type ConvexRuntimeServices<S extends GenericConfectSchema> =
+  | QueryRuntimeServices<S>
+  | MutationRuntimeServices<S>
+  | ActionRuntimeServices<S>
+
 type ConfectBuildTimeServices =
   | QueryLayers
   | MutationLayers
@@ -840,9 +872,9 @@ type ConfectBuildTimeServices =
  * - API definition (pure data structure with groups and functions)
  * - API Layer that provides all group handlers
  *
- * The apiLayer signature is: `Layer<Groups, never, DefaultServices>`
- * - Provides: All the group Tags (handlers for each group)
- * - Requires: Default Convex services (QueryDB, MutationDB, etc.)
+ * The apiLayer signature is: `Layer<ROut, never, ConfectBuildTimeServices | ConvexRuntimeServices<S>>`
+ * - Provides: All the group Tags (ROut extends TagId for all groups)
+ * - Requires: Build-time services (QueryDB, MutationDB, etc.) and runtime Convex contexts
  *
  * Returns a nested object structure: { [groupName]: { [functionName]: RegisteredFunction } }
  *
@@ -864,8 +896,8 @@ type ConfectBuildTimeServices =
  *   Api.add(postsGroup)
  * );
  *
- * const UsersLive = Layer.effect(usersGroup, Effect.succeed({ ... }))
- * const PostsLive = Layer.effect(postsGroup, Effect.succeed({ ... }))
+ * const UsersLive = Layer.effect(Group.Tag(usersGroup), Effect.succeed({ ... }))
+ * const PostsLive = Layer.effect(Group.Tag(postsGroup), Effect.succeed({ ... }))
  * const MyApiLive = Layer.mergeAll(UsersLive, PostsLive)
  *
  * export default Api.serve(schemaDefinition, myApi, MyApiLive);
@@ -875,15 +907,22 @@ export const serve = <
   S extends GenericConfectSchema,
   Name extends string,
   Groups extends Group.ConfectApiGroup.AnyGroup,
+  ROut extends Group.TagId<Group.GetName<Groups>>
 >(
   schemaDefinition: ConfectSchemaDefinition<S>,
   api: ConfectApi<Name, Groups>,
-  apiLayer: Layer.Layer<any, never, ConfectBuildTimeServices>
+  apiLayer: Layer.Layer<ROut, never, ConfectBuildTimeServices | ConvexRuntimeServices<S>>
 ): ConvexApiServer<Groups> => {
   console.log("[confect] Building Convex API server...");
   console.log("[confect] Groups to serve:", Object.keys(api.groups));
   return Record.map(api.groups, (group, groupName) => {
     console.log(`[confect] Processing group: ${groupName}`);
+
+    // Precompute merged layers once per group (user layers + defaults)
+    const queryGroupLayer = Layer.provideMerge(apiLayer, QueryLayers<S>()) as Layer.Layer<ROut, never, QueryRuntimeServices<S>>;
+    const mutationGroupLayer = Layer.provideMerge(apiLayer, MutationLayers<S>()) as Layer.Layer<ROut, never, MutationRuntimeServices<S>>;
+    const actionGroupLayer = Layer.provideMerge(apiLayer, ActionLayers<S>()) as Layer.Layer<ROut, never, ActionRuntimeServices<S>>;
+
     return Record.map(group.functions, (func, functionName) => {
       console.log(`[confect] Registering function: [${groupName}].${functionName}. Type: ${func.functionType}`);
       return Match.value(func.functionType).pipe(
@@ -893,7 +932,7 @@ export const serve = <
             schemaDefinition,
             func.args,
             func.returns,
-            apiLayer as never,
+            queryGroupLayer,
             group,
             functionName
           );
@@ -904,7 +943,7 @@ export const serve = <
             schemaDefinition,
             func.args,
             func.returns,
-            apiLayer as never,
+            mutationGroupLayer,
             group,
             functionName
           );
@@ -915,7 +954,7 @@ export const serve = <
             schemaDefinition,
             func.args,
             func.returns,
-            apiLayer,
+            actionGroupLayer,
             group,
             functionName
           );

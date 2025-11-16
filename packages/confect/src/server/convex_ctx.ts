@@ -89,7 +89,7 @@ export const ConvexStorageWriter = Context.GenericTag<StorageWriter>(
 export const ConvexStorageActionWriter = Context.GenericTag<StorageActionWriter>(
   "@rjdellecese/confect/StorageActionWriter"
 );
-
+export type { Scheduler, Auth, StorageReader, StorageWriter, StorageActionWriter };
 // Query Runner
 export interface ConvexQueryRunner<S extends GenericConfectSchema> {
   runQuery: GenericQueryCtx<DataModelFromConfectSchema<S>>["runQuery"];

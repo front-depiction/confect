@@ -6,10 +6,10 @@
  *
  * ## Design
  *
- * - Plugins enhance Layers, not Tags
- * - Use Layer.map to transform the context
- * - Extract base service, wrap it, merge back into context
+ * - Plugins are thin wrappers around Effect's `Layer.updateService`
+ * - Plugins enhance services by wrapping the base implementation
  * - Compose via .pipe() on layers
+ * - Pattern: `EmptyBase.pipe(plugin, Layer.provide(requirement))`
  *
  * ## Pattern
  *
@@ -23,10 +23,11 @@
  *     })
  * }));
  *
- * const Enhanced = MutationDBLive.pipe(
+ * const EmptyBase = Layer.context<never>();
+ * const Enhanced = EmptyBase.pipe(
  *   withLogging,
  *   withValidation,
- *   withTriggers
+ *   Layer.provide(MutationDBLive)
  * );
  * ```
  *
@@ -42,17 +43,25 @@ import * as Layer from "effect/Layer";
 // =============================================================================
 
 /**
- * A plugin is a function that transforms a Layer by wrapping its service.
+ * A plugin is a function returned by `Layer.updateService`.
  *
- * @template S - Service tag type
- * @template E - Error type
- * @template R - Requirements type
+ * It transforms a Layer by wrapping a service, requiring the service (I) as input
+ * and providing the enhanced version as output.
+ *
+ * The signature matches `Layer.updateService` return type:
+ * - Requires: I (the service being enhanced) + R (additional dependencies)
+ * - Provides: A (passthrough from input layer)
+ * - Errors: E (from enhancement) | E2 (from input layer)
+ *
+ * @template I - Service identifier type
+ * @template E - Error type from enhancement
+ * @template R - Additional requirements for enhancement
  *
  * @since 1.0.0
  */
-export type Plugin<I, E = never, R = never> = <E2, R2>(
-  baseLayer: Layer.Layer<I, E2, R2>
-) => Layer.Layer<I, E | E2, R | R2>;
+export type Plugin<I, E = never, R = never> = <A, E2, R2>(
+  self: Layer.Layer<A, E2, R2>
+) => Layer.Layer<A | I, E | E2, I | R | R2>;
 
 
 
@@ -63,13 +72,14 @@ export type Plugin<I, E = never, R = never> = <E2, R2>(
 /**
  * Create a plugin that enhances a service with synchronous wrapper.
  *
+ * This is a thin wrapper around `Layer.updateService` that merges partial updates.
  * The wrapper function receives the base service and returns an enhanced version.
  * You can return a complete service or a partial with only the enhanced methods.
  * Unspecified methods will be passed through from the base service.
  *
  * @param tag - Service tag to enhance
  * @param wrapper - Function that wraps the base service
- * @returns Plugin function that can be piped onto layers
+ * @returns Plugin function (from Layer.updateService) that can be piped onto layers
  *
  * @category Constructors
  * @since 1.0.0
@@ -85,23 +95,20 @@ export type Plugin<I, E = never, R = never> = <E2, R2>(
  *     })
  * }));
  *
- * const Enhanced = MutationDBLive.pipe(withLogging);
+ * const EmptyBase = Layer.context<never>();
+ * const Enhanced = EmptyBase.pipe(withLogging, Layer.provide(MutationDBLive));
  * ```
  */
 export const forTag = <I, S>(
   tag: Context.Tag<I, S>,
   wrapper: (base: S) => S | Partial<S>
 ): Plugin<I> =>
-  <E, R>(baseLayer: Layer.Layer<I, E, R>): Layer.Layer<I, E, R> =>
-    Layer.map(baseLayer, (ctx) => {
-      const base = Context.get(ctx, tag);
-      const partial = wrapper(base);
-      return Context.add(ctx, tag, Object.assign({}, base, partial));
-    });
+  Layer.updateService(tag, (base) => Object.assign({}, base, wrapper(base))) as never;
 
 /**
  * Create a plugin that enhances a service with effectful setup.
  *
+ * This is a thin wrapper around `Layer.updateService` with Effect support.
  * The wrapper function is an Effect that can access other services during setup,
  * then returns an enhanced service implementation.
  * You can return a complete service or a partial with only the enhanced methods.
@@ -110,7 +117,7 @@ export const forTag = <I, S>(
  *
  * @param tag - Service tag to enhance
  * @param wrapper - Effect that yields dependencies and returns enhanced service
- * @returns Plugin function that can be piped onto layers
+ * @returns Plugin function (from Layer.updateService) that can be piped onto layers
  *
  * @category Constructors
  * @since 1.0.0
@@ -133,20 +140,22 @@ export const forTag = <I, S>(
  *   })
  * );
  *
- * const Enhanced = MutationDBLive.pipe(withAudit);
+ * const Enhanced = Layer.empty.pipe(withAudit, Layer.provide(MutationDBLive), Layer.provide(AuditLogLive));
  * ```
  */
 export const effectForTag = <S, I, E2 = never, R2 = never>(
   tag: Context.Tag<I, S>,
   wrapper: (base: S) => Effect.Effect<S | Partial<S>, E2, R2>
 ): Plugin<I, E2, R2> =>
-  <E, R>(baseLayer: Layer.Layer<I, E, R>): Layer.Layer<I, E | E2, R | R2> => Layer.flatMap(baseLayer, context =>
+  <A, E, R>(self: Layer.Layer<A, E, R>): Layer.Layer<A | I, E | E2, I | R | R2> => Layer.flatMap(self, context =>
     Layer.effectContext(Effect.gen(function* () {
-      const base = Context.get(context, tag);
-      const partial = yield* wrapper(base);
-      return Context.add(context, tag, Object.assign({}, base, partial));
-    }))
-  )
+      const base = yield* tag
+      const updated = yield* wrapper(base)
+      const service = Object.assign({}, base, updated)
+      return Context.add(context, tag, service)
+    })))
+
+
 // =============================================================================
 // Utility Functions
 // =============================================================================
@@ -175,11 +184,11 @@ export const effectForTag = <S, I, E2 = never, R2 = never>(
  * // Equivalent to: MutationDBLive.pipe(withLogging, withValidation, withTriggers)
  * ```
  */
-export const compose = <S, E = never, R = never>(
-  plugins: Array<Plugin<S, E, R>>
-): Plugin<S, E, R> =>
-  <E2, R2>(baseLayer: Layer.Layer<S, E2, R2>): Layer.Layer<S, E | E2, R | R2> =>
+export const compose = <I, E = never, R = never>(
+  plugins: Array<Plugin<I, E, R>>
+): Plugin<I, E, R> =>
+  <A, E2, R2>(self: Layer.Layer<A, E2, R2>): Layer.Layer<A | I, E | E2, I | R | R2> =>
     plugins.reduce(
       (layer, plugin) => plugin(layer),
-      baseLayer as Layer.Layer<S, E | E2, R | R2>
-    );
+      self as Layer.Layer<A | I, E | E2, I | R | R2>
+    ) as never;

@@ -110,8 +110,9 @@ describe("Api Constructor", () => {
         Api.add(usersGroup),
         Api.add(postsGroup),
       );
+      void myApi
 
-      type GroupNames = keyof typeof myApi.groups;
+      type GroupNames = Api.GetGroupNames<typeof myApi>;
       expectTypeOf<GroupNames>().toEqualTypeOf<"users" | "posts">();
       expectTypeOf<
         TypesAreEquivalent<GroupNames, "users" | "posts">
@@ -128,7 +129,7 @@ describe("Api Predicates", () => {
   const validApi = Api.api("myApp").pipe(
     Api.add(usersGroup),
   );
-  
+
 
 
   describe("isApi()", () => {
@@ -191,7 +192,7 @@ describe("Type Extraction Utilities", () => {
     test("extracts groups record", () => {
       type Groups = Api.GetGroups<typeof testApi>;
       // Use toMatchTypeOf for structural compatibility instead of exact equality
-      expectTypeOf<Groups>().toMatchTypeOf<{
+      expectTypeOf<Groups>().toEqualTypeOf<{
         users: typeof usersGroup;
         posts: typeof postsGroup;
       }>();
@@ -479,7 +480,7 @@ describe("Variance Behavior", () => {
 
     expect(specific.groups["users"]).toBe(usersGroup);
 
-    type GroupNames = keyof typeof specific.groups;
+    type GroupNames = Api.GetGroupNames<typeof specific>;
     expectTypeOf<GroupNames>().toEqualTypeOf<"users">();
   });
 });
@@ -531,7 +532,7 @@ describe("Api.serve", () => {
 
       const apiLayer = Layer.mergeAll(UsersLive, PostsLive);
 
-      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer as any);
+      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer);
 
       // Check top-level structure has group names as keys
       expect(convexApi).toHaveProperty("users");
@@ -552,7 +553,7 @@ describe("Api.serve", () => {
         }
       );
 
-      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive as any);
+      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive);
 
       // Check that users group has function keys
       expect(convexApi["users"]).toHaveProperty("getUser");
@@ -570,7 +571,7 @@ describe("Api.serve", () => {
         {}
       );
 
-      const convexApi = Api.serve(testConfectSchema, testApi, EmptyLive as any);
+      const convexApi = Api.serve(testConfectSchema, testApi, EmptyLive);
 
       expect(convexApi).toHaveProperty("empty");
       expect(Object.keys(convexApi["empty"])).toHaveLength(0);
@@ -589,7 +590,7 @@ describe("Api.serve", () => {
         }
       );
 
-      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive as any);
+      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive);
 
       // Registered functions should have specific structure
       expect(convexApi["users"]["getUser"]).toHaveProperty("isQuery");
@@ -612,7 +613,7 @@ describe("Api.serve", () => {
         }
       );
 
-      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive as any);
+      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive);
 
       // Mock Convex query context
       const mockQueryCtx = {
@@ -644,7 +645,7 @@ describe("Api.serve", () => {
         }
       );
 
-      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive as any);
+      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive);
 
       // Mock Convex mutation context
       const mockMutationCtx = {
@@ -689,7 +690,7 @@ describe("Api.serve", () => {
 
       const apiLayer = Layer.mergeAll(UsersLive, PostsLive);
 
-      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer as any);
+      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer);
 
       const mockQueryCtx = {
         db: {},
@@ -729,7 +730,7 @@ describe("Api.serve", () => {
         }
       );
 
-      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive as any);
+      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive);
 
       const mockQueryCtx = {
         db: {},

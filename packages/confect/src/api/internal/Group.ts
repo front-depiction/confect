@@ -35,14 +35,10 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { equals } from "effect/Equal";
-import { SK, dual } from "effect/Function";
-import * as Layer from "effect/Layer";
+import { SK } from "effect/Function";
 import * as Order from "effect/Order";
 import * as Predicate from "effect/Predicate";
 import * as Record from "effect/Record";
-import type * as Scope from "effect/Scope";
-import * as String from "effect/String";
-import * as Types from "effect/Types";
 import type * as Function from "./Function";
 import * as Pipeable from "effect/Pipeable";
 
@@ -97,7 +93,7 @@ const ConfectServiceSymbol: unique symbol = Symbol.for("@confect/ConfectService"
 type ConfectServiceSymbol = typeof ConfectServiceSymbol;
 
 
-export interface TagId<in out Name> {
+export interface TagId<in out Name extends string> {
   [ConfectServiceSymbol]: Name;
 }
 export const Tag = <G extends ConfectApiGroup.AnyGroup>(group: G) => Context.GenericTag<TagId<GetName<G>>, FunctionsToHandlers<GetFunctions<G>>>(group.name);

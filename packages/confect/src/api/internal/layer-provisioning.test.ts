@@ -3,8 +3,8 @@
  *
  * These tests verify that Effect's layer provisioning semantics allow:
  * 1. User layers (with plugins) to override default layers
- * 2. The Api.serve pattern: merge(userLayers, defaults).provide(defaults)
- * 3. Comparison between Plugin system and Layer.updateService
+ * 2. The Api.serve pattern: merge(userLayers, defaults)
+ * 3. Plugin composition and execution order
  */
 
 import { describe, expect, test } from "vitest";
@@ -33,171 +33,10 @@ class Logger extends Context.Tag("Logger")<
 >() { }
 
 // =============================================================================
-// Layer.updateService Tests
-// =============================================================================
-
-describe("Layer.updateService", () => {
-  test("updateService enhances a service by wrapping the requirement", async () => {
-    const executionLog: string[] = [];
-
-    const DefaultDB = Layer.succeed(Database, {
-      query: (sql) => {
-        executionLog.push(`default-query:${sql}`);
-        return Effect.succeed("default-result");
-      },
-      insert: (table) => {
-        executionLog.push(`default-insert:${table}`);
-        return Effect.succeed("default-id");
-      },
-    });
-
-    // updateService creates a layer that requires Database and provides enhanced Database
-    const withLogging = Layer.updateService(
-      Database,
-      (base) => ({
-        ...base,
-        query: (sql) =>
-          Effect.gen(function* () {
-            executionLog.push("log-before");
-            const result = yield* base.query(sql);
-            executionLog.push("log-after");
-            return result;
-          }),
-      })
-    );
-
-    // Pattern from Effect codebase: base.pipe(updateService(...), Layer.provide(requirement))
-    // Start with empty base, apply enhancement, then provide the requirement
-    const EmptyBase = Layer.context<never>();
-    const layer = EmptyBase.pipe(
-      withLogging,
-      Layer.provide(DefaultDB)
-    );
-
-    const program = Effect.gen(function* () {
-      const db = yield* Database;
-      return yield* db.query("SELECT *");
-    });
-
-    await Effect.runPromise(program.pipe(Effect.provide(layer)));
-
-    expect(executionLog).toEqual([
-      "log-before",
-      "default-query:SELECT *",
-      "log-after",
-    ]);
-  });
-
-  test("updateService can be chained to compose multiple enhancements", async () => {
-    const executionLog: string[] = [];
-
-    const DefaultDB = Layer.succeed(Database, {
-      query: (sql) => {
-        executionLog.push(`base:${sql}`);
-        return Effect.succeed("result");
-      },
-      insert: (table) => {
-        executionLog.push(`insert:${table}`);
-        return Effect.succeed("id");
-      },
-    });
-
-    const withLogging = Layer.updateService(Database, (base) => ({
-      ...base,
-      query: (sql) =>
-        Effect.gen(function* () {
-          executionLog.push("log");
-          return yield* base.query(sql);
-        }),
-    }));
-
-    const withValidation = Layer.updateService(Database, (base) => ({
-      ...base,
-      query: (sql) =>
-        Effect.gen(function* () {
-          executionLog.push("validate");
-          return yield* base.query(sql);
-        }),
-    }));
-
-    const withAudit = Layer.updateService(Database, (base) => ({
-      ...base,
-      query: (sql) =>
-        Effect.gen(function* () {
-          executionLog.push("audit");
-          return yield* base.query(sql);
-        }),
-    }));
-
-    // Chain multiple enhancements and provide requirements
-    const EmptyBase = Layer.context<never>();
-    const layer = EmptyBase.pipe(
-      withLogging,
-      withValidation,
-      withAudit,
-      Layer.provide(DefaultDB)
-    );
-
-    const program = Effect.gen(function* () {
-      const db = yield* Database;
-      return yield* db.query("SELECT *");
-    });
-
-    await Effect.runPromise(program.pipe(Effect.provide(layer)));
-
-    // Execution order: log -> validate -> audit -> base (reverse of pipe order)
-    expect(executionLog).toEqual(["log", "validate", "audit", "base:SELECT *"]);
-  });
-
-  test("User enhancement overrides default in Api.serve pattern", async () => {
-    const executionLog: string[] = [];
-
-    const DefaultDB = Layer.succeed(Database, {
-      query: () => {
-        executionLog.push("default");
-        return Effect.succeed("default-result");
-      },
-      insert: () => Effect.succeed("default-id"),
-    });
-
-    // User creates enhancement
-    const withAudit = Layer.updateService(
-      Database,
-      (base) => ({
-        ...base,
-        query: (sql) =>
-          Effect.gen(function* () {
-            executionLog.push("audit");
-            return yield* base.query(sql);
-          }),
-      })
-    );
-    // Apply enhancement to empty base, then provide requirement
-    const EmptyBase = Layer.context<never>();
-    const layer = EmptyBase.pipe(withAudit, Layer.provide(DefaultDB));
-
-    const program = Effect.gen(function* () {
-      const db = yield* Database;
-      return yield* db.query("SELECT *");
-    });
-
-    // Api.serve pattern: provide user enhancement BEFORE defaults
-    const result = await Effect.runPromise(
-      program.pipe(
-        Effect.provide(layer)    // Default implementation
-      )
-    );
-
-    expect(executionLog).toEqual(["audit", "default"]);
-    expect(result).toBe("default-result");
-  });
-});
-
-// =============================================================================
 // Plugin System Tests
 // =============================================================================
 
-describe("Plugin System (Layer.map based)", () => {
+describe("Plugin System", () => {
   test("Plugin.forTag enhances a service", async () => {
     const executionLog: string[] = [];
 
@@ -212,7 +51,7 @@ describe("Plugin System (Layer.map based)", () => {
       },
     });
 
-    // Plugin uses Layer.map internally
+    // Plugin uses Layer.updateService internally
     const withLogging = Plugin.forTag(Database, (base) => ({
       query: (sql) =>
         Effect.gen(function* () {
@@ -223,7 +62,7 @@ describe("Plugin System (Layer.map based)", () => {
         }),
     }));
 
-    const EnhancedDB = DefaultDB.pipe(withLogging);
+    const EnhancedDB=Layer.context<never>().pipe(withLogging, Layer.provide(DefaultDB));
 
     const program = Effect.gen(function* () {
       const db = yield* Database;
@@ -278,7 +117,7 @@ describe("Plugin System (Layer.map based)", () => {
     }));
 
     // Compose plugins via pipe
-    const Enhanced = DefaultDB.pipe(withLogging, withValidation, withAudit);
+    const Enhanced = Layer.context<never>().pipe(withLogging, withValidation, withAudit, Layer.provide(DefaultDB));
 
     const program = Effect.gen(function* () {
       const db = yield* Database;
@@ -287,8 +126,8 @@ describe("Plugin System (Layer.map based)", () => {
 
     await Effect.runPromise(program.pipe(Effect.provide(Enhanced)));
 
-    // Execution order: audit -> validate -> log -> base
-    expect(executionLog).toEqual(["audit", "validate", "log", "base:SELECT *"]);
+    // Execution order: log -> validate -> audit -> base (left-to-right onion)
+    expect(executionLog).toEqual(["log", "validate", "audit", "base:SELECT *"]);
   });
 
   test("Plugin overrides defaults when provided first", async () => {
@@ -313,16 +152,16 @@ describe("Plugin System (Layer.map based)", () => {
         }),
     }));
 
-    const UserDB = DefaultDB.pipe(withPlugin);
+    const UserDB = Layer.context<never>().pipe(withPlugin, Layer.provide(DefaultDB));
 
     const program = Effect.gen(function* () {
       const db = yield* Database;
       return yield* db.query("SELECT *");
     });
 
-    // Provide user layer first, then defaults - user should win
+    // With the new pattern, the plugin enhances the default DB
     const result = await Effect.runPromise(
-      program.pipe(Effect.provide(UserDB), Effect.provide(DefaultDB))
+      program.pipe(Effect.provide(UserDB))
     );
 
     expect(executionLog).toEqual(["plugin-before", "default", "plugin-after"]);
@@ -363,7 +202,10 @@ describe("Plugin System (Layer.map based)", () => {
       })
     );
 
-    const Enhanced = DefaultDB.pipe(withAudit, Layer.provide(LoggerLive));
+    const Enhanced = Layer.context<never>().pipe(
+      withAudit,
+      Layer.provide(Layer.provideMerge(LoggerLive, DefaultDB))
+    );
 
     const program = Effect.gen(function* () {
       const db = yield* Database;
@@ -447,7 +289,7 @@ describe("Layer Provisioning Order", () => {
         }),
     }));
 
-    const EnhancedDB = DefaultDB.pipe(withPlugin);
+    const EnhancedDB = Layer.context<never>().pipe(withPlugin, Layer.provide(DefaultDB));
 
     // Merge enhanced DB with logger
     const Combined = Layer.merge(EnhancedDB, DefaultLogger);
@@ -488,8 +330,6 @@ describe("Layer Provisioning Order", () => {
         }),
     });
 
-    const Defaults = Layer.merge(DefaultDB, DefaultLogger);
-
     // User layer with plugin
     const withAudit = Plugin.forTag(Database, (base) => ({
       query: (sql) =>
@@ -499,7 +339,7 @@ describe("Layer Provisioning Order", () => {
         }),
     }));
 
-    const UserDB = DefaultDB.pipe(withAudit);
+    const UserDB = Layer.context<never>().pipe(withAudit, Layer.provide(DefaultDB));
 
     // Simulate Api.serve: merge user layers with defaults
     const ApiLayer = Layer.merge(UserDB, DefaultLogger);
@@ -509,12 +349,12 @@ describe("Layer Provisioning Order", () => {
       return yield* db.query("SELECT *");
     });
 
-    // Pattern: Effect.provide(userLayers).provide(defaults)
+    // With the new pattern, ApiLayer already has the enhanced DB
     const result = await Effect.runPromise(
-      program.pipe(Effect.provide(ApiLayer), Effect.provide(Defaults))
+      program.pipe(Effect.provide(ApiLayer))
     );
 
-    // Should use audited DB, not bare default
+    // Should use audited DB
     expect(executionLog).toEqual(["audit", "default-db"]);
     expect(result).toBe("default");
   });
@@ -542,7 +382,7 @@ describe("Layer Provisioning Order", () => {
       },
     }));
 
-    const MockDB = DefaultDB.pipe(withMock);
+    const MockDB = Layer.context<never>().pipe(withMock, Layer.provide(DefaultDB));
 
     const program = Effect.gen(function* () {
       const db = yield* Database;
