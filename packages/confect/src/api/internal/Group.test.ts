@@ -38,10 +38,6 @@ const createUserFn = Function.mutation("createUser")
   .args(TestArgsSchema)
   .returns(TestReturnsSchema);
 
-const sendEmailFn = Function.action("sendEmail")
-  .args(TestArgsSchema)
-  .returns(TestReturnsSchema);
-
 // =============================================================================
 // Constructor Tests
 // =============================================================================

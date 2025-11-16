@@ -58,14 +58,11 @@ import * as Effect from "effect/Effect";
 import { pipe, SK } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
-import * as Option from "effect/Option";
 import * as Order from "effect/Order";
-import { pipeArguments, type Pipeable } from "effect/Pipeable";
+import * as Pipeable from "effect/Pipeable";
 import * as Predicate from "effect/Predicate";
 import * as Record from "effect/Record";
 import * as Schema from "effect/Schema";
-import * as String from "effect/String";
-import * as Types from "effect/Types";
 import { ConfectAuth } from "../../server/auth";
 import { layerActionCtx, layerMutationCtx, layerQueryCtx } from "../../server/convex_ctx";
 import { ConfectActionCtx, ConfectMutationCtx, ConfectQueryCtx } from "../../server/ctx";
@@ -112,6 +109,37 @@ export type ApiTypeId = typeof ApiTypeId;
 // Api Types
 // =============================================================================
 
+const ConfectServiceSymbol: unique symbol = Symbol.for("@confect/ConfectService");
+type ConfectServiceSymbol = typeof ConfectServiceSymbol;
+
+export interface TagId<in out Name> {
+  [ConfectServiceSymbol]: Name;
+}
+
+/**
+ * Convert an API to a Context.Tag for use in Layer/Effect.
+ *
+ * APIs are plain data structures. When you need to use them in Effect's DI system,
+ * convert them to a Tag with this function.
+ *
+ * @param api - The API to convert
+ * @returns Context.Tag for the API
+ *
+ * @category Tag Conversion
+ * @since 1.0.0
+ *
+ * @example
+ * const myApi = Api.api("myApp").pipe(Api.add(usersGroup))
+ *
+ * // Use in Layer
+ * const ApiLayer = Layer.effect(Api.Tag(myApi), ...)
+ *
+ * // Use in Effect
+ * const api = yield* Api.Tag(myApi)
+ */
+export const Tag = <A extends ConfectApi.AnyApi>(api: A) =>
+  Context.GenericTag<TagId<GetName<A>>, GetGroups<A>>(api.name);
+
 /**
  * API - top-level collection of groups.
  *
@@ -125,8 +153,8 @@ export type ApiTypeId = typeof ApiTypeId;
  */
 export interface ConfectApi<
   out Name extends string,
-  out Groups extends Group.ConfectApiGroup.IAnyGroup = never,
-> extends Pipeable {
+  out Groups extends Group.ConfectApiGroup.AnyGroup = never,
+> extends Pipeable.Pipeable {
   readonly [ApiTypeId]: ApiTypeId;
 
   readonly name: Name;
@@ -140,17 +168,6 @@ export declare namespace ConfectApi {
 // =============================================================================
 // Constructors
 // =============================================================================
-
-/**
- * Prototype for all ConfectApi instances.
- * @internal
- */
-const ConfectApiProto = {
-  [ApiTypeId]: ApiTypeId,
-  pipe() {
-    return pipeArguments(this, arguments);
-  },
-};
 
 /**
  * Create an empty API with the given name.
@@ -185,10 +202,10 @@ const ConfectApiProto = {
  * )
  *
  * // 3. Implement handlers as Layers
- * const UsersLive = Layer.effect(usersGroup, Effect.succeed({
+ * const UsersLive = Layer.effect(Group.Tag(usersGroup), Effect.succeed({
  *   getUser: (args) => Effect.succeed({ id: args.id, name: "John" })
  * }))
- * const PostsLive = Layer.effect(postsGroup, Effect.succeed({
+ * const PostsLive = Layer.effect(Group.Tag(postsGroup), Effect.succeed({
  *   getPost: (args) => Effect.succeed({ id: args.id, title: "Hello" })
  * }))
  *
@@ -201,10 +218,11 @@ const ConfectApiProto = {
 export const api = <Name extends string>(
   name: Name,
 ): ConfectApi<Name> => {
-  const self = Object.create(ConfectApiProto);
-  self.name = name;
-  self.groups = {};
-  return self;
+  return Object.assign({}, Pipeable.Prototype, {
+    [ApiTypeId]: ApiTypeId,
+    name,
+    groups: {},
+  }) as any;
 };
 
 // =============================================================================
@@ -278,7 +296,7 @@ export type GetGroups<A extends ConfectApi.AnyApi> =
  * type Names = Api.GetGroupNames<typeof myApi>
  * // "users" | "posts"
  */
-type GetGroupNames<A> = A extends ConfectApi<any, infer Groups>
+export type GetGroupNames<A> = A extends ConfectApi<any, infer Groups>
   ? Groups extends Group.ConfectApiGroup.AnyGroup
   ? Group.GetName<Groups>
   : never
@@ -349,14 +367,15 @@ export type GetAllFunctions<A extends ConfectApi<string, Group.ConfectApiGroup.A
  */
 export const add = <G extends Group.ConfectApiGroup.AnyGroup>(
   group: G,
-) => <Name extends string, Groups extends Group.ConfectApiGroup.IAnyGroup>(
+) => <Name extends string, Groups extends Group.ConfectApiGroup.AnyGroup>(
   api: ConfectApi<Name, Groups>,
 ): ConfectApi<Name, Groups | G> => {
     const groups = Record.set(api.groups, group.name, group);
-    const self = Object.create(ConfectApiProto);
-    self.name = api.name;
-    self.groups = groups;
-    return self;
+    return Object.assign({}, Pipeable.Prototype, {
+      [ApiTypeId]: ApiTypeId,
+      name: api.name,
+      groups,
+    }) as any;
   };
 
 /**
@@ -397,10 +416,11 @@ export const merge = <
     api: ConfectApi<Name, Groups>,
   ): ConfectApi<Name, Groups | Groups2> => {
     const groups = Record.union(api.groups, other.groups, SK);
-    const self = Object.create(ConfectApiProto);
-    self.name = api.name;
-    self.groups = groups;
-    return self;
+    return Object.assign({}, Pipeable.Prototype, {
+      [ApiTypeId]: ApiTypeId,
+      name: api.name,
+      groups,
+    }) as any;
   };
 
 // =============================================================================
@@ -464,6 +484,63 @@ export const getFunction = <
 };
 
 // =============================================================================
+// Order Utilities
+// =============================================================================
+
+/**
+ * Order APIs by name (alphabetically).
+ *
+ * @category Ordering
+ * @since 1.0.0
+ *
+ * @example
+ * import * as Array from "effect/Array"
+ *
+ * const apis = [api1, api2, api3]
+ * const sorted = Array.sort(apis, Api.byName)
+ */
+export const byName = Order.mapInput(Order.string, (api: { name: string }) => api.name);
+
+/**
+ * Order APIs by number of groups (ascending).
+ *
+ * @category Ordering
+ * @since 1.0.0
+ *
+ * @example
+ * import * as Array from "effect/Array"
+ *
+ * const apis = [api1, api2, api3]
+ * const sorted = Array.sort(apis, Api.byGroupCount)
+ */
+export const byGroupCount = Order.mapInput(
+  Order.number,
+  (api: { groups: Record.ReadonlyRecord<string, unknown> }) => Object.keys(api.groups).length
+);
+
+/**
+ * Order APIs by total number of functions across all groups (ascending).
+ *
+ * @category Ordering
+ * @since 1.0.0
+ *
+ * @example
+ * import * as Array from "effect/Array"
+ *
+ * const apis = [api1, api2, api3]
+ * const sorted = Array.sort(apis, Api.byFunctionCount)
+ */
+export const byFunctionCount = Order.mapInput(
+  Order.number,
+  (api: ConfectApi.AnyApi) => {
+    return Object.values(api.groups).reduce(
+      (total, group) => total + Object.keys(group.functions).length,
+      0
+    );
+  }
+);
+
+// =============================================================================
 // Convex Runtime Services
 // =============================================================================
 
@@ -480,7 +557,7 @@ export const getFunction = <
  * @internal
  */
 type ConvexApiServer<Groups extends Group.ConfectApiGroup.AnyGroup> = {
-  [K in keyof Groups]: Record<
+  [K in Group.GetName<Groups>]: Record<
     string,
     | RegisteredQuery<"public", DefaultFunctionArgs, any>
     | RegisteredMutation<"public", DefaultFunctionArgs, any>
@@ -619,7 +696,7 @@ const makeQueryFunction = <S extends GenericConfectSchema>(
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
   apiLayer: Layer.Layer<any, never, QueryLayers>,
-  groupTag: Group.ConfectApiGroup.AnyGroup,
+  group: Group.ConfectApiGroup.AnyGroup,
   functionName: string
 ): RegisteredQuery<"public", any, any> =>
   queryGeneric({
@@ -628,7 +705,7 @@ const makeQueryFunction = <S extends GenericConfectSchema>(
     handler: async (ctx: GenericQueryCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
 
       // Get handlers from the group Tag in the provided Layer
-      const handlers = await groupTag.pipe(
+      const handlers = await Group.Tag(group).pipe(
         Effect.provide(apiLayer),
         Effect.provide(QueryLayers<S>()),
         Effect.provide(makeQueryRuntimeLayer(confectSchemaDefinition, ctx)),
@@ -660,7 +737,7 @@ const makeMutationFunction = <S extends GenericConfectSchema>(
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
   apiLayer: Layer.Layer<any, never, MutationLayers>,
-  groupTag: Group.ConfectApiGroup.AnyGroup,
+  group: Group.ConfectApiGroup.AnyGroup,
   functionName: string
 ): RegisteredMutation<"public", any, any> => {
   console.log("[confect] Constructing mutation function:", functionName);
@@ -671,7 +748,7 @@ const makeMutationFunction = <S extends GenericConfectSchema>(
       console.log(`[confect] Executing mutation handler for ${functionName} with actualArgs:`, actualArgs);
 
       // Get handlers from the group Tag in the provided Layer
-      const handlers = await groupTag.pipe(
+      const handlers = await Group.Tag(group).pipe(
         Effect.provide(apiLayer),
         Effect.provide(MutationLayers<S>()),
         Effect.provide(makeMutationRuntimeLayer(confectSchemaDefinition, ctx)),
@@ -709,7 +786,7 @@ const makeActionFunction = <S extends GenericConfectSchema>(
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
   apiLayer: Layer.Layer<any, never, ActionLayers>,
-  groupTag: Group.ConfectApiGroup.AnyGroup,
+  group: Group.ConfectApiGroup.AnyGroup,
   functionName: string
 ): RegisteredAction<"public", any, any> => {
   console.log("[confect] Constructing action function:", functionName);
@@ -720,7 +797,7 @@ const makeActionFunction = <S extends GenericConfectSchema>(
       console.log(`[confect] Executing action handler for ${functionName} with actualArgs:`, actualArgs);
 
       // Get handlers from the group Tag in the provided Layer
-      const handlers = await groupTag.pipe(
+      const handlers = await Group.Tag(group).pipe(
         Effect.provide(apiLayer),
         Effect.provide(ActionLayers<S>()),
         Effect.provide(makeActionRuntimeLayer(confectSchemaDefinition, ctx)),

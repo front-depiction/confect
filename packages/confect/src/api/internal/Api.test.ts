@@ -100,8 +100,8 @@ describe("Api Constructor", () => {
       );
 
       expect(myApi.name).toBe("myApp");
-      expect(myApi.groups.users).toBe(usersGroup);
-      expect(myApi.groups.posts).toBe(postsGroup);
+      expect(myApi.groups["users"]).toBe(usersGroup);
+      expect(myApi.groups["posts"]).toBe(postsGroup);
       expect(Object.keys(myApi.groups)).toHaveLength(2);
     });
 
@@ -159,7 +159,7 @@ describe("Api Predicates", () => {
         expectTypeOf(value).toMatchTypeOf<
           Api.ConfectApi<
             string,
-            Record<string, Group.TagClass<any, any, any>>
+            Group.ConfectApiGroup.AnyGroup
           >
         >();
       }
@@ -234,8 +234,8 @@ describe("Pipeable Utilities", () => {
       );
 
       expect(updated.name).toBe("myApp");
-      expect(updated.groups.users).toBe(usersGroup);
-      expect(updated.groups.posts).toBe(postsGroup);
+      expect(updated.groups["users"]).toBe(usersGroup);
+      expect(updated.groups["posts"]).toBe(postsGroup);
       expect(Object.keys(updated.groups)).toHaveLength(2);
     });
 
@@ -258,12 +258,11 @@ describe("Pipeable Utilities", () => {
       const newUsersGroup = Group.group("users").pipe(
         Group.add(getUserFn),
       );
-      class NewUsersTag extends Group.Tag(newUsersGroup)<NewUsersTag>() {}
 
-      const updated = original.pipe(Api.add(NewUsersTag));
+      const updated = original.pipe(Api.add(newUsersGroup));
 
-      expect(updated.groups.users).toBe(NewUsersTag);
-      expect(updated.groups.users).not.toBe(usersGroup);
+      expect(updated.groups["users"]).toBe(newUsersGroup);
+      expect(updated.groups["users"]).not.toBe(usersGroup);
     });
 
     test("works with multiple adds in single pipe", () => {
@@ -274,9 +273,9 @@ describe("Pipeable Utilities", () => {
       );
 
       expect(Object.keys(api.groups)).toHaveLength(3);
-      expect(api.groups.users).toBe(usersGroup);
-      expect(api.groups.posts).toBe(postsGroup);
-      expect(api.groups.empty).toBe(emptyGroup);
+      expect(api.groups["users"]).toBe(usersGroup);
+      expect(api.groups["posts"]).toBe(postsGroup);
+      expect(api.groups["empty"]).toBe(emptyGroup);
     });
   });
 
@@ -293,8 +292,8 @@ describe("Pipeable Utilities", () => {
       const merged = api1.pipe(Api.merge(api2));
 
       expect(merged.name).toBe("myApp");
-      expect(merged.groups.users).toBe(usersGroup);
-      expect(merged.groups.posts).toBe(postsGroup);
+      expect(merged.groups["users"]).toBe(usersGroup);
+      expect(merged.groups["posts"]).toBe(postsGroup);
       expect(Object.keys(merged.groups)).toHaveLength(2);
     });
 
@@ -302,26 +301,24 @@ describe("Pipeable Utilities", () => {
       const group1 = Group.group("shared").pipe(
         Group.add(getUserFn),
       );
-      class Shared1Tag extends Group.Tag(group1)<Shared1Tag>() {}
 
       const group2 = Group.group("shared").pipe(
         Group.add(createUserFn),
       );
-      class Shared2Tag extends Group.Tag(group2)<Shared2Tag>() {}
 
       const api1 = Api.api("myApp").pipe(
-        Api.add(Shared1Tag),
+        Api.add(group1),
         Api.add(usersGroup),
       );
 
       const api2 = Api.api("myApp").pipe(
-        Api.add(Shared2Tag),
+        Api.add(group2),
       );
 
       const merged = api1.pipe(Api.merge(api2));
 
-      expect(merged.groups.shared).toBe(Shared2Tag);
-      expect(merged.groups.users).toBe(usersGroup);
+      expect(merged.groups["shared"]).toBe(group2);
+      expect(merged.groups["users"]).toBe(usersGroup);
     });
 
     test("does not mutate original APIs", () => {
@@ -480,7 +477,7 @@ describe("Variance Behavior", () => {
       Api.add(usersGroup),
     );
 
-    expect(specific.groups.users).toBe(usersGroup);
+    expect(specific.groups["users"]).toBe(usersGroup);
 
     type GroupNames = keyof typeof specific.groups;
     expectTypeOf<GroupNames>().toEqualTypeOf<"users">();
@@ -517,7 +514,7 @@ describe("Api.serve", () => {
 
       // Create minimal handler implementations
       const UsersLive = Layer.succeed(
-        usersGroup,
+        Group.Tag(usersGroup),
         {
           getUser: () => Effect.succeed({ result: "user" }),
           createUser: () => Effect.succeed({ result: "created" }),
@@ -525,20 +522,15 @@ describe("Api.serve", () => {
       );
 
       const PostsLive = Layer.succeed(
-        postsGroup,
+        Group.Tag(postsGroup),
         {
           getPost: () => Effect.succeed({ result: "post" }),
           createPost: () => Effect.succeed({ result: "created" }),
         }
       );
 
-      const apiLayer = Api.toLayer(testApi).pipe(
-        Layer.provide(UsersLive),
-        Layer.provide(PostsLive),
-      );
+      const apiLayer = Layer.mergeAll(UsersLive, PostsLive);
 
-      // WORKAROUND: Type assertion needed due to structural issue in Api.serve signature
-      // The serve function should accept UnionOfGroupServices<Groups> in its requirements
       const convexApi = Api.serve(testConfectSchema, testApi, apiLayer as any);
 
       // Check top-level structure has group names as keys
@@ -553,24 +545,19 @@ describe("Api.serve", () => {
       );
 
       const UsersLive = Layer.succeed(
-        usersGroup,
+        Group.Tag(usersGroup),
         {
           getUser: () => Effect.succeed({ result: "user" }),
           createUser: () => Effect.succeed({ result: "created" }),
         }
       );
 
-      const apiLayer = Api.toLayer(testApi).pipe(
-        Layer.provide(UsersLive),
-      );
-
-      // WORKAROUND: Type assertion needed due to structural issue in Api.serve signature
-      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer as any);
+      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive as any);
 
       // Check that users group has function keys
-      expect(convexApi.users).toHaveProperty("getUser");
-      expect(convexApi.users).toHaveProperty("createUser");
-      expect(Object.keys(convexApi.users)).toHaveLength(2);
+      expect(convexApi["users"]).toHaveProperty("getUser");
+      expect(convexApi["users"]).toHaveProperty("createUser");
+      expect(Object.keys(convexApi["users"])).toHaveLength(2);
     });
 
     test("works with empty groups", () => {
@@ -579,19 +566,14 @@ describe("Api.serve", () => {
       );
 
       const EmptyLive = Layer.succeed(
-        emptyGroup,
+        Group.Tag(emptyGroup),
         {}
       );
 
-      const apiLayer = Api.toLayer(testApi).pipe(
-        Layer.provide(EmptyLive),
-      );
-
-      // WORKAROUND: Type assertion needed due to structural issue in Api.serve signature
-      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer as any);
+      const convexApi = Api.serve(testConfectSchema, testApi, EmptyLive as any);
 
       expect(convexApi).toHaveProperty("empty");
-      expect(Object.keys(convexApi.empty)).toHaveLength(0);
+      expect(Object.keys(convexApi["empty"])).toHaveLength(0);
     });
 
     test("functions are Convex registered handlers", () => {
@@ -600,23 +582,18 @@ describe("Api.serve", () => {
       );
 
       const UsersLive = Layer.succeed(
-        usersGroup,
+        Group.Tag(usersGroup),
         {
           getUser: () => Effect.succeed({ result: "user" }),
           createUser: () => Effect.succeed({ result: "created" }),
         }
       );
 
-      const apiLayer = Api.toLayer(testApi).pipe(
-        Layer.provide(UsersLive),
-      );
-
-      // WORKAROUND: Type assertion needed due to structural issue in Api.serve signature
-      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer as any);
+      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive as any);
 
       // Registered functions should have specific structure
-      expect(convexApi.users["getUser"]).toHaveProperty("isQuery");
-      expect(convexApi.users["createUser"]).toHaveProperty("isMutation");
+      expect(convexApi["users"]["getUser"]).toHaveProperty("isQuery");
+      expect(convexApi["users"]["createUser"]).toHaveProperty("isMutation");
     });
   });
 
@@ -627,7 +604,7 @@ describe("Api.serve", () => {
       );
 
       const UsersLive = Layer.succeed(
-        usersGroup,
+        Group.Tag(usersGroup),
         {
           getUser: (args: { id: string }) =>
             Effect.succeed({ result: `user-${args.id}` }),
@@ -635,12 +612,7 @@ describe("Api.serve", () => {
         }
       );
 
-      const apiLayer = Api.toLayer(testApi).pipe(
-        Layer.provide(UsersLive),
-      );
-
-      // WORKAROUND: Type assertion needed due to structural issue in Api.serve signature
-      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer as any);
+      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive as any);
 
       // Mock Convex query context
       const mockQueryCtx = {
@@ -650,7 +622,7 @@ describe("Api.serve", () => {
       } as any;
 
       // Invoke the handler (use _handler for direct invocation)
-      const result = await (convexApi.users["getUser"] as any)._handler(
+      const result = await (convexApi["users"]["getUser"] as any)._handler(
         mockQueryCtx,
         { id: "test-123" }
       );
@@ -664,7 +636,7 @@ describe("Api.serve", () => {
       );
 
       const UsersLive = Layer.succeed(
-        usersGroup,
+        Group.Tag(usersGroup),
         {
           getUser: () => Effect.succeed({ result: "user" }),
           createUser: (args: { id: string }) =>
@@ -672,12 +644,7 @@ describe("Api.serve", () => {
         }
       );
 
-      const apiLayer = Api.toLayer(testApi).pipe(
-        Layer.provide(UsersLive),
-      );
-
-      // WORKAROUND: Type assertion needed due to structural issue in Api.serve signature
-      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer as any);
+      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive as any);
 
       // Mock Convex mutation context
       const mockMutationCtx = {
@@ -688,7 +655,7 @@ describe("Api.serve", () => {
       } as any;
 
       // Invoke the handler (use _handler for direct invocation)
-      const result = await (convexApi.users["createUser"] as any)._handler(
+      const result = await (convexApi["users"]["createUser"] as any)._handler(
         mockMutationCtx,
         { id: "new-user" }
       );
@@ -703,7 +670,7 @@ describe("Api.serve", () => {
       );
 
       const UsersLive = Layer.succeed(
-        usersGroup,
+        Group.Tag(usersGroup),
         {
           getUser: (args: { id: string }) =>
             Effect.succeed({ result: `user-${args.id}` }),
@@ -712,7 +679,7 @@ describe("Api.serve", () => {
       );
 
       const PostsLive = Layer.succeed(
-        postsGroup,
+        Group.Tag(postsGroup),
         {
           getPost: (args: { id: string }) =>
             Effect.succeed({ result: `post-${args.id}` }),
@@ -720,12 +687,8 @@ describe("Api.serve", () => {
         }
       );
 
-      const apiLayer = Api.toLayer(testApi).pipe(
-        Layer.provide(UsersLive),
-        Layer.provide(PostsLive),
-      );
+      const apiLayer = Layer.mergeAll(UsersLive, PostsLive);
 
-      // WORKAROUND: Type assertion needed due to structural issue in Api.serve signature
       const convexApi = Api.serve(testConfectSchema, testApi, apiLayer as any);
 
       const mockQueryCtx = {
@@ -735,11 +698,11 @@ describe("Api.serve", () => {
       } as any;
 
       // Test both group handlers
-      const userResult = await (convexApi.users["getUser"] as any)._handler(
+      const userResult = await (convexApi["users"]["getUser"] as any)._handler(
         mockQueryCtx,
         { id: "user-1" }
       );
-      const postResult = await (convexApi.posts["getPost"] as any)._handler(
+      const postResult = await (convexApi["posts"]["getPost"] as any)._handler(
         mockQueryCtx,
         { id: "post-1" }
       );
@@ -756,7 +719,7 @@ describe("Api.serve", () => {
       let receivedArgs: any = null;
 
       const UsersLive = Layer.succeed(
-        usersGroup,
+        Group.Tag(usersGroup),
         {
           getUser: (args: { id: string }) => {
             receivedArgs = args;
@@ -766,12 +729,7 @@ describe("Api.serve", () => {
         }
       );
 
-      const apiLayer = Api.toLayer(testApi).pipe(
-        Layer.provide(UsersLive),
-      );
-
-      // WORKAROUND: Type assertion needed due to structural issue in Api.serve signature
-      const convexApi = Api.serve(testConfectSchema, testApi, apiLayer as any);
+      const convexApi = Api.serve(testConfectSchema, testApi, UsersLive as any);
 
       const mockQueryCtx = {
         db: {},
@@ -779,7 +737,7 @@ describe("Api.serve", () => {
         storage: {},
       } as any;
 
-      await (convexApi.users["getUser"] as any)._handler(
+      await (convexApi["users"]["getUser"] as any)._handler(
         mockQueryCtx,
         { id: "test-id" }
       );
