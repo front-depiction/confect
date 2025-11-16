@@ -88,9 +88,6 @@ describe("Group Constructor", () => {
 
       type FunctionNames = Group.GetFunctionNames<typeof grp>;
       expectTypeOf<FunctionNames>().toEqualTypeOf<"getUser" | "createUser">();
-      expectTypeOf<
-        TypesAreEquivalent<FunctionNames, "getUser" | "createUser">
-      >().toEqualTypeOf<true>();
     });
   });
 });
@@ -176,9 +173,6 @@ describe("Type Extraction Utilities", () => {
     test("extracts function names as union", () => {
       type Names = Group.GetFunctionNames<typeof testGroup>;
       expectTypeOf<Names>().toEqualTypeOf<"getUser" | "createUser">();
-      expectTypeOf<
-        TypesAreEquivalent<Names, "getUser" | "createUser">
-      >().toEqualTypeOf<true>();
     });
 
     test("returns never for empty group", () => {
@@ -451,7 +445,7 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       // Simple handler with no dependencies
-      const TestLive = Layer.effect(testGroup,
+      const TestLive = Layer.effect(Group.Tag(testGroup),
         Effect.succeed({
           getUser: () => Effect.succeed({ result: "test" }),
         })
@@ -472,7 +466,7 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       // Handler Effect requires Database
-      const UsersLive = Layer.effect(usersGroup,
+      const UsersLive = Layer.effect(Group.Tag(usersGroup),
         Effect.gen(function* () {
           const db = yield* Database;
           return {
@@ -519,7 +513,7 @@ describe("Layer Building - Complex Dependencies", () => {
 
 
       // Implement mutation group with no dependencies
-      const NotesWriteLive = Layer.effect(notesWriteGroup,
+      const NotesWriteLive = Layer.effect(Group.Tag(notesWriteGroup),
         Effect.succeed({
           create: () => Effect.succeed({ result: "created" }),
           delete: () => Effect.succeed(null),
@@ -527,10 +521,10 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       // Implement query group that depends on mutation handlers
-      const NotesReadLive = Layer.effect(notesReadGroup,
+      const NotesReadLive = Layer.effect(Group.Tag(notesReadGroup),
         Effect.gen(function* () {
           // Access the mutation group's tag
-          const writeHandlers = yield* notesWriteGroup;
+          const writeHandlers = yield* Group.Tag(notesWriteGroup);
 
           return {
             list: () => Effect.succeed({ result: "list" }),
@@ -551,7 +545,7 @@ describe("Layer Building - Complex Dependencies", () => {
 
       // RUNTIME TEST: Actually use the composed layers
       const program = Effect.gen(function* () {
-        const readHandlers = yield* notesReadGroup;
+        const readHandlers = yield* Group.Tag(notesReadGroup);
 
         // Call list
         const listResult = yield* readHandlers.list({ id: "test-id" });
@@ -593,7 +587,7 @@ describe("Layer Building - Complex Dependencies", () => {
 
 
       // Both groups depend on QueryDB
-      const UsersLive = Layer.effect(usersGroup,
+      const UsersLive = Layer.effect(Group.Tag(usersGroup),
         Effect.gen(function* () {
           const db = yield* QueryDB;
           return {
@@ -602,7 +596,7 @@ describe("Layer Building - Complex Dependencies", () => {
         })
       );
 
-      const PostsLive = Layer.effect(postsGroup,
+      const PostsLive = Layer.effect(Group.Tag(postsGroup),
         Effect.gen(function* () {
           const db = yield* QueryDB;
           return {
@@ -628,8 +622,8 @@ describe("Layer Building - Complex Dependencies", () => {
 
       // RUNTIME TEST: Use both groups
       const program = Effect.gen(function* () {
-        const users = yield* usersGroup;
-        const posts = yield* postsGroup;
+        const users = yield* Group.Tag(usersGroup);
+        const posts = yield* Group.Tag(postsGroup);
 
         const userResult = yield* users.getUser({ id: "test-id" });
         const postResult = yield* posts.getPost({ id: "test-id" });
@@ -666,9 +660,9 @@ describe("Layer Building - Complex Dependencies", () => {
 
 
       // GroupA depends on GroupB - this is fine
-      const GroupALive = Layer.effect(groupA,
+      const GroupALive = Layer.effect(Group.Tag(groupA),
         Effect.gen(function* () {
-          const bHandlers = yield* groupB;
+          const bHandlers = yield* Group.Tag(groupB);
 
           return {
             funcA: () =>
@@ -699,7 +693,7 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add(getUserFn),
       );
 
-      const UsersLive = Layer.effect(usersGroup,
+      const UsersLive = Layer.effect(Group.Tag(usersGroup),
         Effect.gen(function* () {
           const db = yield* Database;
           return {
@@ -713,9 +707,9 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add(Function.rename(getUserFn, "getProfile")),
       );
 
-      const ProfileLive = Layer.effect(profileGroup,
+      const ProfileLive = Layer.effect(Group.Tag(profileGroup),
         Effect.gen(function* () {
-          const users = yield* usersGroup;
+          const users = yield* Group.Tag(usersGroup);
 
           return {
             getProfile: () =>
@@ -738,7 +732,7 @@ describe("Layer Building - Complex Dependencies", () => {
 
       // RUNTIME TEST: Execute the full 3-level stack
       const program = Effect.gen(function* () {
-        const profile = yield* profileGroup;
+        const profile = yield* Group.Tag(profileGroup);
         const result = yield* profile.getProfile({ id: "test-id" });
         return result;
       });
@@ -772,7 +766,7 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
 
-      const AuthLive = Layer.effect(authGroup,
+      const AuthLive = Layer.effect(Group.Tag(authGroup),
         Effect.gen(function* () {
           const config = yield* Config;
           return {
@@ -781,7 +775,7 @@ describe("Layer Building - Complex Dependencies", () => {
         })
       );
 
-      const StorageLive = Layer.effect(storageGroup,
+      const StorageLive = Layer.effect(Group.Tag(storageGroup),
         Effect.gen(function* () {
           const config = yield* Config;
           return {
@@ -795,10 +789,10 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add(Function.rename(getUserFn, "init")),
       );
 
-      const AppLive = Layer.effect(appGroup,
+      const AppLive = Layer.effect(Group.Tag(appGroup),
         Effect.gen(function* () {
-          const auth = yield* authGroup;
-          const storage = yield* storageGroup;
+          const auth = yield* Group.Tag(authGroup);
+          const storage = yield* Group.Tag(storageGroup);
 
           return {
             init: () =>
@@ -827,7 +821,7 @@ describe("Layer Building - Complex Dependencies", () => {
 
       // RUNTIME TEST: Execute diamond dependency pattern
       const program = Effect.gen(function* () {
-        const app = yield* appGroup;
+        const app = yield* Group.Tag(appGroup);
         const result = yield* app.init({ id: "test-id" });
         return result;
       });
@@ -857,7 +851,7 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       // Handler creation requires resources
-      const TestLive = Layer.scoped(testGroup,
+      const TestLive = Layer.scoped(Group.Tag(testGroup),
         Effect.gen(function* () {
           // Acquire resource with cleanup
           const connection = yield* Effect.acquireRelease(
@@ -884,7 +878,7 @@ describe("Layer Building - Complex Dependencies", () => {
             .returns(TestReturnsSchema)),
       );
 
-      const DBLive = Layer.scoped(dbGroup,
+      const DBLive = Layer.scoped(Group.Tag(dbGroup),
         Effect.gen(function* () {
           const config = yield* Config;
 
@@ -912,7 +906,7 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       // Only implement func1, func2 will throw if called
-      const TestMock = Layer.mock(testGroup, {
+      const TestMock = Layer.mock(Group.Tag(testGroup), {
         func1: () => Effect.succeed({ result: "mocked" }),
       });
 
@@ -925,7 +919,7 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       // All functions throw UnimplementedError
-      const TestMock = Layer.mock(testGroup, {});
+      const TestMock = Layer.mock(Group.Tag(testGroup), {});
 
       void TestMock;
     });
@@ -955,7 +949,7 @@ describe("Layer Building - Complex Dependencies", () => {
           .returns(Schema.Null)),
       );
 
-      const NotesMutationLive = Layer.effect(notesMutationGroup,
+      const NotesMutationLive = Layer.effect(Group.Tag(notesMutationGroup),
         Effect.gen(function* () {
           const db = yield* MutationDB;
           return {
@@ -975,10 +969,10 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add(Function.rename(createUserFn, "refresh")),
       );
 
-      const NotesQueryLive = Layer.effect(notesQueryGroup,
+      const NotesQueryLive = Layer.effect(Group.Tag(notesQueryGroup),
         Effect.gen(function* () {
           const queryDb = yield* QueryDB;
-          const mutations = yield* notesMutationGroup;
+          const mutations = yield* Group.Tag(notesMutationGroup);
 
           return {
             list: () => queryDb.query("notes").pipe(
@@ -1023,7 +1017,7 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       const program = Effect.gen(function* () {
-        const query = yield* notesQueryGroup;
+        const query = yield* Group.Tag(notesQueryGroup);
 
         // Initial list (empty)
         const listResult1 = yield* query.list({ id: "test-id" });
@@ -1061,7 +1055,7 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add(getUserFn),
       );
 
-      const ProtectedLive = Layer.effect(protectedGroup,
+      const ProtectedLive = Layer.effect(Group.Tag(protectedGroup),
         Effect.gen(function* () {
           const auth = yield* Auth;
 
@@ -1079,7 +1073,7 @@ describe("Layer Building - Complex Dependencies", () => {
 
       // RUNTIME TEST: Verify middleware is injected
       const program = Effect.gen(function* () {
-        const handlers = yield* protectedGroup;
+        const handlers = yield* Group.Tag(protectedGroup);
         const result = yield* handlers.getUser({ id: "test-id" });
         return result;
       });

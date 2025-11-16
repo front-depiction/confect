@@ -831,7 +831,7 @@ describe("Api.serve() - Convert Layer-based API to Convex", () => {
         getItem: (args) => Effect.succeed(args.id),
         createItem: (args) => Effect.succeed(args.name),
         sendEmail: () => Effect.succeed({}),
-      }),
+      }
     );
 
     // Build API Layer

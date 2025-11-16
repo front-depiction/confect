@@ -113,41 +113,19 @@ export type ApiTypeId = typeof ApiTypeId;
 // =============================================================================
 
 /**
- * Type alias for any ConfectApiGroup.
- *
- * @category Type Aliases
- * @since 1.0.0
- */
-export type AnyGroup = Group.ConfectApiGroup<string, Function.ConfectApiFunction>;
-
-/**
- * Helper type to merge group records.
- * TypeScript cannot prove that MergeRight<A, B> extends Record<string, T>
- * even when A and B both extend Record<string, T>, so we use this helper.
- *
- * @internal
- */
-type MergedGroups<
-  A extends Record<string, AnyGroup>,
-  B extends Record<string, AnyGroup>,
-> = Types.MergeRight<A, B> extends Record<string, AnyGroup>
-  ? Types.MergeRight<A, B>
-  : never;
-
-/**
  * API - top-level collection of groups.
  *
- * APIs organize groups into a complete application API surface.
- * They provide a way to structure large applications and generate complete Convex exports.
+ * APIs are pure data structures that organize groups.
+ * They don't extend Context.Tag - they're just metadata about which groups exist.
  *
- * Groups are Context.Tags, so you can use them directly in Layers.
+ * To serve an API, you provide a Layer that satisfies all the group Tags.
  *
  * @category Types
  * @since 1.0.0
  */
 export interface ConfectApi<
   out Name extends string,
-  out Groups extends Group.ConfectApiGroup<string, Function.ConfectApiFunction> = never,
+  out Groups extends Group.ConfectApiGroup.IAnyGroup = never,
 > extends Pipeable {
   readonly [ApiTypeId]: ApiTypeId;
 
@@ -155,13 +133,16 @@ export interface ConfectApi<
   readonly groups: Record.ReadonlyRecord<string, Groups>;
 }
 
+export declare namespace ConfectApi {
+  export interface AnyApi extends ConfectApi<string, Group.ConfectApiGroup.AnyGroup> { }
+}
+
 // =============================================================================
-// Constructors (using prototype pattern)
+// Constructors
 // =============================================================================
 
 /**
  * Prototype for all ConfectApi instances.
- * Shared across all API objects for memory efficiency.
  * @internal
  */
 const ConfectApiProto = {
@@ -174,7 +155,7 @@ const ConfectApiProto = {
 /**
  * Create an empty API with the given name.
  *
- * APIs organize groups into a complete application API surface.
+ * APIs are pure data structures - just metadata about which groups exist.
  * Use `.pipe()` with `Api.add()` to add groups.
  *
  * @param name - API name (preserved as literal type)
@@ -187,46 +168,35 @@ const ConfectApiProto = {
  * import * as Api from "./internal/Api"
  * import * as Group from "./internal/Group"
  * import * as Function from "./internal/Function"
- * import * as Schema from "effect/Schema"
+ * import * as Layer from "effect/Layer"
  *
+ * // 1. Define groups (pure data)
  * const usersGroup = Group.group("users").pipe(
- *   Group.add("getUser", Function.query("getUser")
- *     .args(Schema.Struct({ id: Schema.String }))
- *     .returns(Schema.Struct({
- *       id: Schema.String,
- *       name: Schema.String,
- *       email: Schema.String
- *     }))),
- *   Group.add("createUser", Function.mutation("createUser")
- *     .args(Schema.Struct({
- *       name: Schema.String,
- *       email: Schema.String
- *     }))
- *     .returns(Schema.Struct({
- *       id: Schema.String,
- *       name: Schema.String,
- *       email: Schema.String
- *     })))
+ *   Group.add(Function.query("getUser").args(...).returns(...))
  * )
- *
  * const postsGroup = Group.group("posts").pipe(
- *   Group.add("getPost", Function.query("getPost")
- *     .args(Schema.Struct({ id: Schema.String }))
- *     .returns(Schema.Struct({
- *       id: Schema.String,
- *       title: Schema.String,
- *       content: Schema.String
- *     })))
+ *   Group.add(Function.query("getPost").args(...).returns(...))
  * )
  *
+ * // 2. Define API (pure data)
  * const myApi = Api.api("myApp").pipe(
  *   Api.add(usersGroup),
  *   Api.add(postsGroup)
  * )
  *
- * // ✅ Literal types preserved!
- * const apiName: "myApp" = myApi.name
- * const groupNames: ("users" | "posts")[] = Object.keys(myApi.groups)
+ * // 3. Implement handlers as Layers
+ * const UsersLive = Layer.effect(usersGroup, Effect.succeed({
+ *   getUser: (args) => Effect.succeed({ id: args.id, name: "John" })
+ * }))
+ * const PostsLive = Layer.effect(postsGroup, Effect.succeed({
+ *   getPost: (args) => Effect.succeed({ id: args.id, title: "Hello" })
+ * }))
+ *
+ * // 4. Provide all groups
+ * const MyApiLive = Layer.mergeAll(UsersLive, PostsLive)
+ *
+ * // 5. Serve to Convex
+ * export default Api.serve(schemaDefinition, myApi, MyApiLive)
  */
 export const api = <Name extends string>(
   name: Name,
@@ -261,7 +231,7 @@ export const api = <Name extends string>(
  */
 export const isApi = (
   u: unknown,
-): u is ConfectApi<string, AnyGroup> =>
+): u is ConfectApi<string, Group.ConfectApiGroup.AnyGroup> =>
   Predicate.hasProperty(u, ApiTypeId);
 
 // =============================================================================
@@ -278,7 +248,7 @@ export const isApi = (
  * const myApi = Api.api("myApp").groups({ ... })
  * type Name = Api.GetName<typeof myApi>  // "myApp"
  */
-export type GetName<A extends ConfectApi<string, AnyGroup>> =
+export type GetName<A extends ConfectApi<string, Group.ConfectApiGroup.AnyGroup>> =
   A["name"];
 
 /**
@@ -291,7 +261,7 @@ export type GetName<A extends ConfectApi<string, AnyGroup>> =
  * const myApi = Api.api("myApp").groups(grps)
  * type Groups = Api.GetGroups<typeof myApi>  // typeof grps
  */
-export type GetGroups<A extends ConfectApi<string, AnyGroup>> =
+export type GetGroups<A extends ConfectApi.AnyApi> =
   A["groups"];
 
 /**
@@ -308,8 +278,13 @@ export type GetGroups<A extends ConfectApi<string, AnyGroup>> =
  * type Names = Api.GetGroupNames<typeof myApi>
  * // "users" | "posts"
  */
-export type GetGroupNames<A extends ConfectApi<string, AnyGroup>> =
-  keyof GetGroups<A>;
+type GetGroupNames<A> = A extends ConfectApi<any, infer Groups>
+  ? Groups extends Group.ConfectApiGroup.AnyGroup
+  ? Group.GetName<Groups>
+  : never
+  : never
+
+
 
 /**
  * Extract all functions from all groups as a flat record.
@@ -332,7 +307,7 @@ export type GetGroupNames<A extends ConfectApi<string, AnyGroup>> =
  * type AllFunctions = Api.GetAllFunctions<typeof myApi>
  * // Record<string, ConfectApiFunction>
  */
-export type GetAllFunctions<A extends ConfectApi<string, AnyGroup>> = {
+export type GetAllFunctions<A extends ConfectApi<string, Group.ConfectApiGroup.AnyGroup>> = {
   [K in keyof GetGroups<A>]: Group.GetFunctions<GetGroups<A>[K]>;
 }[keyof GetGroups<A>];
 
@@ -360,10 +335,10 @@ export type GetAllFunctions<A extends ConfectApi<string, AnyGroup>> = {
  * import * as Group from "./internal/Group"
  *
  * const usersGroup = Group.group("users").pipe(
- *   Group.add("getUser", getUserFn)
+ *   Group.add(getUserFn)
  * )
  * const postsGroup = Group.group("posts").pipe(
- *   Group.add("getPost", getPostFn)
+ *   Group.add(getPostFn)
  * )
  *
  * const myApi = Api.api("myApp").pipe(
@@ -372,20 +347,15 @@ export type GetAllFunctions<A extends ConfectApi<string, AnyGroup>> = {
  * )
  * // myApi has both users and posts groups
  */
-export const add = <
-  Name2 extends string,
-  Functions extends Function.ConfectApiFunction
->(
-  group: Group.ConfectApiGroup<Name2, Functions>,
-) => <Name extends string, Groups extends AnyGroup>(
+export const add = <G extends Group.ConfectApiGroup.AnyGroup>(
+  group: G,
+) => <Name extends string, Groups extends Group.ConfectApiGroup.IAnyGroup>(
   api: ConfectApi<Name, Groups>,
-): ConfectApi<
-  Name,
-  Groups | typeof group
-> => {
+): ConfectApi<Name, Groups | G> => {
+    const groups = Record.set(api.groups, group.name, group);
     const self = Object.create(ConfectApiProto);
     self.name = api.name;
-    self.groups = Record.set(api.groups, group.name, group);
+    self.groups = groups;
     return self;
   };
 
@@ -416,88 +386,22 @@ export const add = <
  */
 export const merge = <
   Name2 extends string,
-  Groups2 extends AnyGroup,
+  Groups2 extends Group.ConfectApiGroup.AnyGroup,
 >(
   other: ConfectApi<Name2, Groups2>,
 ) =>
   <
     Name extends string,
-    Groups extends AnyGroup,
+    Groups extends Group.ConfectApiGroup.AnyGroup,
   >(
     api: ConfectApi<Name, Groups>,
   ): ConfectApi<Name, Groups | Groups2> => {
+    const groups = Record.union(api.groups, other.groups, SK);
     const self = Object.create(ConfectApiProto);
     self.name = api.name;
-    self.groups = Record.union(api.groups, other.groups, SK);
+    self.groups = groups;
     return self;
   };
-
-// =============================================================================
-// Order Utilities
-// =============================================================================
-
-/**
- * Order APIs by name (alphabetically).
- *
- * @category Ordering
- * @since 1.0.0
- *
- * @example
- * import * as Array from "effect/Array"
- *
- * const apis = [api1, api2, api3]
- * const sorted = Array.sort(apis, Api.byName)
- */
-export const byName: Order.Order<ConfectApi<string, AnyGroup>> =
-  Order.mapInput(
-    String.Order,
-    (api: ConfectApi<string, AnyGroup>) => api.name,
-  );
-
-/**
- * Order APIs by number of groups (ascending).
- *
- * @category Ordering
- * @since 1.0.0
- *
- * @example
- * import * as Array from "effect/Array"
- *
- * const apis = [api1, api2, api3]
- * const sorted = Array.sort(apis, Api.byGroupCount)
- * // APIs with fewer groups come first
- */
-export const byGroupCount: Order.Order<ConfectApi<string, Record<string, AnyGroup>>> =
-  Order.mapInput(
-    Order.number,
-    (api: ConfectApi<string, Record<string, AnyGroup>>) =>
-      Object.keys(api.groups).length,
-  );
-
-/**
- * Order APIs by total number of functions (ascending).
- *
- * @category Ordering
- * @since 1.0.0
- *
- * @example
- * import * as Array from "effect/Array"
- *
- * const apis = [api1, api2, api3]
- * const sorted = Array.sort(apis, Api.byFunctionCount)
- * // APIs with fewer functions come first
- */
-export const byFunctionCount: Order.Order<ConfectApi<string, Record<string, AnyGroup>>> =
-  Order.mapInput(
-    Order.number,
-    (api: ConfectApi<string, Record<string, AnyGroup>>) => {
-      let count = 0;
-      for (const group of Object.values(api.groups)) {
-        count += Object.keys(group.functions).length;
-      }
-      return count;
-    },
-  );
 
 // =============================================================================
 // Path Navigation
@@ -518,17 +422,10 @@ export const byFunctionCount: Order.Order<ConfectApi<string, Record<string, AnyG
  * const users = Api.getGroup(myApi, "users")
  * // users is userGroup or undefined
  */
-export const getGroup = <
-  Name extends string,
-  Groups extends Record<string, AnyGroup>,
-  R,
-  Key extends keyof Groups,
->(
-  api: ConfectApi<Name, Groups, R>,
-  name: Key,
-): Groups[Key] | undefined => {
-  return api.groups[name];
-};
+export const getGroup = <Api extends ConfectApi.AnyApi>(
+  api: Api,
+  name: GetGroupNames<Api>,
+) => api.groups[name]!;
 
 /**
  * Get a function from an API by group and function name.
@@ -543,103 +440,32 @@ export const getGroup = <
  *
  * @example
  * const usersGroup = Group.group("users").pipe(
- *   Group.add("getUser", ...)
+ *   Group.add(getUserFn)
  * )
- * const myApi = Api.api("myApp").groups({
- *   users: usersGroup
- * })
+ * const myApi = Api.api("myApp").pipe(
+ *   Api.add(usersGroup)
+ * )
  * const getUser = Api.getFunction(myApi, "users", "getUser")
  * // getUser is the function or undefined
  */
 export const getFunction = <
   Name extends string,
-  Groups extends AnyGroup,
-  R,
+  Groups extends Group.ConfectApiGroup.AnyGroup,
   GroupKey extends keyof Groups,
   FunctionKey extends string,
 >(
-  api: ConfectApi<Name, Groups, R>,
+  api: ConfectApi<Name, Groups>,
   groupName: GroupKey,
   functionName: FunctionKey,
 ): Function.ConfectApiFunction | undefined => {
-  const tagClass = api.groups[groupName];
-  if (!tagClass) return undefined;
-  return tagClass.group.functions[functionName];
+  const group = api.groups[groupName];
+  if (!group) return undefined;
+  return group.functions[functionName];
 };
 
 // =============================================================================
 // Convex Runtime Services
 // =============================================================================
-
-
-
-// =============================================================================
-// Layer Building (Dependency Management)
-// =============================================================================
-
-/**
- * Service tag for an API.
- *
- * Follows Effect HTTP pattern: captures API definition + runtime context.
- * The service value contains the API definition and runtime context.
- *
- * @category Layer Building
- * @since 1.0.0
- */
-export class ApiService extends Context.Tag("@confect/ApiService")<
-  ApiService,
-  {
-    readonly api: ConfectApi<string>
-    readonly context: Context.Context<never>
-  }
->() { }
-
-/**
- * Type helper: Extract union of all GroupService tags from API groups.
- *
- * @internal
- */
-export type UnionOfGroupServices<Groups extends Record<string, Group.TagClass<any, any, any>>> = {
-  [K in keyof Groups]: Groups[K]
-}[keyof Groups];
-
-
-/**
- * Create a top-level Api Layer.
- *
- * Follows Effect HTTP's HttpApiBuilder.api() pattern.
- * Returns Layer that requires all GroupServices and provides ApiService.
- *
- * @param api - API definition
- * @returns Layer that requires all group services
- *
- * @category Layer Building
- * @since 1.0.0
- *
- * @example
- * const MyApiLive = Api.build(myApi).pipe(
- *   Layer.provide(UsersLive),  // Provides GroupService<"users">
- *   Layer.provide(FilesLive)   // Provides GroupService<"files">
- * );
- */
-export const toLayer = <
-  Name extends string,
-  Groups extends AnyGroup,
-  R
->(
-  api: ConfectApi<Name, Groups, R>
-): Layer.Layer<
-  ApiService,
-  never,
-  Groups
-> =>
-  Layer.effect(
-    ApiService,
-    Effect.map(Effect.context(), (context) => ({
-      api: api,
-      context: context
-    }))
-  )
 
 // =============================================================================
 // Convex Integration
@@ -653,7 +479,7 @@ export const toLayer = <
  *
  * @internal
  */
-type ConvexApiServer<Groups extends Record<string, AnyGroup>> = {
+type ConvexApiServer<Groups extends Group.ConfectApiGroup.AnyGroup> = {
   [K in keyof Groups]: Record<
     string,
     | RegisteredQuery<"public", DefaultFunctionArgs, any>
@@ -792,8 +618,8 @@ const makeQueryFunction = <S extends GenericConfectSchema>(
   confectSchemaDefinition: ConfectSchemaDefinition<S>,
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
-  apiLayer: Layer.Layer<ApiService, never, QueryLayers>,
-  groupServiceTag: Group.TagClass<any, any, any>,
+  apiLayer: Layer.Layer<any, never, QueryLayers>,
+  groupTag: Group.ConfectApiGroup.AnyGroup,
   functionName: string
 ): RegisteredQuery<"public", any, any> =>
   queryGeneric({
@@ -801,18 +627,14 @@ const makeQueryFunction = <S extends GenericConfectSchema>(
     returns: compileReturnsSchema(returns),
     handler: async (ctx: GenericQueryCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
 
-      const apiService = await ApiService.pipe(
+      // Get handlers from the group Tag in the provided Layer
+      const handlers = await groupTag.pipe(
         Effect.provide(apiLayer),
         Effect.provide(QueryLayers<S>()),
         Effect.provide(makeQueryRuntimeLayer(confectSchemaDefinition, ctx)),
         Effect.runPromise
       )
 
-      // Extract handler from context at runtime
-      const handlers = pipe(
-        Context.getOption(apiService.context, groupServiceTag),
-        Option.getOrThrow
-      );
       const handler = handlers[functionName];
 
       if (!handler) {
@@ -837,8 +659,8 @@ const makeMutationFunction = <S extends GenericConfectSchema>(
   confectSchemaDefinition: ConfectSchemaDefinition<S>,
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
-  apiLayer: Layer.Layer<ApiService, never, MutationLayers>,
-  groupServiceTag: Group.TagClass<any, any, any>,
+  apiLayer: Layer.Layer<any, never, MutationLayers>,
+  groupTag: Group.ConfectApiGroup.AnyGroup,
   functionName: string
 ): RegisteredMutation<"public", any, any> => {
   console.log("[confect] Constructing mutation function:", functionName);
@@ -848,22 +670,16 @@ const makeMutationFunction = <S extends GenericConfectSchema>(
     handler: async (ctx: GenericMutationCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
       console.log(`[confect] Executing mutation handler for ${functionName} with actualArgs:`, actualArgs);
 
-      // Extract ApiService at runtime with Convex layers
-      const apiService = await ApiService.pipe(
-
+      // Get handlers from the group Tag in the provided Layer
+      const handlers = await groupTag.pipe(
         Effect.provide(apiLayer),
         Effect.provide(MutationLayers<S>()),
         Effect.provide(makeMutationRuntimeLayer(confectSchemaDefinition, ctx)),
         Effect.runPromise
       )
 
-      console.log(`[confect] ApiService provided for mutation: ${functionName}`);
+      console.log(`[confect] Got handlers for mutation: ${functionName}`);
 
-      // Extract handler from context
-      const handlers = pipe(
-        Context.getOption(apiService.context, groupServiceTag),
-        Option.getOrThrow
-      );
       const handler = handlers[functionName];
 
       if (!handler) {
@@ -892,8 +708,8 @@ const makeActionFunction = <S extends GenericConfectSchema>(
   confectSchemaDefinition: ConfectSchemaDefinition<S>,
   args: Schema.Schema.AnyNoContext,
   returns: Schema.Schema.AnyNoContext,
-  apiLayer: Layer.Layer<ApiService, never, ActionLayers>,
-  groupServiceTag: Group.TagClass<any, any, any>,
+  apiLayer: Layer.Layer<any, never, ActionLayers>,
+  groupTag: Group.ConfectApiGroup.AnyGroup,
   functionName: string
 ): RegisteredAction<"public", any, any> => {
   console.log("[confect] Constructing action function:", functionName);
@@ -903,26 +719,16 @@ const makeActionFunction = <S extends GenericConfectSchema>(
     handler: async (ctx: GenericActionCtx<DataModelFromConfectSchema<S>>, actualArgs: any): Promise<any> => {
       console.log(`[confect] Executing action handler for ${functionName} with actualArgs:`, actualArgs);
 
-      // Extract ApiService at runtime with Convex layers
-      const apiService = await ApiService.pipe(
-        Effect.tap(Effect.logInfo("Interesting: ")),
+      // Get handlers from the group Tag in the provided Layer
+      const handlers = await groupTag.pipe(
         Effect.provide(apiLayer),
-        Effect.tap(Effect.logInfo("Interesting: ")),
         Effect.provide(ActionLayers<S>()),
-        Effect.tap(Effect.logInfo("Interesting: ")),
         Effect.provide(makeActionRuntimeLayer(confectSchemaDefinition, ctx)),
-        Effect.tap(Effect.logInfo("Interesting: ")),
-        Effect.tapError(Effect.logError),
         Effect.runPromise
       )
 
-      console.log(`[confect] ApiService provided for action: ${functionName}`);
+      console.log(`[confect] Got handlers for action: ${functionName}`);
 
-      // Extract handler from context
-      const handlers = pipe(
-        Context.getOption(apiService.context, groupServiceTag),
-        Option.getOrThrow
-      );
       const handler = handlers[functionName];
 
       if (!handler) {
@@ -949,22 +755,23 @@ type ConfectBuildTimeServices =
   | ActionLayers
 
 /**
- * Convert a Layer-based API to Convex registered functions.
+ * Convert an API definition to Convex registered functions.
  *
- * This is the final step that bridges the Effect Layer system to Convex's runtime.
+ * This bridges Effect Layers to Convex's runtime.
  * It takes:
  * - Schema definition (for Convex validators and database layers)
  * - API definition (pure data structure with groups and functions)
- * - API Layer (provides ApiService which contains runtime context with all group handlers)
+ * - API Layer that provides all group handlers
+ *
+ * The apiLayer signature is: `Layer<Groups, never, DefaultServices>`
+ * - Provides: All the group Tags (handlers for each group)
+ * - Requires: Default Convex services (QueryDB, MutationDB, etc.)
  *
  * Returns a nested object structure: { [groupName]: { [functionName]: RegisteredFunction } }
  *
- * The apiLayer can have requirements for Convex runtime services (QueryDB, MutationDB, etc.)
- * which will be provided automatically at runtime by the Convex context.
- *
  * @param schemaDefinition - Confect schema definition for the database
  * @param api - API definition (pure data)
- * @param apiLayer - Layer that provides ApiService (may require Convex runtime services)
+ * @param apiLayer - Layer that provides all group handlers
  * @returns Nested object of Convex registered functions
  *
  * @category Convex Integration
@@ -980,10 +787,9 @@ type ConfectBuildTimeServices =
  *   Api.add(postsGroup)
  * );
  *
- * const MyApiLive = Api.build(myApi).pipe(
- *   Layer.provide(UsersLive),
- *   Layer.provide(PostsLive)
- * );
+ * const UsersLive = Layer.effect(usersGroup, Effect.succeed({ ... }))
+ * const PostsLive = Layer.effect(postsGroup, Effect.succeed({ ... }))
+ * const MyApiLive = Layer.mergeAll(UsersLive, PostsLive)
  *
  * export default Api.serve(schemaDefinition, myApi, MyApiLive);
  * // Convex export: { users: { getUser: RegisteredQuery, ... }, posts: { ... } }
@@ -991,11 +797,11 @@ type ConfectBuildTimeServices =
 export const serve = <
   S extends GenericConfectSchema,
   Name extends string,
-  Groups extends Record<string, AnyGroup>,
+  Groups extends Group.ConfectApiGroup.AnyGroup,
 >(
   schemaDefinition: ConfectSchemaDefinition<S>,
-  api: ConfectApi<Name, Groups, any>,
-  apiLayer: Layer.Layer<ApiService, never, ConfectBuildTimeServices>
+  api: ConfectApi<Name, Groups>,
+  apiLayer: Layer.Layer<any, never, ConfectBuildTimeServices>
 ): ConvexApiServer<Groups> => {
   console.log("[confect] Building Convex API server...");
   console.log("[confect] Groups to serve:", Object.keys(api.groups));
@@ -1011,7 +817,7 @@ export const serve = <
             func.args,
             func.returns,
             apiLayer as never,
-            tagClass,  // Pass TagClass directly
+            group,
             functionName
           );
         }),
@@ -1022,7 +828,7 @@ export const serve = <
             func.args,
             func.returns,
             apiLayer as never,
-            tagClass,  // Pass TagClass directly
+            group,
             functionName
           );
         }),
@@ -1033,7 +839,7 @@ export const serve = <
             func.args,
             func.returns,
             apiLayer,
-            tagClass,  // Pass TagClass directly
+            group,
             functionName
           );
         }),

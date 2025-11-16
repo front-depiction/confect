@@ -38,13 +38,13 @@ import { equals } from "effect/Equal";
 import { SK, dual } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Order from "effect/Order";
-import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import * as Predicate from "effect/Predicate";
 import * as Record from "effect/Record";
 import type * as Scope from "effect/Scope";
 import * as String from "effect/String";
 import * as Types from "effect/Types";
 import type * as Function from "./Function";
+import * as Pipeable from "effect/Pipeable";
 
 // =============================================================================
 // Symbols and Type IDs
@@ -95,9 +95,13 @@ export type FunctionsToHandlers<Functions extends Function.ConfectApiFunction> =
 }
 const ConfectServiceSymbol: unique symbol = Symbol.for("@confect/ConfectService");
 type ConfectServiceSymbol = typeof ConfectServiceSymbol;
-export interface ConfectService<Name> {
-  [ConfectServiceSymbol]: Name
+
+
+export interface TagId<in out Name> {
+  [ConfectServiceSymbol]: Name;
 }
+export const Tag = <G extends ConfectApiGroup.AnyGroup>(group: G) => Context.GenericTag<TagId<GetName<G>>, FunctionsToHandlers<GetFunctions<G>>>(group.name);
+
 // TagClass removed - groups are now Context.Tags directly
 /**
  * API Group - collection of related functions.
@@ -107,20 +111,29 @@ export interface ConfectService<Name> {
  *
  * The group itself is a Context.Tag, so you can use it directly in Layers:
  * - yield* usersGroup to get the handlers
- * - Layer.effect(usersGroup, ...) to provide the handlers
+ * - Layer.effect() to provide the handlers
  *
  * @category Types
  * @since 1.0.0
  */
 export interface ConfectApiGroup<
-  in out Name extends string,
-  in out Functions extends Function.ConfectApiFunction = never,
-> extends Context.Tag<ConfectService<Name>, FunctionsToHandlers<Functions>> {
+  out Name extends string,
+  out Functions extends Function.ConfectApiFunction = never,
+> extends Pipeable.Pipeable {
   readonly [GroupTypeId]: GroupTypeId;
   readonly name: Name;
   readonly functions: Record.ReadonlyRecord<string, Functions>;
 }
 
+export declare namespace ConfectApiGroup {
+  /**
+ * Type alias for any ConfectApiGroup.
+ *
+ * @category Type Aliases
+ * @since 1.0.0
+ */
+  export type AnyGroup = ConfectApiGroup<string, Function.ConfectApiFunction>;
+}
 
 
 
@@ -156,7 +169,7 @@ export interface ConfectApiGroup<
  *   Group.add("createUser", Function.mutation("createUser")
  *     .args(Schema.Struct({
  *       name: Schema.String,
- *       email: Schema.String
+ *       email: Schema.Strig
  *     }))
  *     .returns(Schema.Struct({
  *       id: Schema.String,
@@ -172,11 +185,7 @@ export interface ConfectApiGroup<
 export const group = <Name extends string>(
   name: Name,
 ): ConfectApiGroup<Name> => {
-  // Create a Context.Tag first
-  const tag = Context.GenericTag<Name, {}>(name);
-
-  // Then enhance it with group-specific properties
-  return Object.assign(tag, {
+  return Object.assign({}, Pipeable.Prototype, {
     [GroupTypeId]: GroupTypeId,
     name,
     functions: {},
@@ -222,7 +231,7 @@ export const isGroup = (u: unknown): u is ConfectApiGroup<string, Function.Confe
  * const userGroup = Group.group("users").functions({ ... })
  * type Name = Group.GetName<typeof userGroup>  // "users"
  */
-export type GetName<G extends ConfectApiGroup<any, any>> =
+export type GetName<G> =
   G extends ConfectApiGroup<infer Name, any> ? Name : never;
 
 /**
@@ -318,8 +327,7 @@ export const add: <Fn extends Function.ConfectApiFunction>(
   (fn) =>
     (group) => {
       const functions = Record.set(group.functions, fn.name, fn);
-      const tag = Context.GenericTag<typeof group.name, {}>(group.name);
-      return Object.assign(tag, {
+      return Object.assign({}, Pipeable.Prototype, {
         [GroupTypeId]: GroupTypeId,
         name: group.name,
         functions
@@ -358,8 +366,7 @@ export const rename = <OldKey extends string, NewKey extends string>(
     const functions = Record.mapKeys(group.functions, (key) =>
       equals(key, oldKey) ? newKey : key,
     );
-    const tag = Context.GenericTag<typeof group.name, {}>(group.name);
-    return Object.assign(tag, {
+    return Object.assign({}, Pipeable.Prototype, {
       [GroupTypeId]: GroupTypeId,
       name: group.name,
       functions,
@@ -399,8 +406,7 @@ export const merge: <
   (other) =>
     (group) => {
       const functions = Record.union(group.functions, other.functions, SK);
-      const tag = Context.GenericTag<typeof group.name, {}>(group.name);
-      return Object.assign(tag, {
+      return Object.assign({}, Pipeable.Prototype, {
         [GroupTypeId]: GroupTypeId,
         name: group.name,
         functions
@@ -426,39 +432,4 @@ export const merge: <
  */
 export const byName = Order.mapInput(Order.string, (group: { name: string }) => group.name);
 
-// =============================================================================
-// Layer Building (Dependency Management)
-// =============================================================================
-
-/**
- * Groups are Context.Tags, so use Effect's Layer functions directly:
- *
- * ```typescript
- * const notesGroup = Group.group("notes").pipe(
- *   Group.add("list", listQuery),
- *   Group.add("create", createMutation)
- * )
- *
- * // Use the group directly as a tag!
- * const NotesLive = Layer.effect(notesGroup, Effect.gen(function*() {
- *   const db = yield* Database
- *   return {
- *     list: () => db.query("SELECT * FROM notes"),
- *     create: (args) => db.insert("notes", args)
- *   }
- * }))
- *
- * // Provide dependencies
- * const program = Effect.gen(function*() {
- *   const notes = yield* notesGroup  // Get the handlers
- *   yield* notes.list()
- * })
- * ```
- *
- * For scoped resources, use `Layer.scoped(group, effect)`.
- * For mocks, use `Layer.succeed(group, handlers)`.
- *
- * @category Layer Building
- * @since 1.0.0
- */
 
