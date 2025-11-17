@@ -939,3 +939,125 @@ describe("Plugin Utilities", () => {
     });
   });
 });
+
+// =============================================================================
+// Plugin on Non-Empty Layers
+// =============================================================================
+
+describe("Plugin on Non-Empty Layers", () => {
+  test("Layer.updateService piped onto layer that uses MutationDB", async () => {
+    let pluginCalled = false;
+
+    // Define a service Tag
+    class TasksService extends Context.Tag("TasksService")<
+      TasksService,
+      { createTask: (text: string) => Effect.Effect<string> }
+    >() {}
+
+    // Create a layer that uses MutationDB
+    const TasksServiceLive = Layer.effect(
+      TasksService,
+      Effect.gen(function* () {
+        const db = yield* MutationDB;
+
+        return {
+          createTask: (text) =>
+            Effect.gen(function* () {
+              return yield* db.insert("tasks", { text });
+            }),
+        };
+      })
+    );
+
+    // Create an update using Layer.updateService
+    const trackingUpdate = Layer.updateService(MutationDB, (base) => ({
+      ...base,
+      insert: (table, value) =>
+        Effect.gen(function* () {
+          pluginCalled = true;
+          return yield* base.insert(table, value);
+        }),
+    }));
+
+    // Pipe update onto TasksServiceLive, then provide MutationDBLive
+    const Enhanced = TasksServiceLive.pipe(
+      trackingUpdate,
+      Layer.provide(MutationDBLive)
+    );
+
+    // Use the enhanced layer
+    const program = Effect.gen(function* () {
+      const tasks = yield* TasksService;
+      return yield* tasks.createTask("Test task");
+    });
+
+    await Effect.runPromise(program.pipe(Effect.provide(Enhanced)));
+
+    // Verify: did the plugin wrap the MutationDB that TasksServiceLive uses?
+    expect(pluginCalled).toBe(true);
+  });
+
+  test("multiple Layer.updateService on layer with dependencies", async () => {
+    const order: string[] = [];
+
+    class TasksService extends Context.Tag("TasksService")<
+      TasksService,
+      { createTask: (text: string) => Effect.Effect<string> }
+    >() {}
+
+    const TasksServiceLive = Layer.effect(
+      TasksService,
+      Effect.gen(function* () {
+        const db = yield* MutationDB;
+        return {
+          createTask: (text) => db.insert("tasks", { text }),
+        };
+      })
+    );
+
+    const update1 = Layer.updateService(MutationDB, (base) => ({
+      ...base,
+      insert: (table, value) =>
+        Effect.gen(function* () {
+          order.push("update1");
+          return yield* base.insert(table, value);
+        }),
+    }));
+
+    const update2 = Layer.updateService(MutationDB, (base) => ({
+      ...base,
+      insert: (table, value) =>
+        Effect.gen(function* () {
+          order.push("update2");
+          return yield* base.insert(table, value);
+        }),
+    }));
+
+    const update3 = Layer.updateService(MutationDB, (base) => ({
+      ...base,
+      insert: (table, value) =>
+        Effect.gen(function* () {
+          order.push("update3");
+          return yield* base.insert(table, value);
+        }),
+    }));
+
+    // Pipe multiple updates onto the service layer
+    const Enhanced = TasksServiceLive.pipe(
+      update1,
+      update2,
+      update3,
+      Layer.provide(MutationDBLive)
+    );
+
+    const program = Effect.gen(function* () {
+      const tasks = yield* TasksService;
+      return yield* tasks.createTask("Test");
+    });
+
+    await Effect.runPromise(program.pipe(Effect.provide(Enhanced)));
+
+    // Left-to-right execution with Layer.updateService: update1 -> update2 -> update3 -> base
+    expect(order).toEqual(["update1", "update2", "update3"]);
+  });
+});

@@ -550,6 +550,12 @@ export const byFunctionCount = Order.mapInput(
 // Convex Integration
 // =============================================================================
 
+
+type RegisteredFunction =
+  | RegisteredQuery<"public", DefaultFunctionArgs, any>
+  | RegisteredMutation<"public", DefaultFunctionArgs, any>
+  | RegisteredAction<"public", DefaultFunctionArgs, any>
+
 /**
  * Type helper: Extract ConvexApiServer type from API groups.
  *
@@ -559,12 +565,7 @@ export const byFunctionCount = Order.mapInput(
  * @internal
  */
 type ConvexApiServer<Groups extends Group.ConfectApiGroup.AnyGroup> = {
-  [K in Group.GetName<Groups>]: Record<
-    string,
-    | RegisteredQuery<"public", DefaultFunctionArgs, any>
-    | RegisteredMutation<"public", DefaultFunctionArgs, any>
-    | RegisteredAction<"public", DefaultFunctionArgs, any>
-  >
+  [K in Group.GetName<Groups>]: Record<string, RegisteredFunction>
 };
 
 
@@ -919,9 +920,9 @@ export const serve = <
     console.log(`[confect] Processing group: ${groupName}`);
 
     // Precompute merged layers once per group (user layers + defaults)
-    const queryGroupLayer = Layer.provideMerge(apiLayer, QueryLayers<S>()) as Layer.Layer<ROut, never, QueryRuntimeServices<S>>;
-    const mutationGroupLayer = Layer.provideMerge(apiLayer, MutationLayers<S>()) as Layer.Layer<ROut, never, MutationRuntimeServices<S>>;
-    const actionGroupLayer = Layer.provideMerge(apiLayer, ActionLayers<S>()) as Layer.Layer<ROut, never, ActionRuntimeServices<S>>;
+    const queryGroupLayer = Layer.provide(apiLayer, QueryLayers()) as Layer.Layer<ROut, never, QueryRuntimeServices<S>>;
+    const mutationGroupLayer = Layer.provide(apiLayer, MutationLayers()) as Layer.Layer<ROut, never, MutationRuntimeServices<S>>;
+    const actionGroupLayer = Layer.provide(apiLayer, ActionLayers()) as Layer.Layer<ROut, never, ActionRuntimeServices<S>>;
 
     return Record.map(group.functions, (func, functionName) => {
       console.log(`[confect] Registering function: [${groupName}].${functionName}. Type: ${func.functionType}`);
