@@ -17,7 +17,6 @@ import * as Schema from "effect/Schema";
 import { describe, expect, expectTypeOf, test } from "vitest";
 import * as Function from "./Function";
 import * as Group from "./Group";
-import { MutationDB } from "../../server";
 
 // =============================================================================
 // Test Data
@@ -663,49 +662,6 @@ describe("Layer Building - Complex Dependencies", () => {
     });
   });
 
-  describe("Group Dependencies - Circular Dependencies", () => {
-    test("prevents direct circular dependencies at type level", () => {
-      // This test demonstrates that circular dependencies create type errors
-      // In practice, you'd restructure to avoid this pattern
-
-      const funcA = Function.query("funcA")
-        .args(TestArgsSchema)
-        .returns(TestReturnsSchema);
-
-      const groupA = Group.query("a").pipe(
-        Group.add(funcA),
-      );
-
-      const funcB = Function.mutation("funcB")
-        .args(TestArgsSchema)
-        .returns(TestReturnsSchema);
-
-      const groupB = Group.mutation("b").pipe(
-        Group.add(funcB),
-      );
-      void groupB; // Used below
-
-
-      // GroupA depends on GroupB - this is fine
-      const GroupALive = Group.build(groupA,
-        Effect.gen(function* () {
-          const bHandlers = yield* Group.Tag(groupB);
-
-          return {
-            funcA: () =>
-              bHandlers.funcB({ id: "test-id" }).pipe(Effect.map(() => ({ result: "a" }))),
-          };
-        })
-      );
-
-      void GroupALive;
-
-      // If GroupB tried to depend on GroupA, we'd have a circular dependency
-      // This would fail at runtime when trying to provide the layers
-      // Layer.provide(GroupALive.pipe(Layer.provide(GroupBLive))) // Would fail!
-
-    });
-  });
 
   describe("Group Dependencies - Hierarchical Dependencies", () => {
     test("supports multi-level dependency chains", async () => {
@@ -738,11 +694,9 @@ describe("Layer Building - Complex Dependencies", () => {
         Group.add(getProfileFn),
       );
 
-      const someMutationGroup = Group.query("myService")
 
       const ProfileLive = Group.build(profileGroup,
         Effect.gen(function* () {
-          yield* Group.Tag(someMutationGroup)
           const users = yield* Group.Tag(usersGroup);
 
           return {
@@ -827,11 +781,11 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       // Third group depends on both
-      const initFn = Function.query("init")
+      const initFn = Function.mutation("init")
         .args(TestArgsSchema)
         .returns(TestReturnsSchema);
 
-      const appGroup = Group.query("app").pipe(
+      const appGroup = Group.mutation("app").pipe(
         Group.add(initFn),
       );
 

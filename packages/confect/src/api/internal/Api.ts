@@ -908,7 +908,7 @@ export const serve = <
   S extends GenericConfectSchema,
   Name extends string,
   Groups extends Group.ConfectApiGroup.AnyGroup,
-  ROut extends Group.Identifier<Group.GetName<Groups>>
+  ROut extends Group.Identifier<Groups>
 >(
   schemaDefinition: ConfectSchemaDefinition<S>,
   api: ConfectApi<Name, Groups>,

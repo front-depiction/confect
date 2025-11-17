@@ -95,19 +95,25 @@ export type FunctionsToHandlers<Functions extends Function.ConfectApiFunction> =
 }>
 const ConfectServiceSymbol: unique symbol = Symbol.for("@confect/ConfectService");
 type ConfectServiceSymbol = typeof ConfectServiceSymbol;
-
-
-export interface Identifier<Name, Kind> {
+export interface Id<Name, Kind> {
   [ConfectServiceSymbol]: {
     name: Name
     kind: Kind
   };
 }
+type QueryGroup<Name> = Id<Name, "Query">
+type MutationGroup<Name> = Id<Name, "Mutation">
+type ActionGroup<Name> = Id<Name, "Action">
 
+export type Identifier<G extends ConfectApiGroup.AnyGroup> = GetKind<G> extends "Query"
+  ? QueryGroup<GetName<G>>
+  : GetKind<G> extends "Mutation"
+  ? MutationGroup<GetName<G>>
+  : GetKind<G> extends "Action"
+  ? ActionGroup<GetName<G>>
+  : never
 
-export type Tag<G extends ConfectApiGroup.AnyGroup> = Context.Tag<Identifier<GetName<G>, GetKind<G>>, HandlersFor<G>>
-
-
+export type Tag<G extends ConfectApiGroup.AnyGroup> = Context.Tag<Identifier<G>, HandlersFor<G>>
 export const Tag = <G extends ConfectApiGroup.AnyGroup>(group: G): Tag<G> => Context.GenericTag(group.name)
 
 // TagClass removed - groups are now Context.Tags directly
@@ -373,22 +379,21 @@ export type HandlersFor<G extends ConfectApiGroup<any, any, any>> = FunctionsToH
  * @since 1.0.0
  *
  */
-
 export const build: {
   <E, R, G extends ConfectApiGroup<any, any, "Query">, T extends Tag<G>>(
     group: G,
-    effect: Effect.Effect<T["Service"], E, Exclude<R, MutationExclusiveServices | Identifier<string, "Mutation" | "Action">>>
-  ): Layer.Layer<T["Identifier"], E, R>
+    effect: Effect.Effect<Context.Tag.Service<T>, E, Exclude<R, MutationExclusiveServices | MutationGroup<string> | ActionGroup<string>>>
+  ): Layer.Layer<Context.Tag.Identifier<T>, E, R>
 
   <E, R, G extends ConfectApiGroup<any, any, "Mutation">, T extends Tag<G>>(
     group: G,
-    effect: Effect.Effect<T["Service"], E, R>
-  ): Layer.Layer<T["Identifier"], E, R>
+    effect: Effect.Effect<Context.Tag.Service<T>, E, R>
+  ): Layer.Layer<Context.Tag.Identifier<T>, E, R>
 
   <E, R, G extends ConfectApiGroup<any, any, "Action">, T extends Tag<G>>(
     group: G,
-    effect: Effect.Effect<T["Service"], E, R>
-  ): Layer.Layer<T["Identifier"], E, R>
+    effect: Effect.Effect<Context.Tag.Service<T>, E, R>
+  ): Layer.Layer<Context.Tag.Identifier<T>, E, R>
 } = ((group: any, effect: any) => Layer.effect(Tag(group), effect)) as any;
 
 // =============================================================================
