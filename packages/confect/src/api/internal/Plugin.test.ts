@@ -784,4 +784,58 @@ describe("Plugin Utilities", () => {
     // Left-to-right execution: plugin1 -> plugin2
     expect(events).toEqual(["a", "b"]);
   });
+
+  test("compose plugins for different services", async () => {
+    // Define a second service
+    class LogService extends Context.Tag("LogService")<
+      LogService,
+      { log: (msg: string) => Effect.Effect<void> }
+    >() { }
+
+    const logs: string[] = [];
+    const LogServiceLive = Layer.succeed(LogService, {
+      log: (msg) => Effect.sync(() => { logs.push(msg); })
+    });
+
+    const events: string[] = [];
+
+    // Plugin for MutationDB
+    const withDBLogging = Plugin.forTag(MutationDB, (base) => ({
+      insert: (table, value) =>
+        Effect.gen(function* () {
+          events.push("db-plugin");
+          return yield* base.insert(table, value);
+        }),
+    }));
+
+    // Plugin for LogService (different service)
+    const withLogPrefix = Plugin.forTag(LogService, (base) => ({
+      log: (msg) =>
+        Effect.gen(function* () {
+          events.push("log-plugin");
+          return yield* base.log(`[PREFIX] ${msg}`);
+        }),
+    }));
+
+    // Compose plugins for different services
+    const combined = Plugin.combineAll([withDBLogging, withLogPrefix]);
+    const Enhanced = Layer.empty.pipe(
+      combined,
+      Layer.provide(Layer.provideMerge(MutationDBLive, LogServiceLive))
+    );
+
+    const program = Effect.gen(function* () {
+      const db = yield* MutationDB;
+      const logger = yield* LogService;
+      yield* db.insert("notes", { text: "test" });
+      yield* logger.log("hello");
+    });
+
+    await Effect.runPromise(program.pipe(Effect.provide(Enhanced)));
+
+    // Both plugins executed
+    expect(events).toEqual(["db-plugin", "log-plugin"]);
+    // Log was prefixed
+    expect(logs).toEqual(["[PREFIX] hello"]);
+  });
 });
