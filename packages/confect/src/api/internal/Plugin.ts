@@ -40,6 +40,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Function from "effect/Function";
 import * as Option from "effect/Option";
+import * as Types from "effect/Types";
 // =============================================================================
 // Core Plugin Types
 // =============================================================================
@@ -180,8 +181,8 @@ export const effectForTag = <S, I, E2 = never, R2 = never>(
  * @category Utilities
  * @since 1.0.0
  */
-export const identity: Plugin<never, never, never> = <A, E, R>(self: Layer.Layer<A, E, R>): Layer.Layer<A, E, R> => self
-
+export const identity: Identity = <A, E, R>(self: Layer.Layer<A, E, R>): Layer.Layer<A, E, R> => self
+type Identity = Plugin<never, never, never>;
 /**
  * Combine two plugins into a single plugin.
  * Plugins execute right-to-left: `that` executes before `self`.
@@ -208,8 +209,9 @@ export const combine = <I, I2, E = never, E2 = never, R = never, R2 = never>(
 /**
  * Compose multiple plugins into a single plugin.
  *
- * Plugins execute in **left-to-right** order (as written in the array).
- * This is more intuitive than the pipe order.
+ * Plugins are applied in array order (left to right).
+ * This is equivalent to chaining .pipe() calls.
+ * **Note**: Execution order is right-to-left (last plugin executes first).
  *
  * @param plugins - Array of plugins to compose
  * @returns Single plugin that applies all transformations
@@ -226,20 +228,18 @@ export const combine = <I, I2, E = never, E2 = never, R = never, R2 = never>(
  * ]);
  *
  * const Enhanced = Layer.empty.pipe(allPlugins, Layer.provide(MutationDBLive));
- * // Execution: withLogging -> withValidation -> withTriggers -> base (left-to-right)
+ * // Equivalent to: Layer.empty.pipe(withLogging, withValidation, withTriggers, Layer.provide(MutationDBLive))
+ * // Execution: withTriggers -> withValidation -> withLogging -> base
  * ```
  */
-export const compose = <I, E = never, R = never>(
-  plugins: Array<Plugin<I, E, R>>
-): Plugin<I, E, R> =>
-  <A, E2, R2>(self: Layer.Layer<A, E2, R2>): Layer.Layer<A | I, E | E2, I | R | R2> => combineAll(plugins)(self)
+export const compose = <const Ps extends Identity[]>(
+  plugins: Ps
+) =>
+  <A, E2, R2>(self: Layer.Layer<A, E2, R2>) => combineAll(plugins)(self)
 
 /**
  * Compose all plugins in an array into a single plugin.
  * Returns identity plugin if array is empty.
- *
- * Plugins execute in **left-to-right** order (as written in the array).
- * This uses reduceRight internally to build the composition.
  *
  * @param plugins - Array of plugins to compose (can be empty)
  * @returns Single plugin, or identity if empty
@@ -249,18 +249,42 @@ export const compose = <I, E = never, R = never>(
  *
  * @example
  * ```typescript
- * const allPlugins = Plugin.combineAll([withLogging, withValidation, withAudit]);
- * // Execution: withLogging -> withValidation -> withAudit -> base (left-to-right)
- *
  * const maybePlugins = config.enableLogging ? [withLogging] : [];
- * const optional = Plugin.combineAll(maybePlugins);
+ * const allPlugins = Plugin.combineAll(maybePlugins);
  * // Safe to use even with empty array
  * ```
  */
-export const combineAll = <I, E = never, R = never>(
-  plugins: ReadonlyArray<Plugin<I, E, R>>
-): Plugin<I, E, R> =>
+export const combineAll = <const Ps extends Identity[]>(
+  plugins: Ps
+): Plugin<
+  InputsOf<Ps>,
+  ErrorsOf<Ps>,
+  RequirementsOf<Ps>
+> =>
   plugins.reduceRight(
     (acc, plugin) => combine(acc, plugin),
     identity
   );
+
+
+type InputOf<P> = P extends Plugin<infer I, infer _, infer _> ? I : never;
+type ErrorOf<P> = P extends Plugin<infer _, infer E, infer _> ? E : never;
+type RequirementOf<P> = P extends Plugin<infer _, infer _, infer R> ? R : never;
+
+type InputsOf<Ps extends readonly Identity[]> = Ps[number] extends infer P
+  ? P extends Identity
+  ? InputOf<P>
+  : never
+  : never;
+
+type ErrorsOf<Ps extends readonly Identity[]> = Ps[number] extends infer P
+  ? P extends Identity
+  ? ErrorOf<P>
+  : never
+  : never;
+
+type RequirementsOf<Ps extends readonly Identity[]> = Ps[number] extends infer P
+  ? P extends Identity
+  ? RequirementOf<P>
+  : never
+  : never;

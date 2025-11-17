@@ -838,4 +838,104 @@ describe("Plugin Utilities", () => {
     // Log was prefixed
     expect(logs).toEqual(["[PREFIX] hello"]);
   });
+
+  test("compose plugins for three different services with type inference", async () => {
+    // Define three different services
+    class ServiceA extends Context.Tag("ServiceA")<
+      ServiceA,
+      { doA: () => Effect.Effect<string> }
+    >() { }
+
+    class ServiceB extends Context.Tag("ServiceB")<
+      ServiceB,
+      { doB: () => Effect.Effect<number> }
+    >() { }
+
+    class ServiceC extends Context.Tag("ServiceC")<
+      ServiceC,
+      { doC: () => Effect.Effect<boolean> }
+    >() { }
+
+    const ServiceALive = Layer.succeed(ServiceA, {
+      doA: () => Effect.succeed("base-a")
+    });
+
+    const ServiceBLive = Layer.succeed(ServiceB, {
+      doB: () => Effect.succeed(42)
+    });
+
+    const ServiceCLive = Layer.succeed(ServiceC, {
+      doC: () => Effect.succeed(true)
+    });
+
+    const events: string[] = [];
+
+    // Plugin for ServiceA
+    const pluginA = Plugin.forTag(ServiceA, (base) => ({
+      doA: () =>
+        Effect.gen(function* () {
+          events.push("plugin-a");
+          const result = yield* base.doA();
+          return `[A] ${result}`;
+        }),
+    }));
+
+    // Plugin for ServiceB
+    const pluginB = Plugin.forTag(ServiceB, (base) => ({
+      doB: () =>
+        Effect.gen(function* () {
+          events.push("plugin-b");
+          const result = yield* base.doB();
+          return result * 2;
+        }),
+    }));
+
+    // Plugin for ServiceC
+    const pluginC = Plugin.forTag(ServiceC, (base) => ({
+      doC: () =>
+        Effect.gen(function* () {
+          events.push("plugin-c");
+          const result = yield* base.doC();
+          return !result;
+        }),
+    }));
+
+    // Compose three plugins for different services
+    // Type inference should properly union all three service requirements
+    const combined = Plugin.combineAll([pluginA, pluginB, pluginC]);
+
+    const Enhanced = Layer.empty.pipe(
+      combined,
+      Layer.provide(
+        Layer.provideMerge(
+          ServiceALive,
+          Layer.provideMerge(ServiceBLive, ServiceCLive)
+        )
+      )
+    );
+
+    const program = Effect.gen(function* () {
+      const a = yield* ServiceA;
+      const b = yield* ServiceB;
+      const c = yield* ServiceC;
+
+      const resultA = yield* a.doA();
+      const resultB = yield* b.doB();
+      const resultC = yield* c.doC();
+
+      return { resultA, resultB, resultC };
+    });
+
+    const result = await Effect.runPromise(program.pipe(Effect.provide(Enhanced)));
+
+    // All three plugins executed
+    expect(events).toEqual(["plugin-a", "plugin-b", "plugin-c"]);
+
+    // All three services were properly enhanced
+    expect(result).toEqual({
+      resultA: "[A] base-a",
+      resultB: 84, // 42 * 2
+      resultC: false, // !true
+    });
+  });
 });
