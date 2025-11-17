@@ -333,12 +333,13 @@ export const compose = <const Ps extends Identity[]>(
  *
  * ## Key Features
  *
- * - **Left-to-right execution**: Plugins execute in array order
+ * - **Left-to-right execution**: Plugins execute in array order (intuitive onion model)
  * - **Type-safe heterogeneous composition**: Properly infers unions when composing plugins for different services
  * - **Safe with empty arrays**: Returns identity plugin when empty
  *
- * Uses `reduceRight` internally to build the composition from right to left,
- * which results in left-to-right execution order.
+ * Uses `reduceRight` to build the composition, ensuring left-to-right
+ * execution order that directly matches the array order for easier
+ * reasoning about the onion layering.
  *
  * @param plugins - Tuple of plugins to compose (can be empty)
  * @returns Single plugin with properly unioned I, E, R types
@@ -374,7 +375,7 @@ export const combineAll = <const Ps extends Identity[]>(
   RequirementsOf<Ps>
 > =>
   plugins.reduceRight(
-    (acc, plugin) => combine(acc, plugin),
+    (acc, plugin) => combine(plugin, acc),
     identity
   );
 

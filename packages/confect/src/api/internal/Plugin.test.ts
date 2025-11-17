@@ -750,8 +750,8 @@ describe("Plugin Utilities", () => {
 
     await Effect.runPromise(program.pipe(Effect.provide(Enhanced)));
 
-    // Right-to-left execution due to Function.compose: plugin3 -> plugin2 -> plugin1
-    expect(events).toEqual(["p3", "p2", "p1"]);
+    // Left-to-right execution (intuitive onion model): plugin1 -> plugin2 -> plugin3
+    expect(events).toEqual(["p1", "p2", "p3"]);
   });
 
   test("combineAll with empty array returns identity", () => {
@@ -790,8 +790,66 @@ describe("Plugin Utilities", () => {
 
     await Effect.runPromise(program.pipe(Effect.provide(Enhanced)));
 
-    // Right-to-left execution due to Function.compose: plugin2 -> plugin1
-    expect(events).toEqual(["b", "a"]);
+    // Left-to-right execution (intuitive onion model): plugin1 -> plugin2
+    expect(events).toEqual(["a", "b"]);
+  });
+
+  test("combineAll demonstrates clear onion model (before/after)", async () => {
+    const events: string[] = [];
+
+    // Three plugins that log before and after calling base
+    const logging = Plugin.forTag(MutationDB, (base) => ({
+      insert: (table, value) =>
+        Effect.gen(function* () {
+          events.push("logging:before");
+          const result = yield* base.insert(table, value);
+          events.push("logging:after");
+          return result;
+        }),
+    }));
+
+    const validation = Plugin.forTag(MutationDB, (base) => ({
+      insert: (table, value) =>
+        Effect.gen(function* () {
+          events.push("validation:before");
+          const result = yield* base.insert(table, value);
+          events.push("validation:after");
+          return result;
+        }),
+    }));
+
+    const audit = Plugin.forTag(MutationDB, (base) => ({
+      insert: (table, value) =>
+        Effect.gen(function* () {
+          events.push("audit:before");
+          const result = yield* base.insert(table, value);
+          events.push("audit:after");
+          return result;
+        }),
+    }));
+
+    // Combine in intuitive order: logging -> validation -> audit -> base
+    const combined = Plugin.combineAll([logging, validation, audit]);
+    const Enhanced = Layer.context<MutationDB>().pipe(combined, Layer.provide(MutationDBLive));
+
+    const program = Effect.gen(function* () {
+      const db = yield* MutationDB;
+      yield* db.insert("notes", { text: "test" });
+    });
+
+    await Effect.runPromise(program.pipe(Effect.provide(Enhanced)));
+
+    // Onion model: outer layers execute first (going in), inner layers execute first (going out)
+    // Request flow: logging -> validation -> audit -> base
+    // Response flow: base -> audit -> validation -> logging
+    expect(events).toEqual([
+      "logging:before",     // Outermost layer (first in array)
+      "validation:before",  // Middle layer
+      "audit:before",       // Innermost layer (last in array, closest to base)
+      "audit:after",        // Innermost returns first
+      "validation:after",   // Middle returns
+      "logging:after",      // Outermost returns last
+    ]);
   });
 
   test("compose plugins for different services", async () => {
