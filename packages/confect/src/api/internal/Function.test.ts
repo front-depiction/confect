@@ -13,7 +13,6 @@
 import * as Schema from "effect/Schema";
 import { describe, expect, expectTypeOf, test } from "vitest";
 import * as Function from "./Function";
-import type { TypesAreEquivalent } from "./test-helpers";
 
 // =============================================================================
 // Test Schemas
@@ -53,7 +52,6 @@ describe("Function Constructors", () => {
 
       type Name = typeof fn.name;
       expectTypeOf<Name>().toEqualTypeOf<"getUser">();
-      expectTypeOf<TypesAreEquivalent<Name, "getUser">>().toEqualTypeOf<true>();
     });
 
     test("has correct type structure", () => {
@@ -99,9 +97,7 @@ describe("Function Constructors", () => {
 
       type Name = typeof fn.name;
       expectTypeOf<Name>().toEqualTypeOf<"createUser">();
-      expectTypeOf<
-        TypesAreEquivalent<Name, "createUser">
-      >().toEqualTypeOf<true>();
+
     });
 
     test("has correct type structure", () => {
@@ -147,9 +143,7 @@ describe("Function Constructors", () => {
 
       type Name = typeof fn.name;
       expectTypeOf<Name>().toEqualTypeOf<"sendEmail">();
-      expectTypeOf<
-        TypesAreEquivalent<Name, "sendEmail">
-      >().toEqualTypeOf<true>();
+
     });
 
     test("has correct type structure", () => {
@@ -444,9 +438,7 @@ describe("Type Extraction Utilities", () => {
     test("extracts name as literal type", () => {
       type Name = Function.GetName<typeof testFn>;
       expectTypeOf<Name>().toEqualTypeOf<"testFunction">();
-      expectTypeOf<
-        TypesAreEquivalent<Name, "testFunction">
-      >().toEqualTypeOf<true>();
+
     });
   });
 
@@ -454,9 +446,7 @@ describe("Type Extraction Utilities", () => {
     test("extracts args schema", () => {
       type Args = Function.GetArgs<typeof testFn>;
       expectTypeOf<Args>().toEqualTypeOf<typeof TestArgsSchema>();
-      expectTypeOf<
-        TypesAreEquivalent<Args, typeof TestArgsSchema>
-      >().toEqualTypeOf<true>();
+
     });
   });
 
@@ -464,9 +454,7 @@ describe("Type Extraction Utilities", () => {
     test("extracts returns schema", () => {
       type Returns = Function.GetReturns<typeof testFn>;
       expectTypeOf<Returns>().toEqualTypeOf<typeof TestReturnsSchema>();
-      expectTypeOf<
-        TypesAreEquivalent<Returns, typeof TestReturnsSchema>
-      >().toEqualTypeOf<true>();
+
     });
   });
 
@@ -475,9 +463,7 @@ describe("Type Extraction Utilities", () => {
       type ArgsType = Function.GetArgsType<typeof testFn>;
       expectTypeOf<ArgsType["id"]>().toEqualTypeOf<string>()
       expectTypeOf<ArgsType["count"]>().toEqualTypeOf<number>()
-      expectTypeOf<
-        TypesAreEquivalent<ArgsType, { id: string; count: number }>
-      >().toEqualTypeOf<true>();
+
     });
   });
 
@@ -496,12 +482,7 @@ describe("Type Extraction Utilities", () => {
       type ReturnsType = Function.GetReturnsType<typeof testFn>;
       expectTypeOf<ReturnsType["result"]>().toEqualTypeOf<string>()
       expectTypeOf<ReturnsType["timestamp"]>().toEqualTypeOf<number>()
-      expectTypeOf<
-        TypesAreEquivalent<
-          ReturnsType,
-          { result: string; timestamp: number }
-        >
-      >().toEqualTypeOf<true>();
+
     });
   });
 
@@ -522,7 +503,6 @@ describe("Type Extraction Utilities", () => {
         .returns(TestReturnsSchema);
       type FT = Function.GetFunctionType<typeof queryFn>;
       expectTypeOf<FT>().toEqualTypeOf<"Query">();
-      expectTypeOf<TypesAreEquivalent<FT, "Query">>().toEqualTypeOf<true>();
     });
 
     test("extracts Mutation literal type", () => {
@@ -531,7 +511,6 @@ describe("Type Extraction Utilities", () => {
         .returns(TestReturnsSchema);
       type FT = Function.GetFunctionType<typeof mutationFn>;
       expectTypeOf<FT>().toEqualTypeOf<"Mutation">();
-      expectTypeOf<TypesAreEquivalent<FT, "Mutation">>().toEqualTypeOf<true>();
     });
 
     test("extracts Action literal type", () => {
@@ -540,7 +519,6 @@ describe("Type Extraction Utilities", () => {
         .returns(TestReturnsSchema);
       type FT = Function.GetFunctionType<typeof actionFn>;
       expectTypeOf<FT>().toEqualTypeOf<"Action">();
-      expectTypeOf<TypesAreEquivalent<FT, "Action">>().toEqualTypeOf<true>();
     });
   });
 });

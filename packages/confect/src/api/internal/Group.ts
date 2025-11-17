@@ -36,11 +36,14 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { equals } from "effect/Equal";
 import { SK } from "effect/Function";
+import * as Layer from "effect/Layer";
 import * as Order from "effect/Order";
 import * as Predicate from "effect/Predicate";
 import * as Record from "effect/Record";
 import type * as Function from "./Function";
 import * as Pipeable from "effect/Pipeable";
+import type { MutationExclusiveServices, MutationServices, QueryServices } from "./Services";
+import * as Types from "effect/Types";
 
 // =============================================================================
 // Symbols and Type IDs
@@ -57,6 +60,7 @@ export const GroupTypeId: unique symbol = Symbol.for("@confect/Group");
  * @since 1.0.0
  */
 export type GroupTypeId = typeof GroupTypeId;
+
 
 // =============================================================================
 // Group Types
@@ -80,7 +84,7 @@ export type GroupTypeId = typeof GroupTypeId;
  * type Handlers = FunctionsToHandlers<MyFunctions>
  * // { getUser: (...) => Effect, createUser: (...) => Effect }
  */
-export type FunctionsToHandlers<Functions extends Function.ConfectApiFunction> = {
+export type FunctionsToHandlers<Functions extends Function.ConfectApiFunction> = Types.Simplify<{
   [K in Function.GetName<Functions>]: (
     args: Function.GetArgsType<Extract<Functions, { readonly name: K }>>
   ) => Effect.Effect<
@@ -88,22 +92,35 @@ export type FunctionsToHandlers<Functions extends Function.ConfectApiFunction> =
     any,   // E is open
     never  // R must be never (handlers close over deps)
   >
-}
+}>
 const ConfectServiceSymbol: unique symbol = Symbol.for("@confect/ConfectService");
 type ConfectServiceSymbol = typeof ConfectServiceSymbol;
 
 
-export interface TagId<in out Name extends string> {
-  [ConfectServiceSymbol]: Name;
+export interface Identifier<Name, Kind> {
+  [ConfectServiceSymbol]: {
+    name: Name
+    kind: Kind
+  };
 }
-export const Tag = <G extends ConfectApiGroup.AnyGroup>(group: G) => Context.GenericTag<TagId<GetName<G>>, FunctionsToHandlers<GetFunctions<G>>>(group.name);
+
+
+export type Tag<G extends ConfectApiGroup.AnyGroup> = Context.Tag<Identifier<GetName<G>, GetKind<G>>, HandlersFor<G>>
+
+
+export const Tag = <G extends ConfectApiGroup.AnyGroup>(group: G): Tag<G> => Context.GenericTag(group.name)
 
 // TagClass removed - groups are now Context.Tags directly
 /**
  * API Group - collection of related functions.
  *
- * Groups are simple namespaced containers for functions.
- * They don't propagate E/R - that's handled at the function level.
+ * Groups enforce CQRS (Command Query Responsibility Segregation) at the type level:
+ * - Query groups contain only query functions
+ * - Mutation groups contain only mutation functions
+ * - Action groups contain only action functions
+ *
+ * This prevents accidentally mixing function types and ensures handlers can safely
+ * access the appropriate services (QueryServices for queries, MutationServices for mutations).
  *
  * The group itself is a Context.Tag, so you can use it directly in Layers:
  * - yield* usersGroup to get the handlers
@@ -115,10 +132,12 @@ export const Tag = <G extends ConfectApiGroup.AnyGroup>(group: G) => Context.Gen
 export interface ConfectApiGroup<
   out Name extends string,
   out Functions extends Function.ConfectApiFunction = never,
+  out Kind extends Function.Kind = never,
 > extends Pipeable.Pipeable {
   readonly [GroupTypeId]: GroupTypeId;
   readonly name: Name;
   readonly functions: Record.ReadonlyRecord<string, Functions>;
+  readonly kind: Kind;
 }
 
 export declare namespace ConfectApiGroup {
@@ -128,7 +147,7 @@ export declare namespace ConfectApiGroup {
  * @category Type Aliases
  * @since 1.0.0
  */
-  export type AnyGroup = ConfectApiGroup<string, Function.ConfectApiFunction>;
+  export type AnyGroup = ConfectApiGroup<string, Function.ConfectApiFunction, Function.Kind>;
 }
 
 
@@ -138,13 +157,30 @@ export declare namespace ConfectApiGroup {
 // =============================================================================
 
 /**
- * Create an empty group with the given name.
+ * Internal: Create an empty group with the given name and kind.
  *
- * Groups are simple namespaced containers for functions.
- * Use `.pipe()` with `Group.add()` to add functions.
+ * @internal
+ */
+const group = <Name extends string, Kind extends Function.Kind>(
+  name: Name,
+  kind: Kind,
+): ConfectApiGroup<Name, never, Kind> => {
+  return Object.assign({}, Pipeable.Prototype, {
+    [GroupTypeId]: GroupTypeId,
+    name,
+    functions: {},
+    kind,
+  }) as any;
+};
+
+/**
+ * Create an empty query group.
+ *
+ * Query groups can only contain query functions.
+ * Use `.pipe()` with `Group.add()` to add query functions.
  *
  * @param name - Group name (preserved as literal type)
- * @returns Empty group ready for piping
+ * @returns Empty query group ready for piping
  *
  * @category Constructors
  * @since 1.0.0
@@ -152,41 +188,40 @@ export declare namespace ConfectApiGroup {
  * @example
  * import * as Group from "./internal/Group"
  * import * as Function from "./internal/Function"
- * import * as Schema from "effect/Schema"
  *
- * const userGroup = Group.group("users").pipe(
- *   Group.add("getUser", Function.query("getUser")
- *     .args(Schema.Struct({ id: Schema.String }))
- *     .returns(Schema.Struct({
- *       id: Schema.String,
- *       name: Schema.String,
- *       email: Schema.String
- *     }))),
- *   Group.add("createUser", Function.mutation("createUser")
- *     .args(Schema.Struct({
- *       name: Schema.String,
- *       email: Schema.Strig
- *     }))
- *     .returns(Schema.Struct({
- *       id: Schema.String,
- *       name: Schema.String,
- *       email: Schema.String
- *     })))
+ * const queryGroup = Group.query("users").pipe(
+ *   Group.add(Function.query("getUser")...),
+ *   Group.add(Function.query("listUsers")...)
  * )
- *
- * // ✅ Literal types preserved!
- * const groupName: "users" = userGroup.name
- * const functionNames: ("getUser" | "createUser")[] = Object.keys(userGroup.functions)
  */
-export const group = <Name extends string>(
+export const query = <Name extends string>(
   name: Name,
-): ConfectApiGroup<Name> => {
-  return Object.assign({}, Pipeable.Prototype, {
-    [GroupTypeId]: GroupTypeId,
-    name,
-    functions: {},
-  }) as any;
-};
+): ConfectApiGroup<Name, never, "Query"> => group(name, "Query")
+
+/**
+ * Create an empty mutation group.
+ *
+ * Mutation groups can only contain mutation functions.
+ * Use `.pipe()` with `Group.add()` to add mutation functions.
+ *
+ * @param name - Group name (preserved as literal type)
+ * @returns Empty mutation group ready for piping
+ *
+ * @category Constructors
+ * @since 1.0.0
+ *
+ * @example
+ * import * as Group from "./internal/Group"
+ * import * as Function from "./internal/Function"
+ *
+ * const mutationGroup = Group.mutation("tasks").pipe(
+ *   Group.add(Function.mutation("createTask")...),
+ *   Group.add(Function.mutation("updateTask")...)
+ * )
+ */
+export const mutation = <Name extends string>(
+  name: Name,
+): ConfectApiGroup<Name, never, "Mutation"> => group(name, "Mutation")
 
 // =============================================================================
 // Predicates (using Predicate.hasProperty)
@@ -224,24 +259,50 @@ export const isGroup = (u: unknown): u is ConfectApiGroup<string, Function.Confe
  * @since 1.0.0
  *
  * @example
- * const userGroup = Group.group("users").functions({ ... })
+ * const userGroup = Group.group("users").pipe(Group.add(...))
  * type Name = Group.GetName<typeof userGroup>  // "users"
  */
 export type GetName<G> =
-  G extends ConfectApiGroup<infer Name, any> ? Name : never;
+  G extends ConfectApiGroup<infer Name, any, any> ? Name : never;
+
 
 /**
- * Extract functions record
+ * Extract functions
  *
  * @category Type Utilities
  * @since 1.0.0
  *
  * @example
- * const userGroup = Group.group("users").functions(fns)
- * type Fns = Group.GetFunctions<typeof userGroup>  // typeof fns
+ * const userGroup = Group.group("users").pipe(Group.add(...))
+ * type Fns = Group.GetFunctions<typeof userGroup>
  */
-export type GetFunctions<G extends ConfectApiGroup<any, any>> =
-  G extends ConfectApiGroup<any, infer Functions> ? Functions : never;
+export type GetFunctions<G extends ConfectApiGroup<any, any, any>> =
+  G extends ConfectApiGroup<any, infer Functions, any> ? Functions : never;
+
+/**
+ * Extract group kind
+ *
+ * @category Type Utilities
+ * @since 1.0.0
+ *
+ * @example
+ * const queryGroup = Group.group("queries").pipe(Group.add(Function.query(...)))
+ * type Kind = Group.GetKind<typeof queryGroup>  // "Query"
+ */
+export type GetKind<G extends ConfectApiGroup<any, any, any>> =
+  G extends ConfectApiGroup<any, any, infer Kind> ? Kind : never;
+
+/**
+ * Extract the allowed services for a group based on its kind.
+ *
+ * @category Type Utilities
+ * @since 1.0.0
+ */
+export type AllowedServicesForGroup<G extends ConfectApiGroup<any, any, any>> =
+  GetKind<G> extends "Query" ? QueryServices
+  : GetKind<G> extends "Mutation" ? MutationServices
+  : GetKind<G> extends "Action" ? never // TODO: ActionServices
+  : never;
 
 /**
  * Extract function names from the functions stored in the group's record
@@ -251,14 +312,14 @@ export type GetFunctions<G extends ConfectApiGroup<any, any>> =
  *
  * @example
  * const userGroup = Group.group("users").pipe(
- *   Group.add("getUser", ...),
- *   Group.add("createUser", ...)
+ *   Group.add(Function.query("getUser")...),
+ *   Group.add(Function.query("listUsers")...)
  * )
  * type Names = Group.GetFunctionNames<typeof userGroup>
- * // "getUser" | "createUser"
+ * // "getUser" | "listUsers"
  */
 export type GetFunctionNames<G> =
-  G extends ConfectApiGroup<any, infer Functions>
+  G extends ConfectApiGroup<any, infer Functions, any>
   ? Functions extends Function.ConfectApiFunction
   ? Function.GetName<Functions>
   : never
@@ -271,9 +332,9 @@ export type GetFunctionNames<G> =
  * @since 1.0.0
  */
 export type GetFunction<
-  G extends ConfectApiGroup<any, any>,
+  G extends ConfectApiGroup<any, any, any>,
   Name extends string
-> = G extends ConfectApiGroup<any, infer Functions>
+> = G extends ConfectApiGroup<any, infer Functions, any>
   ? Extract<Functions, { readonly name: Name }>
   : never;
 
@@ -283,10 +344,52 @@ export type GetFunction<
  * @category Type Utilities
  * @since 1.0.0
  */
-export type HandlersFor<G extends ConfectApiGroup<any, any>> =
-  G extends ConfectApiGroup<any, infer Functions>
-  ? FunctionsToHandlers<Functions>
-  : never
+export type HandlersFor<G extends ConfectApiGroup<any, any, any>> = FunctionsToHandlers<GetFunctions<G>>
+
+
+// =============================================================================
+// Layer Construction
+// =============================================================================
+
+/**
+ * Type-safe wrapper around Layer.effect for group handler construction.
+ *
+ * Validates that the Effect's requirements (R) are compatible with the group's kind:
+ * - Query groups cannot use MutationServices (MutationDB, ConfectMutationCtx, etc.)
+ * - Mutation groups can use both QueryServices and MutationServices
+ * - Action groups can use ActionServices
+ *
+ * ## Why This Matters
+ *
+ * Groups enforce CQRS at the type level. Query handlers are constructed in query contexts
+ * which don't have access to mutation-only services like MutationDB. This function prevents
+ * compile-time errors by catching service misuse at the type level.
+ *
+ * @param group - The group to build handlers for
+ * @param effect - Effect that provides the handlers
+ * @returns Layer providing the group's handlers or a type error
+ *
+ * @category Constructors
+ * @since 1.0.0
+ *
+ */
+
+export const build: {
+  <E, R, G extends ConfectApiGroup<any, any, "Query">, T extends Tag<G>>(
+    group: G,
+    effect: Effect.Effect<T["Service"], E, Exclude<R, MutationExclusiveServices | Identifier<string, "Mutation" | "Action">>>
+  ): Layer.Layer<T["Identifier"], E, R>
+
+  <E, R, G extends ConfectApiGroup<any, any, "Mutation">, T extends Tag<G>>(
+    group: G,
+    effect: Effect.Effect<T["Service"], E, R>
+  ): Layer.Layer<T["Identifier"], E, R>
+
+  <E, R, G extends ConfectApiGroup<any, any, "Action">, T extends Tag<G>>(
+    group: G,
+    effect: Effect.Effect<T["Service"], E, R>
+  ): Layer.Layer<T["Identifier"], E, R>
+} = ((group: any, effect: any) => Layer.effect(Tag(group), effect)) as any;
 
 // =============================================================================
 // Pipeable Utilities
@@ -295,13 +398,15 @@ export type HandlersFor<G extends ConfectApiGroup<any, any>> =
 /**
  * Add a function to a group (pipeable).
  *
- * Returns a transformer function that adds the function to the group.
+ * Enforces CQRS at the type level - all functions in a group must be the same kind.
+ * Groups are created with `Group.query()` or `Group.mutation()`, so the kind is fixed.
+ * You can only add functions that match the group's kind.
+ *
  * Does not mutate the original group.
  * Functions are stored as a union type.
  *
- * @param key - Function name (key)
  * @param fn - Function to add
- * @returns Transformer function that adds the function to a group
+ * @returns Transformer function that adds the function to a group or a type error
  *
  * @category Utilities
  * @since 1.0.0
@@ -310,23 +415,39 @@ export type HandlersFor<G extends ConfectApiGroup<any, any>> =
  * import * as Group from "./internal/Group"
  * import * as Function from "./internal/Function"
  *
- * const userGroup = Group.group("users").pipe(
- *   Group.add("getUser", getUserFn),
- *   Group.add("createUser", createUserFn)
+ * // ✅ OK - all queries
+ * const queryGroup = Group.query("users").pipe(
+ *   Group.add(Function.query("getUser")...),
+ *   Group.add(Function.query("listUsers")...)
+ * )
+ *
+ * // ✅ OK - all mutations
+ * const mutationGroup = Group.mutation("tasks").pipe(
+ *   Group.add(Function.mutation("createTask")...),
+ *   Group.add(Function.mutation("updateTask")...)
+ * )
+ *
+ * // ❌ Type Error - cannot mix
+ * const invalid = Group.query("mixed").pipe(
+ *   Group.add(Function.query("get")...),
+ *   Group.add(Function.mutation("create")...)  // Type error!
  * )
  */
 export const add: <Fn extends Function.ConfectApiFunction>(
   fn: Fn,
-) => <Name extends string, Functions extends Function.ConfectApiFunction>(
-  group: ConfectApiGroup<Name, Functions>,
-) => ConfectApiGroup<Name, Functions | Fn> =
+) => <Name extends string, Functions extends Function.ConfectApiFunction, Kind extends Function.Kind>(
+  group: Fn["functionType"] extends Kind
+    ? ConfectApiGroup<Name, Functions, Kind>
+    : never
+) => ConfectApiGroup<Name, Functions | Fn, Kind> =
   (fn) =>
-    (group) => {
+    (group: any) => {
       const functions = Record.set(group.functions, fn.name, fn);
       return Object.assign({}, Pipeable.Prototype, {
         [GroupTypeId]: GroupTypeId,
         name: group.name,
-        functions
+        functions,
+        kind: group.kind,
       }) as any;
     };
 
@@ -347,7 +468,7 @@ export const add: <Fn extends Function.ConfectApiFunction>(
  * import * as Group from "./internal/Group"
  *
  * const userGroup = Group.group("users").pipe(
- *   Group.add("getUser", getUserFn),
+ *   Group.add(Function.query("getUser")...),
  *   Group.rename("getUser", "fetchUser")
  * )
  * // userGroup has fetchUser instead of getUser
@@ -356,9 +477,9 @@ export const rename = <OldKey extends string, NewKey extends string>(
   oldKey: OldKey,
   newKey: NewKey,
 ) =>
-  <Name extends string, Functions extends Function.ConfectApiFunction>(
-    group: ConfectApiGroup<Name, Functions>,
-  ): ConfectApiGroup<Name, Functions> => {
+  <Name extends string, Functions extends Function.ConfectApiFunction, Kind extends Function.Kind>(
+    group: ConfectApiGroup<Name, Functions, Kind>,
+  ): ConfectApiGroup<Name, Functions, Kind> => {
     const functions = Record.mapKeys(group.functions, (key) =>
       equals(key, oldKey) ? newKey : key,
     );
@@ -366,6 +487,7 @@ export const rename = <OldKey extends string, NewKey extends string>(
       [GroupTypeId]: GroupTypeId,
       name: group.name,
       functions,
+      kind: group.kind,
     }) as any;
   };
 
@@ -373,12 +495,13 @@ export const rename = <OldKey extends string, NewKey extends string>(
  * Merge another group's functions into this group (pipeable).
  *
  * Returns a transformer function that merges functions from another group.
+ * BOTH GROUPS MUST HAVE THE SAME KIND - you cannot merge query and mutation groups.
  * If there are duplicate function names, functions from the other group take precedence.
  * Functions are unioned at the type level.
  * Does not mutate either group.
  *
- * @param other - Group whose functions to merge
- * @returns Transformer function that merges the groups
+ * @param other - Group whose functions to merge (must have same kind)
+ * @returns Transformer function that merges the groups or a type error
  *
  * @category Utilities
  * @since 1.0.0
@@ -386,26 +509,36 @@ export const rename = <OldKey extends string, NewKey extends string>(
  * @example
  * import * as Group from "./internal/Group"
  *
- * const group1 = Group.group("api").pipe(Group.add("getUser", getUserFn))
- * const group2 = Group.group("api").pipe(Group.add("createUser", createUserFn))
+ * // ✅ OK - Both are query groups
+ * const group1 = Group.query("api").pipe(Group.add(Function.query("getUser")...))
+ * const group2 = Group.query("more").pipe(Group.add(Function.query("listUsers")...))
  * const merged = group1.pipe(Group.merge(group2))
- * // merged has both getUser and createUser
+ * // merged has both getUser and listUsers
+ *
+ * // ❌ Type Error - Cannot merge different kinds
+ * const queryGroup = Group.query("queries").pipe(Group.add(Function.query(...)...))
+ * const mutationGroup = Group.mutation("mutations").pipe(Group.add(Function.mutation(...)...))
+ * const invalid = queryGroup.pipe(Group.merge(mutationGroup))  // Type error!
  */
 export const merge: <
   Name2 extends string,
   Functions2 extends Function.ConfectApiFunction,
+  Kind2 extends Function.Kind,
 >(
-  other: ConfectApiGroup<Name2, Functions2>,
-) => <Name extends string, Functions extends Function.ConfectApiFunction>(
-  group: ConfectApiGroup<Name, Functions>,
-) => ConfectApiGroup<Name, Functions | Functions2> =
+  other: ConfectApiGroup<Name2, Functions2, Kind2>,
+) => <Name extends string, Functions extends Function.ConfectApiFunction, Kind extends Function.Kind>(
+  group: Kind extends Kind2
+    ? ConfectApiGroup<Name, Functions, Kind>
+    : never
+) => ConfectApiGroup<Name, Functions | Functions2, Kind> =
   (other) =>
-    (group) => {
+    (group: any) => {
       const functions = Record.union(group.functions, other.functions, SK);
       return Object.assign({}, Pipeable.Prototype, {
         [GroupTypeId]: GroupTypeId,
         name: group.name,
-        functions
+        functions,
+        kind: group.kind,
       }) as any;
     };
 

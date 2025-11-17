@@ -85,6 +85,7 @@ export const ActionFunctionTypeId: unique symbol = Symbol.for(
  * @since 1.0.0
  */
 export type ActionFunctionTypeId = typeof ActionFunctionTypeId;
+export type Kind = "Query" | "Mutation" | "Action"
 
 // =============================================================================
 // Function Types

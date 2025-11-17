@@ -48,7 +48,7 @@ describe("Api.serve layer provisioning", () => {
   test("basic mutation without plugins", async () => {
     await testDB.run(async (ctx) => {
       // Define API using the proper builder pattern
-      const tasksGroup = Group.group("tasks").pipe(
+      const tasksGroup = Group.mutation("tasks").pipe(
         Group.add(
           Function.mutation("createTask")
             .args(Schema.Struct({ text: Schema.String }))
@@ -59,8 +59,7 @@ describe("Api.serve layer provisioning", () => {
       const api = Api.api("testApi").pipe(Api.add(tasksGroup));
 
       // Implement handlers
-      const TasksLive = Layer.effect(
-        Group.Tag(tasksGroup),
+      const TasksLive = Group.build(tasksGroup,
         Effect.gen(function* () {
           const db = yield* MutationDB;
 
@@ -90,7 +89,7 @@ describe("Api.serve layer provisioning", () => {
       expect(typeof taskId).toBe("string");
       const tasks = await ctx.db.query("tasks").collect();
       expect(tasks).toHaveLength(1);
-      expect(tasks[0].text).toBe("Test task");
+      expect(tasks[0]?.text).toBe("Test task");
     });
   });
 
@@ -107,7 +106,7 @@ describe("Api.serve layer provisioning", () => {
           }),
       }));
 
-      const tasksGroup = Group.group("tasks").pipe(
+      const tasksGroup = Group.mutation("tasks").pipe(
         Group.add(
           Function.mutation("createTask")
             .args(Schema.Struct({ text: Schema.String }))
@@ -117,8 +116,8 @@ describe("Api.serve layer provisioning", () => {
 
       const api = Api.api("testApi").pipe(Api.add(tasksGroup));
 
-      const TasksLive = Layer.effect(
-        Group.Tag(tasksGroup),
+      const TasksLive = Group.build(
+        tasksGroup,
         Effect.gen(function* () {
           const db = yield* MutationDB;
           return {
@@ -141,7 +140,7 @@ describe("Api.serve layer provisioning", () => {
       const served = Api.serve(schema, api, apiLayer);
 
       // Extract the handler and call it
-      const createTaskHandler = getHandler(served.tasks.createTask as never);
+      const createTaskHandler = getHandler(served.tasks["createTask"] as never);
       const taskId = await createTaskHandler(ctx, { text: "Plugin test" });
 
       // Verify plugin was called
@@ -184,7 +183,7 @@ describe("Api.serve layer provisioning", () => {
           }),
       }));
 
-      const tasksGroup = Group.group("tasks").pipe(
+      const tasksGroup = Group.mutation("tasks").pipe(
         Group.add(
           Function.mutation("createTask")
             .args(Schema.Struct({ text: Schema.String }))
@@ -212,7 +211,7 @@ describe("Api.serve layer provisioning", () => {
       const apiLayer = TasksLive.pipe(plugin1, plugin2, plugin3);
       const served = Api.serve(schema, api, apiLayer);
 
-      const createTaskHandler = getHandler(served.tasks.createTask as never);
+      const createTaskHandler = getHandler(served.tasks["createTask"] as never);
       await createTaskHandler(ctx, { text: "Order test" });
 
       // Verify execution order (left-to-right with Plugin.forTag)
@@ -235,7 +234,7 @@ describe("Api.serve layer provisioning", () => {
               }),
           }),
         }
-      ) {}
+      ) { }
 
       // Create an effectful plugin that uses AuditService
       const auditPlugin = Plugin.effectForTag(MutationDB, (base) =>
@@ -252,7 +251,7 @@ describe("Api.serve layer provisioning", () => {
         })
       );
 
-      const tasksGroup = Group.group("tasks").pipe(
+      const tasksGroup = Group.mutation("tasks").pipe(
         Group.add(
           Function.mutation("createTask")
             .args(Schema.Struct({ text: Schema.String }))
@@ -284,7 +283,7 @@ describe("Api.serve layer provisioning", () => {
 
       const served = Api.serve(schema, api, apiLayer);
 
-      const createTaskHandler = getHandler(served.tasks.createTask as never);
+      const createTaskHandler = getHandler(served.tasks["createTask"] as never);
       await createTaskHandler(ctx, { text: "Audited task" });
 
       // Verify audit log was called

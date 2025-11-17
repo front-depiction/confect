@@ -50,17 +50,15 @@ const createPostFn = Function.mutation("createPost")
   .args(TestArgsSchema)
   .returns(TestReturnsSchema);
 
-const usersGroup = Group.group("users").pipe(
+const usersGroup = Group.query("users").pipe(
   Group.add(getUserFn),
-  Group.add(createUserFn),
 );
 
-const postsGroup = Group.group("posts").pipe(
+const postsGroup = Group.query("posts").pipe(
   Group.add(getPostFn),
-  Group.add(createPostFn),
 );
 
-const emptyGroup = Group.group("empty");
+const emptyGroup = Group.query("empty");
 
 
 
@@ -256,7 +254,7 @@ describe("Pipeable Utilities", () => {
         Api.add(usersGroup),
       );
 
-      const newUsersGroup = Group.group("users").pipe(
+      const newUsersGroup = Group.query("users").pipe(
         Group.add(getUserFn),
       );
 
@@ -299,11 +297,11 @@ describe("Pipeable Utilities", () => {
     });
 
     test("second API groups take precedence on conflict", () => {
-      const group1 = Group.group("shared").pipe(
+      const group1 = Group.query("shared").pipe(
         Group.add(getUserFn),
       );
 
-      const group2 = Group.group("shared").pipe(
+      const group2 = Group.mutation("shared").pipe(
         Group.add(createUserFn),
       );
 

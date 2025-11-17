@@ -2,7 +2,8 @@
  * Tests for internal/Group module
  *
  * This test file showcases the desired pipeable API pattern:
- * - Group.group("name") creates empty group
+ * - Group.query("name") creates query group
+ * - Group.mutation("name") creates mutation group
  * - Group.add(fn) adds function (pipeable, uses fn.name as key)
  * - Group.rename(old, new) renames function (pipeable)
  * - Group.merge(other) merges groups (pipeable)
@@ -16,7 +17,7 @@ import * as Schema from "effect/Schema";
 import { describe, expect, expectTypeOf, test } from "vitest";
 import * as Function from "./Function";
 import * as Group from "./Group";
-import type { TypesAreEquivalent } from "./test-helpers";
+import { MutationDB } from "../../server";
 
 // =============================================================================
 // Test Data
@@ -43,39 +44,64 @@ const createUserFn = Function.mutation("createUser")
 // =============================================================================
 
 describe("Group Constructor", () => {
-  describe("group()", () => {
-    test("preserves literal name type", () => {
-      const grp = Group.group("users");
+  describe("query() and mutation()", () => {
+    test("preserves literal name type - query", () => {
+      const grp = Group.query("users");
       void grp
       type Name = typeof grp.name;
       expectTypeOf<Name>().toEqualTypeOf<"users">();
     });
 
     test("has GroupTypeId symbol", () => {
-      const grp = Group.group("test");
+      const grp = Group.query("test");
       expect(grp[Group.GroupTypeId]).toBeTruthy();
     });
 
-    test("works with pipe to add functions", () => {
-      const grp = Group.group("users").pipe(
-        Group.add(getUserFn),
-        Group.add(createUserFn),
-      );
-      expect(grp.name).toBe("users");
+    test("works with pipe to add functions - queries", () => {
+      const getPostFn = Function.query("getPost")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
 
-      expect(grp.functions["createUser"]).toBe(createUserFn);
+      const grp = Group.query("queries").pipe(
+        Group.add(getUserFn),
+        Group.add(getPostFn),
+      );
+      expect(grp.name).toBe("queries");
+      expect(grp.kind).toBe("Query");
+
+      expect(grp.functions["getPost"]).toBe(getPostFn);
+      expect(Object.keys(grp.functions)).toHaveLength(2);
+    });
+
+    test("works with pipe to add functions - mutations", () => {
+      const updateUserFn = Function.mutation("updateUser")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const grp = Group.mutation("mutations").pipe(
+        Group.add(createUserFn),
+        Group.add(updateUserFn),
+      );
+      expect(grp.name).toBe("mutations");
+      expect(grp.kind).toBe("Mutation");
+
+      expect(grp.functions["updateUser"]).toBe(updateUserFn);
       expect(Object.keys(grp.functions)).toHaveLength(2);
     });
 
     test("preserves function names as literal types with pipe", () => {
-      const grp = Group.group("users").pipe(
+      const listUsersFn = Function.query("listUsers")
+        .args(Schema.Struct({}))
+        .returns(TestReturnsSchema);
+
+      const grp = Group.query("users").pipe(
         Group.add(getUserFn),
-        Group.add(createUserFn),
+        Group.add(listUsersFn),
       );
       void grp
 
       type FunctionNames = Group.GetFunctionNames<typeof grp>;
-      expectTypeOf<FunctionNames>().toEqualTypeOf<"getUser" | "createUser">();
+      expectTypeOf<FunctionNames>().toEqualTypeOf<"getUser" | "listUsers">();
     });
   });
 });
@@ -85,7 +111,7 @@ describe("Group Constructor", () => {
 // =============================================================================
 
 describe("Group Predicates", () => {
-  const validGroup = Group.group("users").pipe(
+  const validGroup = Group.query("users").pipe(
     Group.add(getUserFn),
   );
 
@@ -120,9 +146,13 @@ describe("Group Predicates", () => {
 // =============================================================================
 
 describe("Type Extraction Utilities", () => {
-  const testGroup = Group.group("testGroup").pipe(
+  const listUsersFn = Function.query("listUsers")
+    .args(Schema.Struct({}))
+    .returns(TestReturnsSchema);
+
+  const testGroup = Group.query("testGroup").pipe(
     Group.add(getUserFn),
-    Group.add(createUserFn),
+    Group.add(listUsersFn),
   );
   void testGroup
 
@@ -130,23 +160,39 @@ describe("Type Extraction Utilities", () => {
     test("extracts name as literal type", () => {
       type Name = Group.GetName<typeof testGroup>;
       expectTypeOf<Name>().toEqualTypeOf<"testGroup">();
-      expectTypeOf<
-        TypesAreEquivalent<Name, "testGroup">
-      >().toEqualTypeOf<true>();
     });
   });
 
   describe("GetFunctionNames", () => {
     test("extracts function names as union", () => {
       type Names = Group.GetFunctionNames<typeof testGroup>;
-      expectTypeOf<Names>().toEqualTypeOf<"getUser" | "createUser">();
+      expectTypeOf<Names>().toEqualTypeOf<"getUser" | "listUsers">();
     });
 
     test("returns never for empty group", () => {
-      const emptyGroup = Group.group("empty");
+      const emptyGroup = Group.query("empty");
       void emptyGroup
       type Names = Group.GetFunctionNames<typeof emptyGroup>;
       expectTypeOf<Names>().toEqualTypeOf<never>();
+    });
+  });
+
+  describe("GetKind", () => {
+    test("extracts kind for query group", () => {
+      type Kind = Group.GetKind<typeof testGroup>;
+      expectTypeOf<Kind>().toEqualTypeOf<"Query">();
+    });
+
+    test("extracts kind for mutation group", () => {
+      const mutGroup = Group.mutation("mutations").pipe(Group.add(createUserFn));
+      type Kind = Group.GetKind<typeof mutGroup>;
+      expectTypeOf<Kind>().toEqualTypeOf<"Mutation">();
+    });
+
+    test("returns Query for empty query group", () => {
+      const emptyGroup = Group.query("empty");
+      type Kind = Group.GetKind<typeof emptyGroup>;
+      expectTypeOf<Kind>().toEqualTypeOf<"Query">();
     });
   });
 });
@@ -157,34 +203,63 @@ describe("Type Extraction Utilities", () => {
 
 describe("Pipeable Utilities", () => {
   describe("add()", () => {
-    test("adds a function to a group", () => {
-      const original = Group.group("users").pipe(
+    test("adds a query function to a query group", () => {
+      const listUsersFn = Function.query("listUsers")
+        .args(Schema.Struct({}))
+        .returns(TestReturnsSchema);
+
+      const original = Group.query("users").pipe(
         Group.add(getUserFn),
       );
 
       const updated = original.pipe(
-        Group.add(createUserFn)
+        Group.add(listUsersFn)
       );
 
       expect(updated.name).toBe("users");
+      expect(updated.kind).toBe("Query");
       expect(updated.functions["getUser"]).toBe(getUserFn);
+      expect(updated.functions["listUsers"]).toBe(listUsersFn);
+      expect(Object.keys(updated.functions)).toHaveLength(2);
+    });
+
+    test("adds a mutation function to a mutation group", () => {
+      const updateUserFn = Function.mutation("updateUser")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const original = Group.mutation("users").pipe(
+        Group.add(createUserFn),
+      );
+
+      const updated = original.pipe(
+        Group.add(updateUserFn)
+      );
+
+      expect(updated.name).toBe("users");
+      expect(updated.kind).toBe("Mutation");
       expect(updated.functions["createUser"]).toBe(createUserFn);
+      expect(updated.functions["updateUser"]).toBe(updateUserFn);
       expect(Object.keys(updated.functions)).toHaveLength(2);
     });
 
     test("does not mutate original group", () => {
-      const original = Group.group("users").pipe(
+      const listUsersFn = Function.query("listUsers")
+        .args(Schema.Struct({}))
+        .returns(TestReturnsSchema);
+
+      const original = Group.query("users").pipe(
         Group.add(getUserFn),
       );
 
-      void original.pipe(Group.add(createUserFn));
+      void original.pipe(Group.add(listUsersFn));
 
       expect(Object.keys(original.functions)).toHaveLength(1);
-      expect(original.functions).not.toHaveProperty("createUser");
+      expect(original.functions).not.toHaveProperty("listUsers");
     });
 
     test("overwrites existing function with same name", () => {
-      const original = Group.group("users").pipe(
+      const original = Group.query("users").pipe(
         Group.add(getUserFn),
       );
 
@@ -200,10 +275,14 @@ describe("Pipeable Utilities", () => {
   });
 
   describe("rename()", () => {
-    test("renames a function in a group", () => {
-      const original = Group.group("users").pipe(
+    test("renames a function in a query group", () => {
+      const listUsersFn = Function.query("listUsers")
+        .args(Schema.Struct({}))
+        .returns(TestReturnsSchema);
+
+      const original = Group.query("users").pipe(
         Group.add(getUserFn),
-        Group.add(createUserFn),
+        Group.add(listUsersFn),
       );
 
       const updated = original.pipe(Group.rename("getUser", "fetchUser"));
@@ -211,11 +290,11 @@ describe("Pipeable Utilities", () => {
       expect(updated.functions).toHaveProperty("fetchUser");
       expect(updated.functions).not.toHaveProperty("getUser");
       expect(updated.functions["fetchUser"]).toBe(getUserFn);
-      expect(updated.functions["createUser"]).toBe(createUserFn);
+      expect(updated.functions["listUsers"]).toBe(listUsersFn);
     });
 
     test("does not mutate original group", () => {
-      const original = Group.group("users").pipe(
+      const original = Group.query("users").pipe(
         Group.add(getUserFn),
       );
 
@@ -227,20 +306,47 @@ describe("Pipeable Utilities", () => {
   });
 
   describe("merge()", () => {
-    test("merges two groups with different functions", () => {
-      const group1 = Group.group("api").pipe(
+    test("merges two query groups with different functions", () => {
+      const listUsersFn = Function.query("listUsers")
+        .args(Schema.Struct({}))
+        .returns(TestReturnsSchema);
+
+      const group1 = Group.query("api").pipe(
         Group.add(getUserFn),
       );
 
-      const group2 = Group.group("api").pipe(
-        Group.add(createUserFn),
+      const group2 = Group.query("api").pipe(
+        Group.add(listUsersFn),
       );
 
       const merged = group1.pipe(Group.merge(group2));
 
       expect(merged.name).toBe("api");
+      expect(merged.kind).toBe("Query");
       expect(merged.functions["getUser"]).toBe(getUserFn);
+      expect(merged.functions["listUsers"]).toBe(listUsersFn);
+      expect(Object.keys(merged.functions)).toHaveLength(2);
+    });
+
+    test("merges two mutation groups with different functions", () => {
+      const updateUserFn = Function.mutation("updateUser")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const group1 = Group.mutation("api").pipe(
+        Group.add(createUserFn),
+      );
+
+      const group2 = Group.mutation("api").pipe(
+        Group.add(updateUserFn),
+      );
+
+      const merged = group1.pipe(Group.merge(group2));
+
+      expect(merged.name).toBe("api");
+      expect(merged.kind).toBe("Mutation");
       expect(merged.functions["createUser"]).toBe(createUserFn);
+      expect(merged.functions["updateUser"]).toBe(updateUserFn);
       expect(Object.keys(merged.functions)).toHaveLength(2);
     });
 
@@ -253,12 +359,12 @@ describe("Pipeable Utilities", () => {
         .args(TestArgsSchema)
         .returns(Schema.String);
 
-      const group1 = Group.group("api").pipe(
+      const group1 = Group.query("api").pipe(
         Group.add(fn1),
         Group.add(getUserFn),
       );
 
-      const group2 = Group.group("api").pipe(
+      const group2 = Group.query("api").pipe(
         Group.add(fn2),
       );
 
@@ -269,12 +375,16 @@ describe("Pipeable Utilities", () => {
     });
 
     test("does not mutate original groups", () => {
-      const group1 = Group.group("api").pipe(
+      const listUsersFn = Function.query("listUsers")
+        .args(Schema.Struct({}))
+        .returns(TestReturnsSchema);
+
+      const group1 = Group.query("api").pipe(
         Group.add(getUserFn),
       );
 
-      const group2 = Group.group("api").pipe(
-        Group.add(createUserFn),
+      const group2 = Group.query("api").pipe(
+        Group.add(listUsersFn),
       );
 
       void group1.pipe(Group.merge(group2));
@@ -292,9 +402,9 @@ describe("Pipeable Utilities", () => {
 describe("Order Utilities", () => {
   describe("byName", () => {
     test("orders groups alphabetically by name", () => {
-      const zGroup = Group.group("zebra");
-      const aGroup = Group.group("apple");
-      const mGroup = Group.group("mango");
+      const zGroup = Group.query("zebra");
+      const aGroup = Group.query("apple");
+      const mGroup = Group.query("mango");
 
       const groups = [zGroup, aGroup, mGroup];
       const sorted = Array.sort(groups, Group.byName);
@@ -312,7 +422,7 @@ describe("Order Utilities", () => {
 
 describe("Variance Behavior", () => {
   test("Name is covariant", () => {
-    const specific = Group.group("specificName").pipe(
+    const specific = Group.query("specificName").pipe(
       Group.add(getUserFn),
     );
 
@@ -333,12 +443,12 @@ describe("Variance Behavior", () => {
 describe("Layer Building - Complex Dependencies", () => {
   describe("Group.build() - Basic Layer Creation", () => {
     test("creates a Layer from Effect returning handlers", () => {
-      const testGroup = Group.group("test").pipe(
+      const testGroup = Group.query("test").pipe(
         Group.add(getUserFn),
       );
 
       // Simple handler with no dependencies
-      const TestLive = Layer.effect(Group.Tag(testGroup),
+      const TestLive = Group.build(testGroup,
         Effect.succeed({
           getUser: () => Effect.succeed({ result: "test" }),
         })
@@ -354,12 +464,12 @@ describe("Layer Building - Complex Dependencies", () => {
         { readonly query: (sql: string) => Effect.Effect<string> }
       >() { }
 
-      const usersGroup = Group.group("users").pipe(
+      const usersGroup = Group.query("users").pipe(
         Group.add(getUserFn),
       );
 
       // Handler Effect requires Database
-      const UsersLive = Layer.effect(Group.Tag(usersGroup),
+      const UsersLive = Group.build(usersGroup,
         Effect.gen(function* () {
           const db = yield* Database;
           return {
@@ -374,7 +484,7 @@ describe("Layer Building - Complex Dependencies", () => {
     });
 
     test("handlers themselves must have R = never", () => {
-      const testGroup = Group.group("test").pipe(
+      const testGroup = Group.query("test").pipe(
         Group.add(getUserFn),
       );
 
@@ -389,24 +499,36 @@ describe("Layer Building - Complex Dependencies", () => {
   describe("Group Dependencies - Query Group Depends on Another", () => {
     test("query group can depend on mutation group handlers", async () => {
       // Define mutation group
-      const notesWriteGroup = Group.group("notesWrite").pipe(
-        Group.add(Function.rename(createUserFn, "create")),
-        Group.add(Function.mutation("delete")
-          .args(TestArgsSchema)
-          .returns(Schema.Null))
+      const createNoteFn = Function.mutation("create")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+      const deleteNoteFn = Function.mutation("delete")
+        .args(TestArgsSchema)
+        .returns(Schema.Null);
+
+      const notesWriteGroup = Group.mutation("notesWrite").pipe(
+        Group.add(createNoteFn),
+        Group.add(deleteNoteFn)
       );
 
       // Define query group
-      const notesReadGroup = Group.group("notesRead").pipe(
-        Group.add(Function.rename(getUserFn, "list")),
-        Group.add(Function.rename(getUserFn, "get")),
+      const listNotesFn = Function.query("list")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+      const getNoteFn = Function.query("get")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const notesReadGroup = Group.query("notesRead").pipe(
+        Group.add(listNotesFn),
+        Group.add(getNoteFn),
       );
 
       // Create tags for the groups
 
 
       // Implement mutation group with no dependencies
-      const NotesWriteLive = Layer.effect(Group.Tag(notesWriteGroup),
+      const NotesWriteLive = Group.build(notesWriteGroup,
         Effect.succeed({
           create: () => Effect.succeed({ result: "created" }),
           delete: () => Effect.succeed(null),
@@ -414,7 +536,7 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       // Implement query group that depends on mutation handlers
-      const NotesReadLive = Layer.effect(Group.Tag(notesReadGroup),
+      const NotesReadLive = Group.build(notesReadGroup,
         Effect.gen(function* () {
           // Access the mutation group's tag
           const writeHandlers = yield* Group.Tag(notesWriteGroup);
@@ -468,19 +590,23 @@ describe("Layer Building - Complex Dependencies", () => {
         { readonly query: (table: string) => Effect.Effect<unknown[]> }
       >() { }
 
-      const usersGroup = Group.group("users").pipe(
+      const usersGroup = Group.query("users").pipe(
         Group.add(getUserFn),
       );
 
-      const postsGroup = Group.group("posts").pipe(
-        Group.add(Function.rename(getUserFn, "getPost")),
+      const getPostFn = Function.query("getPost")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const postsGroup = Group.query("posts").pipe(
+        Group.add(getPostFn),
       );
 
       // Create tags
 
 
       // Both groups depend on QueryDB
-      const UsersLive = Layer.effect(Group.Tag(usersGroup),
+      const UsersLive = Group.build(usersGroup,
         Effect.gen(function* () {
           const db = yield* QueryDB;
           return {
@@ -489,7 +615,7 @@ describe("Layer Building - Complex Dependencies", () => {
         })
       );
 
-      const PostsLive = Layer.effect(Group.Tag(postsGroup),
+      const PostsLive = Group.build(postsGroup,
         Effect.gen(function* () {
           const db = yield* QueryDB;
           return {
@@ -542,18 +668,26 @@ describe("Layer Building - Complex Dependencies", () => {
       // This test demonstrates that circular dependencies create type errors
       // In practice, you'd restructure to avoid this pattern
 
-      const groupA = Group.group("a").pipe(
-        Group.add(Function.rename(getUserFn, "funcA")),
+      const funcA = Function.query("funcA")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const groupA = Group.query("a").pipe(
+        Group.add(funcA),
       );
 
-      const groupB = Group.group("b").pipe(
-        Group.add(Function.rename(createUserFn, "funcB")),
+      const funcB = Function.mutation("funcB")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const groupB = Group.mutation("b").pipe(
+        Group.add(funcB),
       );
       void groupB; // Used below
 
 
       // GroupA depends on GroupB - this is fine
-      const GroupALive = Layer.effect(Group.Tag(groupA),
+      const GroupALive = Group.build(groupA,
         Effect.gen(function* () {
           const bHandlers = yield* Group.Tag(groupB);
 
@@ -582,11 +716,11 @@ describe("Layer Building - Complex Dependencies", () => {
       >() { }
 
       // Level 2: Domain services using infrastructure
-      const usersGroup = Group.group("users").pipe(
+      const usersGroup = Group.query("users").pipe(
         Group.add(getUserFn),
       );
 
-      const UsersLive = Layer.effect(Group.Tag(usersGroup),
+      const UsersLive = Group.build(usersGroup,
         Effect.gen(function* () {
           const db = yield* Database;
           return {
@@ -596,12 +730,19 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       // Level 3: Application services using domain services
-      const profileGroup = Group.group("profile").pipe(
-        Group.add(Function.rename(getUserFn, "getProfile")),
+      const getProfileFn = Function.query("getProfile")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const profileGroup = Group.query("profile").pipe(
+        Group.add(getProfileFn),
       );
 
-      const ProfileLive = Layer.effect(Group.Tag(profileGroup),
+      const someMutationGroup = Group.query("myService")
+
+      const ProfileLive = Group.build(profileGroup,
         Effect.gen(function* () {
+          yield* Group.Tag(someMutationGroup)
           const users = yield* Group.Tag(usersGroup);
 
           return {
@@ -650,16 +791,24 @@ describe("Layer Building - Complex Dependencies", () => {
       >() { }
 
       // Two groups both depend on Config
-      const authGroup = Group.group("auth").pipe(
-        Group.add(Function.rename(getUserFn, "login")),
+      const loginFn = Function.query("login")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const authGroup = Group.query("auth").pipe(
+        Group.add(loginFn),
       );
 
-      const storageGroup = Group.group("storage").pipe(
-        Group.add(Function.rename(createUserFn, "upload")),
+      const uploadFn = Function.mutation("upload")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const storageGroup = Group.mutation("storage").pipe(
+        Group.add(uploadFn),
       );
 
 
-      const AuthLive = Layer.effect(Group.Tag(authGroup),
+      const AuthLive = Group.build(authGroup,
         Effect.gen(function* () {
           const config = yield* Config;
           return {
@@ -668,7 +817,7 @@ describe("Layer Building - Complex Dependencies", () => {
         })
       );
 
-      const StorageLive = Layer.effect(Group.Tag(storageGroup),
+      const StorageLive = Group.build(storageGroup,
         Effect.gen(function* () {
           const config = yield* Config;
           return {
@@ -678,11 +827,15 @@ describe("Layer Building - Complex Dependencies", () => {
       );
 
       // Third group depends on both
-      const appGroup = Group.group("app").pipe(
-        Group.add(Function.rename(getUserFn, "init")),
+      const initFn = Function.query("init")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const appGroup = Group.query("app").pipe(
+        Group.add(initFn),
       );
 
-      const AppLive = Layer.effect(Group.Tag(appGroup),
+      const AppLive = Group.build(appGroup,
         Effect.gen(function* () {
           const auth = yield* Group.Tag(authGroup);
           const storage = yield* Group.Tag(storageGroup);
@@ -735,7 +888,7 @@ describe("Layer Building - Complex Dependencies", () => {
 
   describe("Group.buildScoped() - Resource Management", () => {
     test("supports scoped resources with cleanup", () => {
-      const testGroup = Group.group("test").pipe(
+      const testGroup = Group.query("test").pipe(
         Group.add(
           Function.query("query")
             .args(Schema.Struct({}))
@@ -764,9 +917,16 @@ describe("Layer Building - Complex Dependencies", () => {
 
   describe("Group.buildMock() - Testing Support", () => {
     test("creates mock layer with partial implementation", () => {
-      const testGroup = Group.group("test").pipe(
-        Group.add(Function.rename(getUserFn, "func1")),
-        Group.add(createUserFn),
+      const func1 = Function.query("func1")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+      const func2 = Function.query("func2")
+        .args(TestArgsSchema)
+        .returns(TestReturnsSchema);
+
+      const testGroup = Group.query("test").pipe(
+        Group.add(func1),
+        Group.add(func2),
       );
 
       // Only implement func1, func2 will throw if called
