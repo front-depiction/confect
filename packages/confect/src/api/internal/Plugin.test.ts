@@ -1440,4 +1440,67 @@ describe("Plugin.provide", () => {
 
     expect(logs).toEqual(["config:loaded", "insert:notes"]);
   });
+
+  test("plugin cannot enhance service already provided in earlier layer composition", async () => {
+    const pluginCalled: string[] = [];
+    const baseCalled: string[] = [];
+
+    // Base MutationDB implementation
+    const MutationDBLive = Layer.succeed(MutationDB, {
+      insert: (table, value) => {
+        baseCalled.push("base:insert");
+        return Effect.succeed(`${table}-id`);
+      },
+      patch: () => Effect.void,
+      remove: () => Effect.void,
+    });
+
+    // Create a layer that uses MutationDB
+    class TaskService extends Context.Tag("TaskService")<
+      TaskService,
+      { createTask: (text: string) => Effect.Effect<string> }
+    >() { }
+
+    const TaskServiceLive = Layer.effect(
+      TaskService,
+      Effect.gen(function* () {
+        const db = yield* MutationDB;
+        return {
+          createTask: (text: string) => db.insert("tasks", { text }),
+        };
+      })
+    );
+
+    // Step 1: Compose TaskServiceLive with MutationDBLive
+    const composedLayer = TaskServiceLive.pipe(Layer.provide(MutationDBLive));
+    // At this point, MutationDB is already provided to TaskService
+
+    // Step 2: Try to apply a plugin to MutationDB
+    const loggingPlugin = Plugin.forTag(MutationDB, (base) => ({
+      insert: (table, value) =>
+        Effect.gen(function* () {
+          pluginCalled.push("plugin:insert");
+          return yield* base.insert(table, value);
+        }),
+    }));
+
+    // Step 3: Try to enhance the already-composed layer
+    // This should NOT work because MutationDB was already provided
+    const attemptedEnhancement = composedLayer.pipe(
+      loggingPlugin,
+      Layer.provide(MutationDBLive)
+    );
+
+    const program = Effect.gen(function* () {
+      const tasks = yield* TaskService;
+      yield* tasks.createTask("test task");
+    });
+
+    await Effect.runPromise(program.pipe(Effect.provide(attemptedEnhancement)));
+
+    // The plugin should NOT be called because MutationDB was already
+    // provided before we tried to enhance it
+    expect(pluginCalled).toEqual([]);
+    expect(baseCalled).toEqual(["base:insert"]);
+  });
 });
