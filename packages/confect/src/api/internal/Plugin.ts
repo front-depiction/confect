@@ -6,16 +6,17 @@
  *
  * ## Design
  *
- * - Plugins are thin wrappers around Effect's `Layer.updateService`
  * - Plugins enhance services by wrapping the base implementation
  * - Compose via .pipe() on layers
- * - Pattern: `EmptyBase.pipe(plugin, Layer.provide(requirement))`
+ * - Pattern: `Layer.empty.pipe(plugin, Layer.provide(requirement))`
+ * - **Execution order**: Plugins execute in **right-to-left** order (reverse of pipe)
+ *   - Last plugin in the pipe executes first (outermost wrapper)
+ *   - First plugin in the pipe executes last (innermost wrapper, closest to base)
  *
  * ## Pattern
  *
  * ```typescript
  * const withLogging = Plugin.forTag(MutationDB, (base) => ({
- *   ...base,
  *   insert: (table, value) =>
  *     Effect.gen(function*() {
  *       yield* Effect.log("inserting");
@@ -23,8 +24,8 @@
  *     })
  * }));
  *
- * const EmptyBase = Layer.context<never>();
- * const Enhanced = EmptyBase.pipe(
+ * // Plugins execute right-to-left: withValidation -> withLogging -> base
+ * const Enhanced = Layer.empty.pipe(
  *   withLogging,
  *   withValidation,
  *   Layer.provide(MutationDBLive)
@@ -37,7 +38,8 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
 // =============================================================================
 // Core Plugin Types
 // =============================================================================
@@ -72,14 +74,13 @@ export type Plugin<I, E = never, R = never> = <A, E2, R2>(
 /**
  * Create a plugin that enhances a service with synchronous wrapper.
  *
- * This is a thin wrapper around `Layer.updateService` that merges partial updates.
  * The wrapper function receives the base service and returns an enhanced version.
  * You can return a complete service or a partial with only the enhanced methods.
  * Unspecified methods will be passed through from the base service.
  *
  * @param tag - Service tag to enhance
  * @param wrapper - Function that wraps the base service
- * @returns Plugin function (from Layer.updateService) that can be piped onto layers
+ * @returns Plugin function that can be piped onto layers
  *
  * @category Constructors
  * @since 1.0.0
@@ -95,15 +96,24 @@ export type Plugin<I, E = never, R = never> = <A, E2, R2>(
  *     })
  * }));
  *
- * const EmptyBase = Layer.context<never>();
- * const Enhanced = EmptyBase.pipe(withLogging, Layer.provide(MutationDBLive));
+ * const Enhanced = Layer.empty.pipe(withLogging, Layer.provide(MutationDBLive));
  * ```
  */
 export const forTag = <I, S>(
   tag: Context.Tag<I, S>,
   wrapper: (base: S) => S | Partial<S>
 ): Plugin<I> =>
-  Layer.updateService(tag, (base) => Object.assign({}, base, wrapper(base))) as never;
+  <A, E, R>(self: Layer.Layer<A, E, R>): Layer.Layer<A | I, E, I | R> => Layer.flatMap(self, context =>
+    Layer.effectContext(Effect.gen(function* () {
+      const base = yield* Option.match(Context.getOption(context, tag), {
+        onNone: () => tag,
+        onSome: Effect.succeed
+      })
+      const updated = wrapper(base)
+      const service = Object.assign({}, base, updated)
+      return Context.add(context, tag, service)
+    })))
+
 
 /**
  * Create a plugin that enhances a service with effectful setup.
@@ -140,7 +150,7 @@ export const forTag = <I, S>(
  *   })
  * );
  *
- * const Enhanced = Layer.empty.pipe(withAudit, Layer.provide(MutationDBLive), Layer.provide(AuditLogLive));
+ * const Enhanced = Layer.empty.pipe(withAudit, Layer.provide(Layer.provideMerge(MutationDBLive, AuditLogLive)));
  * ```
  */
 export const effectForTag = <S, I, E2 = never, R2 = never>(
@@ -149,7 +159,10 @@ export const effectForTag = <S, I, E2 = never, R2 = never>(
 ): Plugin<I, E2, R2> =>
   <A, E, R>(self: Layer.Layer<A, E, R>): Layer.Layer<A | I, E | E2, I | R | R2> => Layer.flatMap(self, context =>
     Layer.effectContext(Effect.gen(function* () {
-      const base = yield* tag
+      const base = yield* Option.match(Context.getOption(context, tag), {
+        onNone: () => tag,
+        onSome: Effect.succeed
+      })
       const updated = yield* wrapper(base)
       const service = Object.assign({}, base, updated)
       return Context.add(context, tag, service)
@@ -161,10 +174,42 @@ export const effectForTag = <S, I, E2 = never, R2 = never>(
 // =============================================================================
 
 /**
+ * Identity plugin that returns the layer untouched.
+ * Useful as the zero element in plugin composition.
+ *
+ * @category Utilities
+ * @since 1.0.0
+ */
+export const identity: Plugin<never, never, never> = <A, E, R>(self: Layer.Layer<A, E, R>): Layer.Layer<A, E, R> => self
+
+/**
+ * Combine two plugins into a single plugin.
+ * Plugins execute right-to-left: `that` executes before `self`.
+ *
+ * @param self - First plugin (executes second, inner wrapper)
+ * @param that - Second plugin (executes first, outer wrapper)
+ * @returns Combined plugin
+ *
+ * @category Utilities
+ * @since 1.0.0
+ *
+ * @example
+ * ```typescript
+ * const combined = Plugin.combine(withLogging, withValidation);
+ * // Equivalent to: layer.pipe(withLogging, withValidation)
+ * // Execution: withValidation -> withLogging -> base
+ * ```
+ */
+export const combine = <I, I2, E = never, E2 = never, R = never, R2 = never>(
+  self: Plugin<I, E, R>,
+  that: Plugin<I2, E2, R2>
+): Plugin<I | I2, E | E2, R | R2> => Function.compose(self, that)
+
+/**
  * Compose multiple plugins into a single plugin.
  *
- * Plugins are applied in order (left to right in array).
- * This is equivalent to chaining .pipe() calls but more concise for many plugins.
+ * Plugins execute in **left-to-right** order (as written in the array).
+ * This is more intuitive than the pipe order.
  *
  * @param plugins - Array of plugins to compose
  * @returns Single plugin that applies all transformations
@@ -180,15 +225,42 @@ export const effectForTag = <S, I, E2 = never, R2 = never>(
  *   withTriggers
  * ]);
  *
- * const Enhanced = MutationDBLive.pipe(allPlugins);
- * // Equivalent to: MutationDBLive.pipe(withLogging, withValidation, withTriggers)
+ * const Enhanced = Layer.empty.pipe(allPlugins, Layer.provide(MutationDBLive));
+ * // Execution: withLogging -> withValidation -> withTriggers -> base (left-to-right)
  * ```
  */
 export const compose = <I, E = never, R = never>(
   plugins: Array<Plugin<I, E, R>>
 ): Plugin<I, E, R> =>
-  <A, E2, R2>(self: Layer.Layer<A, E2, R2>): Layer.Layer<A | I, E | E2, I | R | R2> =>
-    plugins.reduce(
-      (layer, plugin) => plugin(layer),
-      self as Layer.Layer<A | I, E | E2, I | R | R2>
-    ) as never;
+  <A, E2, R2>(self: Layer.Layer<A, E2, R2>): Layer.Layer<A | I, E | E2, I | R | R2> => combineAll(plugins)(self)
+
+/**
+ * Compose all plugins in an array into a single plugin.
+ * Returns identity plugin if array is empty.
+ *
+ * Plugins execute in **left-to-right** order (as written in the array).
+ * This uses reduceRight internally to build the composition.
+ *
+ * @param plugins - Array of plugins to compose (can be empty)
+ * @returns Single plugin, or identity if empty
+ *
+ * @category Utilities
+ * @since 1.0.0
+ *
+ * @example
+ * ```typescript
+ * const allPlugins = Plugin.combineAll([withLogging, withValidation, withAudit]);
+ * // Execution: withLogging -> withValidation -> withAudit -> base (left-to-right)
+ *
+ * const maybePlugins = config.enableLogging ? [withLogging] : [];
+ * const optional = Plugin.combineAll(maybePlugins);
+ * // Safe to use even with empty array
+ * ```
+ */
+export const combineAll = <I, E = never, R = never>(
+  plugins: ReadonlyArray<Plugin<I, E, R>>
+): Plugin<I, E, R> =>
+  plugins.reduceRight(
+    (acc, plugin) => combine(acc, plugin),
+    identity
+  );
