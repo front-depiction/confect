@@ -4,16 +4,28 @@
  * Plugin system for enhancing service layers.
  * Plugins wrap existing services with additional behavior (logging, validation, triggers, etc.)
  *
- * ## Design
+ * ## Design Principles
  *
  * - Plugins enhance services by wrapping the base implementation
- * - Compose via .pipe() on layers
+ * - Compose via `.pipe()` on layers or `Plugin.combineAll()`
  * - Pattern: `Layer.empty.pipe(plugin, Layer.provide(requirement))`
- * - **Execution order**: Plugins execute in **right-to-left** order (reverse of pipe)
- *   - Last plugin in the pipe executes first (outermost wrapper)
- *   - First plugin in the pipe executes last (innermost wrapper, closest to base)
+ * - Supports heterogeneous composition (plugins for different services)
  *
- * ## Pattern
+ * ## Execution Order
+ *
+ * **Pipe-based composition** (right-to-left):
+ * ```typescript
+ * Layer.empty.pipe(p1, p2, p3, Layer.provide(service))
+ * // Executes: p3 -> p2 -> p1 -> base
+ * ```
+ *
+ * **Array-based composition** (left-to-right):
+ * ```typescript
+ * Plugin.combineAll([p1, p2, p3])
+ * // Executes: p1 -> p2 -> p3 -> base
+ * ```
+ *
+ * ## Basic Example
  *
  * ```typescript
  * const withLogging = Plugin.forTag(MutationDB, (base) => ({
@@ -24,11 +36,32 @@
  *     })
  * }));
  *
- * // Plugins execute right-to-left: withValidation -> withLogging -> base
+ * // Pipe pattern (right-to-left)
  * const Enhanced = Layer.empty.pipe(
  *   withLogging,
  *   withValidation,
  *   Layer.provide(MutationDBLive)
+ * );
+ * // Execution: withValidation -> withLogging -> base
+ * ```
+ *
+ * ## Heterogeneous Composition
+ *
+ * ```typescript
+ * // Plugins for different services compose cleanly
+ * const crossCutting = Plugin.combineAll([
+ *   withDBLogging,   // enhances MutationDB
+ *   withLogPrefix,   // enhances LogService
+ *   withCaching      // enhances CacheService
+ * ]);
+ * // Type: Plugin<MutationDB | LogService | CacheService, never, never>
+ *
+ * const Enhanced = Layer.empty.pipe(
+ *   crossCutting,
+ *   Layer.provide(Layer.provideMerge(
+ *     MutationDBLive,
+ *     Layer.provideMerge(LogServiceLive, CacheServiceLive)
+ *   ))
  * );
  * ```
  *
@@ -46,19 +79,25 @@ import * as Types from "effect/Types";
 // =============================================================================
 
 /**
- * A plugin is a function returned by `Layer.updateService`.
+ * A plugin is a layer transformation function that enhances services.
  *
  * It transforms a Layer by wrapping a service, requiring the service (I) as input
  * and providing the enhanced version as output.
  *
- * The signature matches `Layer.updateService` return type:
- * - Requires: I (the service being enhanced) + R (additional dependencies)
- * - Provides: A (passthrough from input layer)
- * - Errors: E (from enhancement) | E2 (from input layer)
+ * ## Type Parameters
  *
- * @template I - Service identifier type
- * @template E - Error type from enhancement
- * @template R - Additional requirements for enhancement
+ * @template I - Service identifier(s) being enhanced (can be union for multi-service plugins)
+ * @template E - Error type from enhancement (defaults to never)
+ * @template R - Additional requirements for enhancement (defaults to never)
+ *
+ * ## Signature Details
+ *
+ * Input layer provides `A`, has errors `E2`, requires `R2`
+ * Output layer provides `A | I`, has errors `E | E2`, requires `I | R | R2`
+ *
+ * - **Provides**: `A | I` - Passthrough existing services (A) + enhanced service (I)
+ * - **Errors**: `E | E2` - Enhancement errors (E) + existing errors (E2)
+ * - **Requires**: `I | R | R2` - Service to enhance (I) + enhancement deps (R) + existing deps (R2)
  *
  * @since 1.0.0
  */
@@ -209,27 +248,34 @@ export const combine = <I, I2, E = never, E2 = never, R = never, R2 = never>(
 /**
  * Compose multiple plugins into a single plugin.
  *
- * Plugins are applied in array order (left to right).
- * This is equivalent to chaining .pipe() calls.
- * **Note**: Execution order is right-to-left (last plugin executes first).
+ * Plugins execute in **left-to-right** order (as written in the array).
+ * This is more intuitive than pipe-based composition.
+ *
+ * Supports heterogeneous plugins - properly infers union types when composing
+ * plugins that enhance different services.
  *
  * @param plugins - Array of plugins to compose
- * @returns Single plugin that applies all transformations
+ * @returns Single plugin with unioned type requirements
  *
  * @category Utilities
  * @since 1.0.0
  *
  * @example
  * ```typescript
+ * // Homogeneous composition
  * const allPlugins = Plugin.compose([
  *   withLogging,
  *   withValidation,
  *   withTriggers
  * ]);
+ * // Execution: withLogging -> withValidation -> withTriggers -> base
  *
- * const Enhanced = Layer.empty.pipe(allPlugins, Layer.provide(MutationDBLive));
- * // Equivalent to: Layer.empty.pipe(withLogging, withValidation, withTriggers, Layer.provide(MutationDBLive))
- * // Execution: withTriggers -> withValidation -> withLogging -> base
+ * // Heterogeneous composition
+ * const crossCutting = Plugin.compose([
+ *   withDBLogging,    // Plugin<MutationDB, ...>
+ *   withLogPrefix     // Plugin<LogService, ...>
+ * ]);
+ * // Type: Plugin<MutationDB | LogService, ...>
  * ```
  */
 export const compose = <const Ps extends Identity[]>(
@@ -241,17 +287,39 @@ export const compose = <const Ps extends Identity[]>(
  * Compose all plugins in an array into a single plugin.
  * Returns identity plugin if array is empty.
  *
- * @param plugins - Array of plugins to compose (can be empty)
- * @returns Single plugin, or identity if empty
+ * ## Key Features
+ *
+ * - **Left-to-right execution**: Plugins execute in array order
+ * - **Type-safe heterogeneous composition**: Properly infers unions when composing plugins for different services
+ * - **Safe with empty arrays**: Returns identity plugin when empty
+ *
+ * Uses `reduceRight` internally to build the composition from right to left,
+ * which results in left-to-right execution order.
+ *
+ * @param plugins - Tuple of plugins to compose (can be empty)
+ * @returns Single plugin with properly unioned I, E, R types
  *
  * @category Utilities
  * @since 1.0.0
  *
  * @example
  * ```typescript
+ * // Simple composition
+ * const allPlugins = Plugin.combineAll([withLogging, withValidation, withAudit]);
+ * // Execution: withLogging -> withValidation -> withAudit -> base
+ *
+ * // Heterogeneous composition (different services)
+ * const crossCutting = Plugin.combineAll([
+ *   withDBLogging,    // Plugin<MutationDB, never, never>
+ *   withLogPrefix,    // Plugin<LogService, never, never>
+ *   withCaching       // Plugin<CacheService, never, never>
+ * ]);
+ * // Type correctly inferred: Plugin<MutationDB | LogService | CacheService, never, never>
+ *
+ * // Safe with conditional plugins
  * const maybePlugins = config.enableLogging ? [withLogging] : [];
- * const allPlugins = Plugin.combineAll(maybePlugins);
- * // Safe to use even with empty array
+ * const optional = Plugin.combineAll(maybePlugins);
+ * // Returns identity if array is empty
  * ```
  */
 export const combineAll = <const Ps extends Identity[]>(
