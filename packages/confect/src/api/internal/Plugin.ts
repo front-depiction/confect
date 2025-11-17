@@ -6,16 +6,18 @@
  *
  * ## Design Principles
  *
- * - Plugins enhance services by wrapping the base implementation
+ * - Plugins enhance layers that provide services
+ * - Plugins wrap the service within the layer they're piped onto
  * - Compose via `.pipe()` on layers or `Plugin.combineAll()`
- * - Pattern: `Layer.empty.pipe(plugin, Layer.provide(requirement))`
+ * - Pattern: `ServiceLayer.pipe(plugin, Layer.provide(requirements))`
+ * - NOT: `Layer.empty.pipe(plugin, ...)` - this doesn't work for non-empty layers
  * - Supports heterogeneous composition (plugins for different services)
  *
  * ## Execution Order
  *
  * **Pipe-based composition** (right-to-left):
  * ```typescript
- * Layer.empty.pipe(p1, p2, p3, Layer.provide(service))
+ * ServiceLayer.pipe(p1, p2, p3, Layer.provide(deps))
  * // Executes: p3 -> p2 -> p1 -> base
  * ```
  *
@@ -37,10 +39,10 @@
  * }));
  *
  * // Pipe pattern (right-to-left)
- * const Enhanced = Layer.empty.pipe(
+ * const Enhanced = MutationDBLive.pipe(
  *   withLogging,
  *   withValidation,
- *   Layer.provide(MutationDBLive)
+ *   Layer.provide(ValidationServiceLive)
  * );
  * // Execution: withValidation -> withLogging -> base
  * ```
@@ -56,12 +58,14 @@
  * ]);
  * // Type: Plugin<MutationDB | LogService | CacheService, never, never>
  *
- * const Enhanced = Layer.empty.pipe(
+ * const AllServicesLive = Layer.provideMerge(
+ *   MutationDBLive,
+ *   Layer.provideMerge(LogServiceLive, CacheServiceLive)
+ * );
+ *
+ * const Enhanced = AllServicesLive.pipe(
  *   crossCutting,
- *   Layer.provide(Layer.provideMerge(
- *     MutationDBLive,
- *     Layer.provideMerge(LogServiceLive, CacheServiceLive)
- *   ))
+ *   Layer.provide(dependencies)
  * );
  * ```
  *
@@ -95,7 +99,7 @@ import * as Types from "effect/Types";
  * Input layer provides `A`, has errors `E2`, requires `R2`
  * Output layer provides `A | I`, has errors `E | E2`, requires `I | R | R2`
  *
- * - **Provides**: `A | I` - Passthrough existing services (A) + enhanced service (I)
+ * - **Provides**: `A` - Passthrough existing services (A)
  * - **Errors**: `E | E2` - Enhancement errors (E) + existing errors (E2)
  * - **Requires**: `I | R | R2` - Service to enhance (I) + enhancement deps (R) + existing deps (R2)
  *
@@ -103,7 +107,7 @@ import * as Types from "effect/Types";
  */
 export type Plugin<I, E = never, R = never> = <A, E2, R2>(
   self: Layer.Layer<A, E2, R2>
-) => Layer.Layer<A | I, E | E2, I | R | R2>;
+) => Layer.Layer<A, E | E2, I | R | R2>
 
 
 
@@ -136,24 +140,13 @@ export type Plugin<I, E = never, R = never> = <A, E2, R2>(
  *     })
  * }));
  *
- * const Enhanced = Layer.empty.pipe(withLogging, Layer.provide(MutationDBLive));
+ * const Enhanced = MutationDBLive.pipe(withLogging);
  * ```
  */
 export const forTag = <I, S>(
   tag: Context.Tag<I, S>,
   wrapper: (base: S) => S | Partial<S>
-): Plugin<I> =>
-  <A, E, R>(self: Layer.Layer<A, E, R>): Layer.Layer<A | I, E, I | R> => Layer.flatMap(self, context =>
-    Layer.effectContext(Effect.gen(function* () {
-      const base = yield* Option.match(Context.getOption(context, tag), {
-        onNone: () => tag,
-        onSome: Effect.succeed
-      })
-      const updated = wrapper(base)
-      const service = Object.assign({}, base, updated)
-      return Context.add(context, tag, service)
-    })))
-
+): Plugin<I> => Layer.updateService(tag, (base) => Object.assign({}, base, wrapper(base)))
 
 /**
  * Create a plugin that enhances a service with effectful setup.
@@ -190,24 +183,75 @@ export const forTag = <I, S>(
  *   })
  * );
  *
- * const Enhanced = Layer.empty.pipe(withAudit, Layer.provide(Layer.provideMerge(MutationDBLive, AuditLogLive)));
+ * const Enhanced = MutationDBLive.pipe(
+ *   withAudit,
+ *   Layer.provide(AuditLogLive)
+ * );
  * ```
  */
 export const effectForTag = <S, I, E2 = never, R2 = never>(
   tag: Context.Tag<I, S>,
   wrapper: (base: S) => Effect.Effect<S | Partial<S>, E2, R2>
 ): Plugin<I, E2, R2> =>
-  <A, E, R>(self: Layer.Layer<A, E, R>): Layer.Layer<A | I, E | E2, I | R | R2> => Layer.flatMap(self, context =>
-    Layer.effectContext(Effect.gen(function* () {
-      const base = yield* Option.match(Context.getOption(context, tag), {
-        onNone: () => tag,
-        onSome: Effect.succeed
-      })
-      const updated = yield* wrapper(base)
-      const service = Object.assign({}, base, updated)
-      return Context.add(context, tag, service)
-    })))
+  <A, E, R>(self: Layer.Layer<A, E, R>): Layer.Layer<A, E | E2, I | R | R2> => Layer.provide(
+    self,
+    Layer.flatMap(
+      Layer.context(),
+      (context) => Layer.effectContext(
+        Effect.gen(function* () {
+          const base = Context.unsafeGet(context, tag)
+          const newService = yield* wrapper(base)
+          return Context.add(context, tag, Object.assign({}, base, newService))
+        })
+      )
+    )
+  )
 
+/**
+ * Partially satisfy a plugin's requirements by providing a layer.
+ *
+ * This allows creating reusable plugins with dependencies, then closing over
+ * those dependencies to create a simpler plugin with fewer requirements.
+ *
+ * The resulting plugin still enhances the same service (I) but has its
+ * requirements (R) reduced by the services provided by the layer (ROut).
+ *
+ * @param self - Plugin with requirements R
+ * @param layer - Layer providing some of the plugin's requirements
+ * @returns Plugin with reduced requirements (R - ROut + R2)
+ *
+ * @category Constructors
+ * @since 1.0.0
+ *
+ * @example
+ * ```typescript
+ * // Plugin that needs a trigger registry
+ * const withTriggers = Plugin.effectForTag(MutationDB, (base) =>
+ *   Effect.gen(function*() {
+ *     const registry = yield* TriggerRegistry;
+ *
+ *     return {
+ *       insert: (table, value) =>
+ *         Effect.gen(function*() {
+ *           const id = yield* base.insert(table, value);
+ *           const trigger = registry.get(table);
+ *           if (trigger) yield* trigger(id, value);
+ *           return id;
+ *         })
+ *     };
+ *   })
+ * );
+ * // Type: Plugin<MutationDB, never, TriggerRegistry>
+ *
+ * // Close over the registry dependency
+ * const withMyTriggers = Plugin.provide(withTriggers, TriggerRegistryLive);
+ * // Type: Plugin<MutationDB, never, never>
+ *
+ * // Now can be used without providing TriggerRegistry
+ * const Enhanced = MutationDBLive.pipe(withMyTriggers);
+ * ```
+ */
+export const provide = <I, E, E2, R, ROut, R2>(self: Plugin<I, E, R>, layer: Layer.Layer<ROut, E2, R2>): Plugin<I, E | E2, Exclude<R, ROut> | R2> => Function.flow(self, Layer.provide(layer))
 
 // =============================================================================
 // Utility Functions

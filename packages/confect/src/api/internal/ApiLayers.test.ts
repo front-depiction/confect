@@ -99,26 +99,13 @@ describe("Api.serve layer provisioning", () => {
       let pluginCalled = false;
 
       // Create a plugin that tracks insertions
-      const trackingPlugin = Plugin.forTag(MutationDB, (base) => {
-        console.log("PLUGIN WAS BUILT")
-        return ({
-          insert: (table, value) =>
-            Effect.gen(function* () {
-              pluginCalled = true;
-              return yield* base.insert(table, value);
-            }),
-        })
-      });
-
-      const trackinPluginWithLayerUpdate = Layer.updateService(MutationDB, (base) => ({
-        ...base,
+      const trackingPlugin = Plugin.forTag(MutationDB, (base) => ({
         insert: (table, value) =>
           Effect.gen(function* () {
             pluginCalled = true;
             return yield* base.insert(table, value);
           }),
-      })
-      )
+      }));
 
       const tasksGroup = Group.group("tasks").pipe(
         Group.add(
@@ -147,7 +134,7 @@ describe("Api.serve layer provisioning", () => {
       // User layer with plugin
       const apiLayer =
         TasksLive.pipe(
-          trackinPluginWithLayerUpdate
+          trackingPlugin
         )
 
       // Serve the API
@@ -173,8 +160,7 @@ describe("Api.serve layer provisioning", () => {
     await testDB.run(async (ctx) => {
       const order: string[] = [];
 
-      const plugin1 = Layer.updateService(MutationDB, (base) => ({
-        ...base,
+      const plugin1 = Plugin.forTag(MutationDB, (base) => ({
         insert: (table, value) =>
           Effect.gen(function* () {
             order.push("plugin1");
@@ -182,8 +168,7 @@ describe("Api.serve layer provisioning", () => {
           }),
       }));
 
-      const plugin2 = Layer.updateService(MutationDB, (base) => ({
-        ...base,
+      const plugin2 = Plugin.forTag(MutationDB, (base) => ({
         insert: (table, value) =>
           Effect.gen(function* () {
             order.push("plugin2");
@@ -191,8 +176,7 @@ describe("Api.serve layer provisioning", () => {
           }),
       }));
 
-      const plugin3 = Layer.updateService(MutationDB, (base) => ({
-        ...base,
+      const plugin3 = Plugin.forTag(MutationDB, (base) => ({
         insert: (table, value) =>
           Effect.gen(function* () {
             order.push("plugin3");
@@ -231,8 +215,80 @@ describe("Api.serve layer provisioning", () => {
       const createTaskHandler = getHandler(served.tasks.createTask as never);
       await createTaskHandler(ctx, { text: "Order test" });
 
-      // Verify execution order (left-to-right with Layer.updateService)
+      // Verify execution order (left-to-right with Plugin.forTag)
       expect(order).toEqual(["plugin1", "plugin2", "plugin3"]);
+    });
+  });
+
+  test("effectful plugin with dependencies", async () => {
+    await testDB.run(async (ctx) => {
+      const auditLog: string[] = [];
+
+      // Create a custom audit service
+      class AuditService extends Effect.Service<AuditService>()(
+        "AuditService",
+        {
+          effect: Effect.succeed({
+            log: (message: string) =>
+              Effect.sync(() => {
+                auditLog.push(message);
+              }),
+          }),
+        }
+      ) {}
+
+      // Create an effectful plugin that uses AuditService
+      const auditPlugin = Plugin.effectForTag(MutationDB, (base) =>
+        Effect.gen(function* () {
+          const audit = yield* AuditService;
+
+          return {
+            insert: (table, value) =>
+              Effect.gen(function* () {
+                yield* audit.log(`Inserting into ${table}`);
+                return yield* base.insert(table, value);
+              }),
+          };
+        })
+      );
+
+      const tasksGroup = Group.group("tasks").pipe(
+        Group.add(
+          Function.mutation("createTask")
+            .args(Schema.Struct({ text: Schema.String }))
+            .returns(Schema.String)
+        )
+      );
+
+      const api = Api.api("testApi").pipe(Api.add(tasksGroup));
+
+      const TasksLive = Layer.effect(
+        Group.Tag(tasksGroup),
+        Effect.gen(function* () {
+          const db = yield* MutationDB;
+          return {
+            createTask: (args) =>
+              db.insert("tasks", {
+                text: args.text,
+                completed: false,
+              }),
+          };
+        })
+      );
+
+      // Pipe effectful plugin onto TasksLive, provide its dependency
+      const apiLayer = TasksLive.pipe(
+        auditPlugin,
+        Layer.provide(AuditService.Default)
+      );
+
+      const served = Api.serve(schema, api, apiLayer);
+
+      const createTaskHandler = getHandler(served.tasks.createTask as never);
+      await createTaskHandler(ctx, { text: "Audited task" });
+
+      // Verify audit log was called
+      expect(auditLog).toEqual(["Inserting into tasks"]);
     });
   });
 });
